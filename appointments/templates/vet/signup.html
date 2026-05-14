@@ -1,0 +1,19 @@
+{% extends "vet/base_auth.html" %}
+{% block title %}Sign up — ThePetPhysioVet{% endblock %}
+{% block auth_content %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for field in form %}
+        <div class="field">
+            {{ field.label_tag }}
+            {{ field }}
+            {{ field.errors }}
+        </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">Create account</button>
+</form>
+<p class="auth-footer">Already registered? <a href="{% url 'login' %}">Sign in</a></p>
+{% endblock %}

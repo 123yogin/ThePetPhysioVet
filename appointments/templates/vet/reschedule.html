@@ -1,0 +1,20 @@
+{% extends "vet/app_base.html" %}
+{% block title %}Reschedule — ThePetPhysioVet{% endblock %}
+{% block content %}
+<h1 class="page-title">Reschedule visit</h1>
+<p class="page-sub">{{ appointment.pet_name }} — {{ appointment.owner_name }}</p>
+<div class="panel">
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        <div class="field">
+            {{ form.date.label_tag }}{{ form.date }}{{ form.date.errors }}
+        </div>
+        <div class="field">
+            {{ form.time.label_tag }}{{ form.time }}{{ form.time.errors }}
+        </div>
+        <div class="form-actions full">
+            <button type="submit" class="btn btn-primary">Save &amp; share update</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

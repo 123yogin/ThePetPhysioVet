@@ -1,0 +1,36 @@
+{% extends "vet/app_base.html" %}
+{% block title %}Dashboard — ThePetPhysioVet{% endblock %}
+{% block content %}
+<h1 class="page-title">Today’s visits</h1>
+<p class="page-sub">{{ today|date:"l, F j, Y" }} · Pending &amp; rescheduled slots for today only.</p>
+
+<div class="grid-cards">
+    {% for a in today_appointments %}
+    <article class="visit-card" style="margin:0;">
+        <h4>{{ a.pet_name }} <span class="badge {% if a.status == 'Pending' %}badge-pending{% elif a.status == 'Completed' %}badge-completed{% else %}badge-rescheduled{% endif %}">{{ a.status }}</span></h4>
+        <p class="meta-row"><strong>Owner</strong> {{ a.owner_name }}</p>
+        <p class="meta-row"><strong>Time</strong> {{ a.time }}</p>
+        <p class="meta-row"><strong>Pet type</strong> {{ a.pet_type }}</p>
+        <p class="meta-row"><strong>Visit</strong> {{ a.get_visit_type_display }}</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <form method="post" action="{% url 'mark_complete' a.pk %}" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="dashboard">
+                <button type="submit" class="btn btn-sm btn-primary">Mark completed</button>
+            </form>
+            <a class="btn btn-sm btn-ghost" href="{% url 'share_appointment' a.pk %}">Share</a>
+        </div>
+    </article>
+    {% empty %}
+    <p class="panel">No visits scheduled for today (or all are already completed).</p>
+    {% endfor %}
+</div>
+
+<div class="completed-bar panel" style="margin-top:8px;">
+    <div>
+        <div style="font-size:13px;font-weight:700;color:var(--brown-500);text-transform:uppercase;letter-spacing:0.06em;">Completed visits</div>
+        <div class="big">{{ completed_count }}</div>
+    </div>
+    <span style="font-size:13px;color:var(--brown-500);max-width:220px;">Total completed appointments on your account.</span>
+</div>
+{% endblock %}

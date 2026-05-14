@@ -1,0 +1,68 @@
+{% extends "vet/app_base.html" %}
+{% block title %}Appointments — ThePetPhysioVet{% endblock %}
+{% block content %}
+<h1 class="page-title">View appointments</h1>
+<p class="page-sub">Search by pet name, owner name, or date.</p>
+<div class="panel">
+    <form method="get" class="filter-bar">
+        <div class="field" style="margin:0;">
+            <label for="fpet">Pet name</label>
+            <input class="input-glass" id="fpet" type="text" name="pet" value="{{ filter_pet }}" placeholder="Pet">
+        </div>
+        <div class="field" style="margin:0;">
+            <label for="fowner">Owner name</label>
+            <input class="input-glass" id="fowner" type="text" name="owner" value="{{ filter_owner }}" placeholder="Owner">
+        </div>
+        <div class="field" style="margin:0;">
+            <label for="fdate">Date</label>
+            <input class="input-glass" id="fdate" type="date" name="date" value="{{ filter_date }}">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Search</button>
+    </form>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Pet</th>
+                    <th>Owner</th>
+                    <th>Date &amp; time</th>
+                    <th>Visit</th>
+                    <th>Status</th>
+                    <th>Done</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in appointments %}
+                <tr>
+                    <td>{{ a.pet_name }}</td>
+                    <td>{{ a.owner_name }}</td>
+                    <td>{{ a.date }} <span style="color:var(--brown-500);">{{ a.time }}</span></td>
+                    <td>{{ a.get_visit_type_display }}</td>
+                    <td><span class="badge {% if a.status == 'Pending' %}badge-pending{% elif a.status == 'Completed' %}badge-completed{% else %}badge-rescheduled{% endif %}">{{ a.status }}</span></td>
+                    <td>
+                        {% if a.status != 'Completed' %}
+                        <form method="post" action="{% url 'mark_complete' a.pk %}" class="inline-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="list">
+                            <label style="cursor:pointer;font-size:13px;font-weight:600;">
+                                <input type="checkbox" onchange="this.form.submit();"> Tick
+                            </label>
+                        </form>
+                        {% else %}
+                        <span style="color:#2e7d32;font-weight:700;">&#10003;</span>
+                        {% endif %}
+                    </td>
+                    <td style="white-space:nowrap;">
+                        <a class="btn btn-sm btn-ghost" href="{% url 'reschedule_appointment' a.pk %}">Reschedule</a>
+                        <a class="btn btn-sm btn-primary" href="{% url 'share_appointment' a.pk %}">Share</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7">No appointments match.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
