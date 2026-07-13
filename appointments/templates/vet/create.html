@@ -2,12 +2,12 @@
 {% block title %}Create appointment — ThePetPhysioVet{% endblock %}
 {% block content %}
 <h1 class="page-title">Create appointment</h1>
-<p class="page-sub">Enter owner &amp; pet details. You can share WhatsApp / SMS right after saving.</p>
+<p class="page-sub">Pick a patient and a time. You can share WhatsApp / SMS right after saving.</p>
 <div class="panel">
     <form method="post" class="form-grid">
         {% csrf_token %}
         {% for field in form %}
-            <div class="field {% if field.name == 'reason_notes' or field.name == 'owner_phone' or field.name == 'visit_type' %}full{% endif %}">
+            <div class="field {% if field.name == 'reason_notes' or field.name == 'pet' or field.name == 'visit_type' %}full{% endif %}">
                 {{ field.label_tag }}
                 {% if field.name == 'visit_type' %}<p class="field-hint">{{ field.help_text }}</p>{% endif %}
                 {{ field }}

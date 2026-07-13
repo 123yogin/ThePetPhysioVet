@@ -1,0 +1,46 @@
+{% extends "vet/app_base.html" %}
+{% block title %}Patients — ThePetPhysioVet{% endblock %}
+{% block content %}
+<h1 class="page-title">Patients</h1>
+<p class="page-sub">Your saved pets. Add one here, then book appointments for it without re-typing details.</p>
+<div class="panel">
+    <div class="filter-bar" style="justify-content:space-between;">
+        <form method="get" class="filter-bar" style="margin:0;padding:0;border:0;">
+            <div class="field" style="margin:0;">
+                <label for="fq">Search</label>
+                <input class="input-glass" id="fq" type="text" name="q" value="{{ filter_q }}" placeholder="Pet or owner name">
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </form>
+        <a class="btn btn-sm btn-primary" href="{% url 'patient_create' %}">&#10133; Add patient</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Pet</th>
+                    <th>Type</th>
+                    <th>Owner</th>
+                    <th>Phone</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in patients %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.pet_type }}</td>
+                    <td>{{ p.owner_name }}</td>
+                    <td>{{ p.owner_phone }}</td>
+                    <td style="white-space:nowrap;">
+                        <a class="btn btn-sm btn-primary" href="{% url 'create_appointment' %}">Book</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">No patients yet. <a href="{% url 'patient_create' %}">Add your first patient</a>.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

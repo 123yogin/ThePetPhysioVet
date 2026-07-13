@@ -9,8 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .forms import AppointmentForm, DoctorLoginForm, DoctorSignupForm, RescheduleForm
-from .models import Appointment, DoctorProfile
+from .forms import AppointmentForm, DoctorLoginForm, DoctorSignupForm, PetForm, RescheduleForm
+from .models import Appointment, DoctorProfile, Pet
 
 
 def vet_required(view_func):
@@ -136,10 +136,40 @@ def dashboard(request):
 
 @login_required
 @vet_required
+def patient_list(request):
+    qs = Pet.objects.filter(doctor=request.user)
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(name__icontains=q) | qs.filter(owner_name__icontains=q)
+    return render(request, "vet/patients.html", {"patients": qs.distinct(), "filter_q": q})
+
+
+@login_required
+@vet_required
+@require_http_methods(["GET", "POST"])
+def patient_create(request):
+    if request.method == "POST":
+        form = PetForm(request.POST)
+        if form.is_valid():
+            pet = form.save(commit=False)
+            pet.doctor = request.user
+            pet.save()
+            messages.success(request, f"Patient '{pet.name}' added.")
+            return redirect("patient_list")
+    else:
+        form = PetForm()
+    return render(request, "vet/pet_form.html", {"form": form})
+
+
+@login_required
+@vet_required
 @require_http_methods(["GET", "POST"])
 def create_appointment(request):
+    if not Pet.objects.filter(doctor=request.user).exists():
+        messages.info(request, "Add a patient first, then you can book an appointment for them.")
+        return redirect("patient_create")
     if request.method == "POST":
-        form = AppointmentForm(request.POST)
+        form = AppointmentForm(request.POST, doctor=request.user)
         if form.is_valid():
             appt = form.save(commit=False)
             appt.doctor = request.user
@@ -148,7 +178,7 @@ def create_appointment(request):
             messages.success(request, "Appointment saved.")
             return redirect("share_appointment", pk=appt.pk)
     else:
-        form = AppointmentForm()
+        form = AppointmentForm(doctor=request.user)
     return render(request, "vet/create.html", {"form": form})
 
 
@@ -175,14 +205,14 @@ def share_appointment(request, pk):
 @login_required
 @vet_required
 def appointment_list(request):
-    qs = Appointment.objects.filter(doctor=request.user)
+    qs = Appointment.objects.filter(doctor=request.user).select_related("pet")
     pet = request.GET.get("pet", "").strip()
     owner = request.GET.get("owner", "").strip()
     date = request.GET.get("date", "").strip()
     if pet:
-        qs = qs.filter(pet_name__icontains=pet)
+        qs = qs.filter(pet__name__icontains=pet)
     if owner:
-        qs = qs.filter(owner_name__icontains=owner)
+        qs = qs.filter(pet__owner_name__icontains=owner)
     if date:
         qs = qs.filter(date=date)
     return render(

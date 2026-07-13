@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 
-from .models import Appointment, DoctorProfile
+from .models import Appointment, DoctorProfile, Pet
 
 
 class DoctorLoginForm(AuthenticationForm):
@@ -70,32 +70,43 @@ class DoctorSignupForm(UserCreationForm):
         return user
 
 
+class PetForm(forms.ModelForm):
+    class Meta:
+        model = Pet
+        fields = ["name", "pet_type", "owner_name", "owner_phone", "notes"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "input-glass"}),
+            "pet_type": forms.TextInput(attrs={"class": "input-glass", "placeholder": "e.g. Dog, Cat"}),
+            "owner_name": forms.TextInput(attrs={"class": "input-glass"}),
+            "owner_phone": forms.TextInput(attrs={"class": "input-glass"}),
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "input-glass", "placeholder": "Medical history / notes (optional)"}),
+        }
+        labels = {"name": "Pet name", "pet_type": "Species / type"}
+
+
 class AppointmentForm(forms.ModelForm):
     class Meta:
         model = Appointment
         fields = [
-            "pet_name",
-            "pet_type",
-            "owner_name",
-            "owner_phone",
+            "pet",
             "visit_type",
             "date",
             "time",
             "reason_notes",
         ]
         widgets = {
-            "pet_name": forms.TextInput(attrs={"class": "input-glass"}),
-            "pet_type": forms.TextInput(attrs={"class": "input-glass", "placeholder": "e.g. Dog, Cat"}),
-            "owner_name": forms.TextInput(attrs={"class": "input-glass"}),
-            "owner_phone": forms.TextInput(attrs={"class": "input-glass"}),
+            "pet": forms.Select(attrs={"class": "input-glass"}),
             "visit_type": forms.RadioSelect(),
             "date": forms.DateInput(attrs={"type": "date", "class": "input-glass"}),
             "time": forms.TimeInput(attrs={"type": "time", "class": "input-glass"}),
             "reason_notes": forms.Textarea(attrs={"rows": 3, "class": "input-glass", "placeholder": "Reason / notes"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, doctor=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["pet"].label = "Patient"
+        if doctor is not None:
+            self.fields["pet"].queryset = Pet.objects.filter(doctor=doctor)
         self.fields["visit_type"].label = "Visit type"
         self.fields["visit_type"].help_text = "Clinic = owner comes to you. Home = you visit the pet at their location."
 
