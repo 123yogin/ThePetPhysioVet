@@ -1,0 +1,68 @@
+# Pet Physio Vet — Project Context (shared by all team agents)
+
+This file is read by every agent. It is the shared source of truth for what this
+project is, where it stands, and the rules everyone follows.
+
+## What this is
+A veterinary physiotherapy & rehabilitation platform connecting **Doctors**
+(vets/physios) and **Pet Owners**. Full requirements: `SRS` (in repo/notes) and the
+build-out roadmap in `PRODUCT_PLAN.md`.
+
+## Current reality (as of the last audit)
+- Stack today: a **single Django template monolith** (`petphysio/` project, one
+  `appointments/` app), SQLite/Postgres, server-rendered HTML.
+- Only ~1 of 12 SRS areas exists (basic single-doctor appointment CRUD).
+- Only 2 of 13 data entities exist: `DoctorProfile`, `Appointment`. **No Owner, no Pet.**
+- Auth = Django sessions + PBKDF2 (SRS wants JWT + bcrypt≥12).
+
+## Target architecture (approved)
+Full **microservices on OCI (OKE)** per the system diagram:
+- Services: **Auth**, **Core API**, **Notification**, **Scheduler (OCI Functions)**.
+- Data: PostgreSQL primary + read replica, Redis, OCI Object Storage + CDN,
+  OCI Queue/Streaming (event backbone), OCI Logging/Monitoring (audit).
+- Edge: OCI Load Balancer → API Gateway (JWT validation, rate limit) → services.
+- Client: **React doctor web app only (SPA).** Mobile (React Native) is **out of scope
+  for now** — do not build it.
+  **Frontend decision (confirmed):** the current Django HTML templates are being
+  *replaced* by the React SPA. Django becomes **API-only** (DRF/JSON) — no server-rendered
+  HTML in the target. See `PRODUCT_PLAN.md` §1.4a for the template→React migration.
+  Owner-facing access is deferred (revisit as responsive web later); current build
+  focuses on the doctor web experience.
+- Integrations: Razorpay (payments), FCM (push), Twilio/MSG91 (SMS).
+See `PRODUCT_PLAN.md` for the phased roadmap and per-phase acceptance criteria.
+
+## Non-negotiable rules for all agents
+1. **Security first.** Never commit secrets. The old `.env` leaked a live DB
+   credential — secrets live in OCI Vault only. Fail-fast if a prod secret is missing.
+2. **Traceability.** Every change maps to an SRS acceptance criterion (AC-xx) or a
+   PRODUCT_PLAN phase. State which one in PR/commit descriptions.
+3. **Data ownership.** One service owns its schema. No cross-service DB joins —
+   integrate via API or events.
+4. **AuthZ in depth.** Gateway validates JWT; each service re-checks role + object
+   ownership (owner sees only their own pets, etc.).
+5. **Tests + review gate.** No story is "done" until QA verifies it against its ACs.
+6. **Idempotency** on money-touching mutations (payment webhooks) and event consumers.
+7. Report honestly: if tests fail, say so with output; never mark work done unverified.
+
+## Local dev environment (already set up)
+- **Python:** 3.12 venv at `.venv/`. Run backend commands with `./.venv/bin/python`,
+  `./.venv/bin/pip`, `./.venv/bin/pytest` (do NOT use the system `python3`, which is 3.9
+  and too old for Django 6).
+- **Database:** **SQLite** (`db.sqlite3`), configured directly in
+  `petphysio/settings.py` on this `cleanup/sqlite-and-patients` branch. The old
+  Neon/Postgres + Render deployment config was removed here. `.env` and `db.sqlite3` are
+  untracked (git-ignored). When the target OCI Postgres work begins, reintroduce a
+  `DATABASE_URL`-driven config.
+- **Node:** installed (for the React web app). Use `node`/`npm`.
+- Run server: `./.venv/bin/python manage.py runserver`. Migrate: `... manage.py migrate`.
+
+## Team (see .claude/agents/)
+- `product-manager` — backlog, user stories, acceptance criteria, sprint scope, sign-off.
+- `tech-lead` — technical design, task breakdown, code review, architecture calls.
+- `backend-engineer` — services, APIs, DB, events.
+- `frontend-engineer` — React doctor web app (web only).
+- `qa-security-engineer` — tests, AC verification, security review.
+
+## The loop (see .claude/skills/sdlc-sprint + .claude/workflows/sdlc-sprint.js)
+Plan (PM) → Design (Tech Lead) → Build (Backend ‖ Frontend) → Test (QA) →
+Review (Tech Lead) → Accept & re-plan (PM) → repeat.
