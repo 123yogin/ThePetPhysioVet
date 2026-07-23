@@ -6,7 +6,9 @@ charset-normalizer==3.4.9
 Django==6.0.3
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
+dj-database-url==3.1.2
 idna==3.18
+psycopg==3.3.4
 packaging==26.2
 pillow==12.2.0
 PyJWT==2.13.0

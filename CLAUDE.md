@@ -54,7 +54,9 @@ Trade-off: this disables all confirmations, including destructive commands — i
 
 ## Project layout (distributed: backend + frontend)
 - **`backend/`** — Django API: `manage.py`, `petphysio/`, `appointments/`, plus the
-  Python 3.12 venv `backend/.venv/` and SQLite `backend/db.sqlite3` (both git-ignored).
+  Python 3.12 venv `backend/.venv/` (git-ignored). **DB: PostgreSQL** via
+  `DATABASE_URL` (defaults to `postgres://postgres:postgres@127.0.0.1:5432/petphysio`);
+  set `DATABASE_URL="sqlite:///db.sqlite3"` to fall back to the old SQLite file.
 - **`frontend/`** — React/Vite SPA (renamed from `clients/web`). Playwright is local here.
 - **They connect over HTTP** — no shared code. Dev: the Vite proxy forwards
   `/api → http://127.0.0.1:8000`. Prod: a gateway / reverse-proxy routes `/api` to Django.

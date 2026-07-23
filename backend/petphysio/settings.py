@@ -134,11 +134,22 @@ WSGI_APPLICATION = 'petphysio.wsgi.application'
 # DATABASE
 # =========================
 
+# PostgreSQL (SRS §4 data store). Configured via DATABASE_URL so the same code
+# runs against local dev, CI, and OCI without edits; defaults to the local
+# Postgres (postgres/postgres @ 127.0.0.1:5432/petphysio). To fall back to the
+# old SQLite file, set DATABASE_URL="sqlite:///db.sqlite3".
+import dj_database_url  # noqa: E402
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgres://postgres:postgres@127.0.0.1:5432/petphysio",
+)
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "600")),
+        conn_health_checks=True,
+    ),
 }
 
 
