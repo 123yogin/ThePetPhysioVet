@@ -57,10 +57,10 @@ const SCREENS = ['app_base (shell, its own diff case)', 'login', 'signup', 'dash
   'appointments', 'create', 'reschedule', 'patients', 'pet_form']
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, and your role file under .claude/agents/. ' +
-  'Context: Sprint 1 built a React SPA (clients/web/) that reuses appointments/static/vet.css ' +
+  'Context: Sprint 1 built a React SPA (frontend/) that reuses backend/appointments/static/vet.css ' +
   'VERBATIM (byte-identical — keep it that way) plus a DRF API under /api/v1. Playwright parity ' +
   'passed on 6/9 screens; FAILED on login, dashboard, reschedule. ROOT CAUSES: (1) React mock ' +
-  'data has a different ROW COUNT than the seeded Django data (breaks dashboard/appointments/' +
+  'data has a different ROW COUNT than the seeded Django data (breaks dashboard/backend/appointments/' +
   'reschedule); (2) autofocus rings on login/signup inputs add pixel noise. Viewport is 1280x800. ' +
   'Playwright chromium is installed globally — use NODE_PATH="$(npm root -g)". Do NOT git commit.'
 
@@ -94,15 +94,15 @@ while (true) {
   const prev = qa ? `Previous QA still failing: ${JSON.stringify(qa.screen_results.filter(s => s.parity === 'FAIL'))}. ` : ''
   const [backend, frontend] = await parallel([
     () => agent(
-      `${CTX}\n${prev}As Backend Engineer (round ${round}), implement ONLY under appointments/ ` +
-      `and petphysio/. Add the deterministic seed (manage.py seed_parity or a fixture) creating a ` +
-      `FIXED, known dataset (doctor + pets + appointments) so the dashboard/appointments/reschedule ` +
+      `${CTX}\n${prev}As Backend Engineer (round ${round}), implement ONLY under backend/appointments/ ` +
+      `and backend/petphysio/. Add the deterministic seed (manage.py seed_parity or a fixture) creating a ` +
+      `FIXED, known dataset (doctor + pets + appointments) so the dashboard/backend/appointments/reschedule ` +
       `pages render identical rows every run. Keep endpoints/tests green (run them). Plan: ` +
       `${JSON.stringify(plan)}.`,
       { agentType: 'general-purpose', label: `be:r${round}`, phase: 'Build', schema: BUILD },
     ),
     () => agent(
-      `${CTX}\n${prev}As Frontend Engineer (round ${round}), implement ONLY under clients/web/. ` +
+      `${CTX}\n${prev}As Frontend Engineer (round ${round}), implement ONLY under frontend/. ` +
       `Make the React mock/fixture data mirror the Django seed ROW-FOR-ROW for dashboard, ` +
       `appointments, and reschedule. Neutralize autofocus/focus-ring differences for parity ` +
       `capture WITHOUT breaking real UX. Do NOT edit vet.css (keep byte-identical). Run ` +
@@ -116,13 +116,13 @@ while (true) {
   qa = await agent(
     `${CTX}\nAs QA (round ${round}), run the deterministic parity check: seed Django ` +
     `(manage.py seed_parity), start Django runserver, build+preview the React app, then use ` +
-    `Playwright — it is installed LOCALLY at clients/web/node_modules (chromium cached). Run ` +
-    `your capture script FROM the clients/web directory with ` +
+    `Playwright — it is installed LOCALLY at frontend/node_modules (chromium cached). Run ` +
+    `your capture script FROM the frontend directory with ` +
     "`const { chromium } = require('playwright')`. Do NOT use the global install or NODE_PATH " +
     `(that path is broken and wastes time). Screenshot at 1280x800 and pixel-diff ALL NINE ` +
     `planned screens: ` +
     `${JSON.stringify(SCREENS)} (app_base as its OWN case; do NOT include 'share'). Save shots ` +
-    `under clients/web/parity-shots/round${round}/. Report per-screen PASS/FAIL + remaining ` +
+    `under frontend/parity-shots/round${round}/. Report per-screen PASS/FAIL + remaining ` +
     `issues. Backend: ${JSON.stringify(backend)}. Frontend: ${JSON.stringify(frontend)}.`,
     { agentType: 'general-purpose', label: `qa:r${round}`, phase: 'Parity', schema: QA },
   )

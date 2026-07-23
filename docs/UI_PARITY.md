@@ -4,10 +4,10 @@
 Django-rendered pages — same layout, same colors, same fonts, same spacing.
 
 ## Source of truth (do not invent styles)
-- **Stylesheet:** `appointments/static/vet.css` (564 lines) — the single source of all
+- **Stylesheet:** `backend/appointments/static/vet.css` (564 lines) — the single source of all
   styling. **Reuse it verbatim** in React (copy it into the React app as a global CSS
   file and import it once at the app root). Do not re-derive or "clean up" the styles.
-- **Markup:** `appointments/templates/vet/*.html` — mirror the DOM structure and the
+- **Markup:** `backend/appointments/templates/vet/*.html` — mirror the DOM structure and the
   exact CSS class names for each screen so `vet.css` applies unchanged.
 - **Font:** DM Sans via the Google Fonts `@import` already in `vet.css`.
 
@@ -32,7 +32,7 @@ key classes:   .glass-card .auth-shell .auth-brand .alert(.alert-success/-error/
 The **dashboard intentionally diverged** from the Django template: it now shows the
 SRS §3.2 **notification feed** widget, which the Django template (being retired) never
 had. So the dashboard is **no longer diffed against Django** — its approved golden is
-`clients/web/parity-baseline/dashboard.png` (the accepted React render, feed included).
+`frontend/parity-baseline/dashboard.png` (the accepted React render, feed included).
 The header/stats above the fold still match Django exactly; only the feed region (lower
 half) differs, and that is intended. The other 8 screens still diff against Django.
 As more React screens gain features Django lacks, migrate them to a committed React

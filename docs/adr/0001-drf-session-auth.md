@@ -8,7 +8,7 @@
 
 ## Context
 
-The current sprint delivers a React SPA (`clients/web/`) that must look
+The current sprint delivers a React SPA (`frontend/`) that must look
 pixel-identical to the existing Django template pages. To feed the SPA, Django
 gains a JSON API at `/api/v1`. Django is still a single template monolith with
 **Django sessions + PBKDF2** auth and the `EmailOrUsernameBackend`.

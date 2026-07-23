@@ -33,9 +33,9 @@ const REVIEW = { type: 'object', required: ['decision'], properties: { decision:
 const SIGNOFF = { type: 'object', required: ['decision', 'next_scope'], properties: { decision: { type: 'string' }, summary: { type: 'string' }, next_scope: { type: 'string' } } }
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role file under .claude/agents/ ' +
-  '(follow the hardening rules). State: React SPA (clients/web/) on DRF /api/v1 with JWT+session auth, ' +
+  '(follow the hardening rules). State: React SPA (frontend/) on DRF /api/v1 with JWT+session auth, ' +
   'pixel-parity kept (vet.css VERBATIM & byte-identical across both copies; dashboard baselined against ' +
-  'clients/web/parity-baseline/dashboard.png). SPRINT 7 has two parts: (A) DASHBOARD COMPLETENESS (SRS §3.2) ' +
+  'frontend/parity-baseline/dashboard.png). SPRINT 7 has two parts: (A) DASHBOARD COMPLETENESS (SRS §3.2) ' +
   '— wire the dashboard stat tiles to REAL data now that billing/treatment exist: active-treatments count, ' +
   'pending-payments sum, today-revenue, monthly-revenue (replace any placeholder). (B) OWNER↔DOCTOR QUERIES ' +
   '(SRS §3.9) — a Query thread per pet: messages with up to 5 image attachments (JPEG/PNG, 5MB each), doctor ' +
@@ -44,7 +44,7 @@ const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role f
   '(dashboard tile VALUES may change but layout/markup must stay parity-stable — if tile text changes pixels, ' +
   'treat like the feed: baseline against the committed React reference, do not fake data). CONTRACT DISCIPLINE: ' +
   'implement the Design api_contract EXACTLY; tested side is canonical; never break a passing test. Learnings: ' +
-  'Playwright LOCAL in clients/web; Django golden DEBUG=true + seed_parity; viewport 1280x800. Do NOT git commit.'
+  'Playwright LOCAL in frontend; Django golden DEBUG=true + seed_parity; viewport 1280x800. Do NOT git commit.'
 
 phase('Plan')
 const plan = await agent(`${CTX}\nAs PM, write stories for (A) dashboard real-data tiles (§3.2 widgets: active ` +
@@ -65,10 +65,10 @@ const design = await agent(`${CTX}\nAs Tech Lead, design Sprint 7 AND emit the e
 phase('Build')
 const [beFound, feFound] = await parallel([
   () => agent(`${CTX}\nAs Backend Engineer, BACKEND FOUNDATION only: ${design.backend_foundation}. Implement to ` +
-    `api_contract: ${JSON.stringify(design.api_contract)}. Models: ${JSON.stringify(design.models)}. Migrate + run tests. Touch ONLY appointments/ + petphysio/.`,
+    `api_contract: ${JSON.stringify(design.api_contract)}. Models: ${JSON.stringify(design.models)}. Migrate + run tests. Touch ONLY backend/appointments/ + backend/petphysio/.`,
     { agentType: 'general-purpose', label: 'be:foundation', phase: 'Build', schema: BUILD }),
   () => agent(`${CTX}\nAs Frontend Engineer, FRONTEND FOUNDATION only: ${design.frontend_foundation}. Consume ` +
-    `api_contract EXACTLY: ${JSON.stringify(design.api_contract)}. vet.css byte-identical. npm build. Touch ONLY clients/web/.`,
+    `api_contract EXACTLY: ${JSON.stringify(design.api_contract)}. vet.css byte-identical. npm build. Touch ONLY frontend/.`,
     { agentType: 'general-purpose', label: 'fe:foundation', phase: 'Build', schema: BUILD }),
 ])
 const beTasks = design.backend_tasks || [], feTasks = design.frontend_tasks || []
@@ -85,7 +85,7 @@ log(`Fan-out: ${built.filter(Boolean).length}/${built.length} ok`)
 // CONTRACT GATE
 phase('Contract')
 const runContractCheck = () => agent(`${CTX}\nRun the CHEAP CONTRACT SMOKE-TEST (no browser): start Django (DEBUG=true, ` +
-  `seed_parity); assert every clients/web api path resolves (no 404) and response keys match the api_contract ` +
+  `seed_parity); assert every frontend api path resolves (no 404) and response keys match the api_contract ` +
   `(${JSON.stringify(design.api_contract)}). ok=true only if all pass; else list defects (frontend_ref, backend_reality, canonical_side, fix).`,
   { agentType: 'general-purpose', label: 'contract-check', phase: 'Contract', schema: CONTRACTCHECK })
 let contract = await runContractCheck(), cRound = 0
@@ -124,8 +124,8 @@ while (true) {
     } else {
       const prev = `Prev fails: func=${JSON.stringify((qa.functional_results||[]).filter(f=>f.result==='FAIL'))} regr=${JSON.stringify((qa.regression_parity||[]).filter(p=>p.parity==='FAIL'))}. `
       await parallel([
-        () => agent(`${CTX}\n${prev}Backend Engineer (fix ${round}) — API-side ONLY under appointments/petphysio. Tests+migrations green.`, { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
-        () => agent(`${CTX}\n${prev}Frontend Engineer (fix ${round}) — client-side ONLY under clients/web. vet.css byte-identical.`, { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
+        () => agent(`${CTX}\n${prev}Backend Engineer (fix ${round}) — API-side ONLY under backend/appointments/petphysio. Tests+migrations green.`, { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
+        () => agent(`${CTX}\n${prev}Frontend Engineer (fix ${round}) — client-side ONLY under frontend. vet.css byte-identical.`, { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
       ])
     }
   }

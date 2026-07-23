@@ -47,7 +47,7 @@ const SIGNOFF = { type: 'object', required: ['decision', 'next_scope'], properti
   decision: { type: 'string' }, summary: { type: 'string' }, next_scope: { type: 'string' } } }
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role file under ' +
-  '.claude/agents/. Current state: React SPA (clients/web/) wired to DRF /api/v1 (auth session+CSRF, ' +
+  '.claude/agents/. Current state: React SPA (frontend/) wired to DRF /api/v1 (auth session+CSRF, ' +
   'dashboard, appointments, pets, diagnosis, treatment, billing), all pixel-identical to Django ' +
   '(vet.css reused VERBATIM — keep byte-identical; UI extensions live in clinical.css). SPRINT 5 = ' +
   'NOTIFICATIONS & REMINDERS (SRS §3.7 + §7), DOCTOR WEB ONLY: (a) Notification model + feed API ' +
@@ -60,7 +60,7 @@ const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role f
   'push to the doctor — BOTH behind a provider abstraction with a DEV MOCK (no real keys; record a ' +
   'DeliveryLog) so it is testable offline; (e) SMS OPT-OUT preference. New notification UI reuses ' +
   'vet.css and must NOT regress the existing pixel-parity screens. Learnings: Playwright is LOCAL in ' +
-  'clients/web (require from there; chromium cached; not global); Django golden runs DEBUG=true (else ' +
+  'frontend (require from there; chromium cached; not global); Django golden runs DEBUG=true (else ' +
   'vet.css 404s) and is seeded via "manage.py seed_parity"; viewport 1280x800. Do NOT git commit.'
 
 phase('Plan')
@@ -90,13 +90,13 @@ const [beFound, feFound] = await parallel([
     `${CTX}\nAs Backend Engineer, do ONLY the BACKEND FOUNDATION (shared files, before fan-out): ` +
     `${design.backend_foundation}. Create the notification models + migrations, wire urls/settings, ` +
     `and the provider/notification-service abstraction with a DEV MOCK. Run migrations + existing ` +
-    `tests (paste output). Touch ONLY appointments/ + petphysio/. Models: ${JSON.stringify(design.models)}.`,
+    `tests (paste output). Touch ONLY backend/appointments/ + backend/petphysio/. Models: ${JSON.stringify(design.models)}.`,
     { agentType: 'general-purpose', label: 'be:foundation', phase: 'Build', schema: BUILD }),
   () => agent(
     `${CTX}\nAs Frontend Engineer, do ONLY the FRONTEND FOUNDATION (shared files): ` +
     `${design.frontend_foundation}. Add the nav unread badge, notification routes, and shared ` +
     `notification hooks/types, reusing vet.css (byte-identical; extensions in clinical.css). Run ` +
-    `"npm run build". Touch ONLY clients/web/.`,
+    `"npm run build". Touch ONLY frontend/.`,
     { agentType: 'general-purpose', label: 'fe:foundation', phase: 'Build', schema: BUILD }),
 ])
 
@@ -133,7 +133,7 @@ const verifyPrompt = (rnd, scope) =>
   `N + unread badge + mark-read); each §7 event creates the right notification; "manage.py ` +
   `send_due_reminders" fires 24h/1h/30min + SUPPRESSES after cancel/reschedule; SMS+FCM via the mock ` +
   `provider write a DeliveryLog; SMS opt-out honored. NEW-SCREEN CHECKS: screenshot notification UI ` +
-  `under clients/web/parity-shots/s5-r${rnd}/, confirm vet.css reuse + no console errors. REGRESSION: ` +
+  `under frontend/parity-shots/s5-r${rnd}/, confirm vet.css reuse + no console errors. REGRESSION: ` +
   `local Playwright at 1280x800 vs the seeded golden. Your returned functional_results + ` +
   `regression_parity MUST list ALL items (re-tested ones with fresh results; out-of-scope ones copied ` +
   `forward). overall=PASS only if EVERY functional area AND EVERY regression screen is PASS. ` +
@@ -146,9 +146,9 @@ while (true) {
     const prev = `Previous QA fails: functional=${JSON.stringify((qa.functional_results||[]).filter(f=>f.result==='FAIL'))} regression=${JSON.stringify((qa.regression_parity||[]).filter(p=>p.parity==='FAIL'))} issues=${JSON.stringify(qa.remaining_issues||[])}. `
     phase('Build')
     await parallel([
-      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix API-side causes ONLY under appointments/petphysio. Keep tests + migrations green.`,
+      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix API-side causes ONLY under backend/appointments/petphysio. Keep tests + migrations green.`,
         { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
-      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix client-side causes ONLY under clients/web. Keep vet.css byte-identical; don't regress existing screens.`,
+      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix client-side causes ONLY under frontend. Keep vet.css byte-identical; don't regress existing screens.`,
         { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
     ])
   }

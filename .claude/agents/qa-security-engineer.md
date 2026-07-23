@@ -31,7 +31,7 @@ skeptic, try to break it.
 Before the expensive Playwright pass, run a fast contract check — it catches the
 drift bugs that once cost a whole sprint, in seconds:
 - With Django running, hit EVERY `/api/...` path the frontend references (grep
-  `clients/web/src` for `api("…")` / fetch paths) and assert none return **404** (404 =
+  `frontend/src` for `api("…")` / fetch paths) and assert none return **404** (404 =
   path mismatch). 
 - For each feed/list endpoint, confirm the **response JSON keys** match what the frontend
   reads (e.g. frontend reads `data.results` ⇒ backend must return `results`).

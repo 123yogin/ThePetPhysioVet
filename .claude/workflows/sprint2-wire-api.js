@@ -44,13 +44,13 @@ const SIGNOFF = { type: 'object', required: ['decision', 'next_scope'], properti
   decision: { type: 'string' }, summary: { type: 'string' }, next_scope: { type: 'string' } } }
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, and your role file under .claude/agents/. ' +
-  'Context: the React SPA (clients/web/) renders 9 doctor screens with MOCK data and is ' +
+  'Context: the React SPA (frontend/) renders 9 doctor screens with MOCK data and is ' +
   'PIXEL-IDENTICAL to Django (vet.css reused VERBATIM — keep it byte-identical). The Django ' +
   'service exposes a DRF JSON API at /api/v1 (auth login/logout/me/signup via DRF ' +
   'SessionAuthentication + CSRF; dashboard/stats; appointments list/create/detail/reschedule/' +
   'complete/share; pets list+search/create; all scoped to request.user). GOAL of Sprint 2: ' +
   'replace the React mock data with LIVE calls to /api/v1, WITHOUT breaking pixel parity. ' +
-  'Learnings to honor: Playwright is installed LOCALLY in clients/web (require("playwright") ' +
+  'Learnings to honor: Playwright is installed LOCALLY in frontend (require("playwright") ' +
   'from that dir; chromium cached; do NOT use the global install). The Django parity golden ' +
   'MUST run with DEBUG=true (else vet.css 404s) and be seeded via "manage.py seed_parity". ' +
   'Viewport 1280x800. Do NOT git commit.'
@@ -84,7 +84,7 @@ const design = await agent(
 phase('Build')
 const [backend, frontend] = await parallel([
   () => agent(
-    `${CTX}\nAs Backend Engineer, implement ONLY under appointments/ and petphysio/. Make the ` +
+    `${CTX}\nAs Backend Engineer, implement ONLY under backend/appointments/ and backend/petphysio/. Make the ` +
     `API ready for the SPA: confirm/adjust serializer response shapes to match what the screens ` +
     `render, ensure CSRF + SessionAuthentication work behind a same-origin Vite proxy, and ` +
     `ensure "manage.py seed_parity" yields the exact dataset the parity golden expects. Keep all ` +
@@ -92,7 +92,7 @@ const [backend, frontend] = await parallel([
     { agentType: 'general-purpose', label: 'be:wire', phase: 'Build', schema: BUILD },
   ),
   () => agent(
-    `${CTX}\nAs Frontend Engineer, implement ONLY under clients/web/. Add the typed API client + ` +
+    `${CTX}\nAs Frontend Engineer, implement ONLY under frontend/. Add the typed API client + ` +
     `React Query hooks and REPLACE the mock data on every screen with live /api/v1 calls (auth/me ` +
     `bootstrap + RequireAuth, dashboard stats, appointments list/filter/create/reschedule/complete/` +
     `share, pets list/search/create). Add loading/error/empty states. Configure the Vite dev proxy ` +
@@ -119,9 +119,9 @@ while (true) {
     // remediation build before re-verifying
     phase('Build')
     await parallel([
-      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix the API-side causes ONLY under appointments/petphysio. Keep tests green.`,
+      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix the API-side causes ONLY under backend/appointments/petphysio. Keep tests green.`,
         { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
-      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix the client-side causes ONLY under clients/web. Keep vet.css byte-identical.`,
+      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix the client-side causes ONLY under frontend. Keep vet.css byte-identical.`,
         { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
     ])
     phase('Verify')
@@ -131,9 +131,9 @@ while (true) {
     `Django (DEBUG=true, run "manage.py seed_parity" first), start the React app with its Vite ` +
     `proxy; drive real flows via the running app and assert each screen loads/writes REAL data ` +
     `through /api/v1 (login, dashboard stats, appointments list/create/reschedule/complete, pets ` +
-    `list/create). (2) PARITY REGRESSION — using the LOCAL Playwright (require from clients/web) at ` +
+    `list/create). (2) PARITY REGRESSION — using the LOCAL Playwright (require from frontend) at ` +
     `1280x800, re-screenshot and pixel-diff all 9 screens vs the seeded Django golden; save under ` +
-    `clients/web/parity-shots/s2-r${round}/. overall = PASS only if functional AND parity both pass. ` +
+    `frontend/parity-shots/s2-r${round}/. overall = PASS only if functional AND parity both pass. ` +
     `Backend: ${JSON.stringify(backend)}. Frontend: ${JSON.stringify(frontend)}.`,
     { agentType: 'general-purpose', label: `qa:r${round}`, phase: 'Verify', schema: QA },
   )

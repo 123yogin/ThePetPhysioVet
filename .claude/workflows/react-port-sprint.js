@@ -79,12 +79,12 @@ const SIGNOFF = {
     next_scope: { type: 'string' } },
 }
 
-const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, appointments/static/vet.css, and ' +
-  'appointments/templates/vet/*.html first. Also read your role file under .claude/agents/ ' +
+const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, backend/appointments/static/vet.css, and ' +
+  'backend/appointments/templates/vet/*.html first. Also read your role file under .claude/agents/ ' +
   '(product-manager.md / tech-lead.md / backend-engineer.md / frontend-engineer.md / ' +
   'qa-security-engineer.md) and follow it. This is the ThePetPhysioVet doctor web app. ' +
   'GOAL: a React SPA that looks PIXEL-IDENTICAL to the current Django pages by reusing ' +
-  'vet.css verbatim and mirroring template markup/classes. React app lives in clients/web/.'
+  'vet.css verbatim and mirroring template markup/classes. React app lives in frontend/.'
 
 // 1. PLAN
 phase('Plan')
@@ -102,7 +102,7 @@ log(`${plan?.stories?.length ?? 0} screen stories planned`)
 // 2. DESIGN
 phase('Design')
 const design = await agent(
-  `${CTX}\nAs Tech Lead, design the sprint: (a) the React app structure under clients/web/ ` +
+  `${CTX}\nAs Tech Lead, design the sprint: (a) the React app structure under frontend/ ` +
   `(Vite + TypeScript + React Router + React Query), how vet.css is imported globally and ` +
   `reused verbatim, and the app shell mirroring app_base.html; (b) the list of Django JSON ` +
   `endpoints (add Django REST Framework) the screens will consume — auth (login/logout/me), ` +
@@ -115,7 +115,7 @@ const design = await agent(
 phase('Build')
 const [backend, frontend] = await parallel([
   () => agent(
-    `${CTX}\nAs Backend Engineer, implement ONLY under appointments/ and petphysio/ (do NOT ` +
+    `${CTX}\nAs Backend Engineer, implement ONLY under backend/appointments/ and backend/petphysio/ (do NOT ` +
     `touch clients/). Add Django REST Framework to requirements + settings, and JSON API ` +
     `endpoints at /api/v1 for: auth (login returns JWT or session, logout, current user), ` +
     `dashboard stats, appointments (list/create/reschedule/complete), pets (list/create). ` +
@@ -125,9 +125,9 @@ const [backend, frontend] = await parallel([
     { agentType: 'general-purpose', label: 'build:backend', phase: 'Build', schema: BUILD },
   ),
   () => agent(
-    `${CTX}\nAs Frontend Engineer, create the React app ONLY under clients/web/ (do NOT touch ` +
-    `appointments/ or petphysio/). Steps: scaffold Vite + React + TypeScript; COPY ` +
-    `appointments/static/vet.css into the app and import it once globally (verbatim — do not ` +
+    `${CTX}\nAs Frontend Engineer, create the React app ONLY under frontend/ (do NOT touch ` +
+    `backend/appointments/ or backend/petphysio/). Steps: scaffold Vite + React + TypeScript; COPY ` +
+    `backend/appointments/static/vet.css into the app and import it once globally (verbatim — do not ` +
     `edit styles); build the app shell mirroring app_base.html and every screen (login, signup, ` +
     `dashboard, appointments, create, reschedule, patients, pet_form) as React components whose ` +
     `JSX mirrors each template's DOM and CSS class names EXACTLY so vet.css applies unchanged. ` +
@@ -143,13 +143,13 @@ phase('Parity')
 const qa = await agent(
   `${CTX}\nAs QA/Security Engineer, verify PIXEL PARITY. Playwright (chromium) is installed ` +
   `globally; if you write a node script use NODE_PATH="$(npm root -g)" to import playwright, ` +
-  `or "npm i -D playwright" inside clients/web. Steps: (1) start Django: ` +
+  `or "npm i -D playwright" inside frontend. Steps: (1) start Django: ` +
   `"./.venv/bin/python manage.py runserver 8000" in background; seed a test doctor user via ` +
   `manage.py shell so authenticated pages render. (2) build+preview the React app ` +
-  `("npm run build" then "npm run preview" in clients/web) or run its dev server. (3) For each ` +
+  `("npm run build" then "npm run preview" in frontend) or run its dev server. (3) For each ` +
   `screen, screenshot the Django page and the matching React page at the SAME viewport ` +
   `(1280x800) and compare; report per-screen parity PASS/FAIL with a short diff summary and ` +
-  `save screenshots under clients/web/parity-shots/. (4) Also sanity-check the backend JSON ` +
+  `save screenshots under frontend/parity-shots/. (4) Also sanity-check the backend JSON ` +
   `endpoints respond. Frontend result: ${JSON.stringify(frontend)}. Backend result: ` +
   `${JSON.stringify(backend)}.`,
   { agentType: 'general-purpose', phase: 'Parity', schema: QA },

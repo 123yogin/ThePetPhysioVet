@@ -50,7 +50,7 @@ const SIGNOFF = { type: 'object', required: ['decision', 'next_scope'], properti
   decision: { type: 'string' }, summary: { type: 'string' }, next_scope: { type: 'string' } } }
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role file under ' +
-  '.claude/agents/. Current state: the React SPA (clients/web/) has 9 doctor screens wired to a ' +
+  '.claude/agents/. Current state: the React SPA (frontend/) has 9 doctor screens wired to a ' +
   'DRF /api/v1 (auth session+CSRF, dashboard, appointments, pets), all pixel-identical to Django ' +
   '(vet.css reused VERBATIM — keep byte-identical). SPRINT 3 adds two NEW doctor features from ' +
   'the SRS: (§3.4) DIAGNOSIS — upload diagnostic reports (X-Ray/MRI/CT/Blood/Other) with rich-text ' +
@@ -61,7 +61,7 @@ const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role f
   'These screens are NEW (no Django HTML golden), so there is NO pixel target for them — instead ' +
   'build them to REUSE the vet.css design system (glass cards, tokens, classes) so they look native, ' +
   'and integrate into the existing app shell/nav. Files: uploads go to Django MEDIA (local disk) for ' +
-  'now — OCI Object Storage is a later phase. Learnings: Playwright is LOCAL in clients/web ' +
+  'now — OCI Object Storage is a later phase. Learnings: Playwright is LOCAL in frontend ' +
   '(require from there; chromium cached; not the global install); Django golden runs with DEBUG=true ' +
   '(else vet.css 404s) and is seeded via "manage.py seed_parity". Viewport 1280x800. Do NOT git commit.'
 
@@ -94,7 +94,7 @@ const design = await agent(
 phase('Build')
 const [backend, frontend] = await parallel([
   () => agent(
-    `${CTX}\nAs Backend Engineer, implement ONLY under appointments/ and petphysio/. Add the ` +
+    `${CTX}\nAs Backend Engineer, implement ONLY under backend/appointments/ and backend/petphysio/. Add the ` +
     `Diagnosis, TreatmentPlan, ProgressNote models + migrations, and DRF endpoints (multipart ` +
     `upload with 20MB + report-type/format validation; list/create/delete/replace; treatment plan ` +
     `+ progress notes), scoped to request.user. Keep existing endpoints/tests green and add new ` +
@@ -102,7 +102,7 @@ const [backend, frontend] = await parallel([
     { agentType: 'general-purpose', label: 'be:build', phase: 'Build', schema: BUILD },
   ),
   () => agent(
-    `${CTX}\nAs Frontend Engineer, implement ONLY under clients/web/. Build the Diagnosis and ` +
+    `${CTX}\nAs Frontend Engineer, implement ONLY under frontend/. Build the Diagnosis and ` +
     `Treatment React screens REUSING vet.css classes/tokens (glass cards etc.) so they look native, ` +
     `wired to the new /api/v1 endpoints (upload with progress + validation messages, list/view, ` +
     `delete/replace, DICOM-in-tab; treatment plan form + progress-note timeline). Integrate into the ` +
@@ -127,9 +127,9 @@ while (true) {
     const prev = `Previous QA fails: functional=${JSON.stringify((qa.functional_results||[]).filter(f=>f.result==='FAIL'))} regression=${JSON.stringify((qa.regression_parity||[]).filter(p=>p.parity==='FAIL'))} issues=${JSON.stringify(qa.remaining_issues||[])}. `
     phase('Build')
     await parallel([
-      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix API-side causes ONLY under appointments/petphysio. Keep tests green.`,
+      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix API-side causes ONLY under backend/appointments/petphysio. Keep tests green.`,
         { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
-      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix client-side causes ONLY under clients/web. Keep vet.css byte-identical; don't regress the 9 existing screens.`,
+      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix client-side causes ONLY under frontend. Keep vet.css byte-identical; don't regress the 9 existing screens.`,
         { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
     ])
   }
@@ -140,7 +140,7 @@ while (true) {
     `upload each report type (and reject >20MB / wrong type), list/view/delete/replace a report, ` +
     `DICOM-opens-in-tab, create a treatment plan, add progress notes, archive on complete — assert ` +
     `each works against /api/v1 with real data. (2) NEW-SCREEN CHECKS — screenshot the new diagnosis ` +
-    `& treatment screens (save under clients/web/parity-shots/s3-r${round}/), confirm each reuses ` +
+    `& treatment screens (save under frontend/parity-shots/s3-r${round}/), confirm each reuses ` +
     `vet.css (glass cards/tokens present) and has no console errors. (3) REGRESSION — using the LOCAL ` +
     `Playwright at 1280x800, re-diff the existing 9 screens vs the seeded Django golden; they must ` +
     `still PASS. overall=PASS only if functional PASS AND regression all PASS AND new screens use ` +

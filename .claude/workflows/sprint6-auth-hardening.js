@@ -55,16 +55,16 @@ const SIGNOFF = { type: 'object', required: ['decision', 'next_scope'], properti
   decision: { type: 'string' }, summary: { type: 'string' }, next_scope: { type: 'string' } } }
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role file under ' +
-  '.claude/agents/ (follow its hardening rules). State: React SPA (clients/web/) wired to DRF ' +
+  '.claude/agents/ (follow its hardening rules). State: React SPA (frontend/) wired to DRF ' +
   '/api/v1 via SessionAuthentication + CSRF (auth login/logout/me, dashboard, appointments, ' +
   'pets, diagnosis, treatment, billing, notifications), pixel-parity kept (vet.css VERBATIM; ' +
-  'dashboard baselined against clients/web/parity-baseline/dashboard.png per docs/UI_PARITY.md). ' +
+  'dashboard baselined against frontend/parity-baseline/dashboard.png per docs/UI_PARITY.md). ' +
   'SPRINT 6 = AUTH HARDENING (SRS §3.1 + §4): JWT access (short TTL) + ROTATING refresh with ' +
   'server-side revocation, RBAC (DOCTOR role claim enforced server-side), password hashing ' +
   'bcrypt cost>=12 (PASSWORD_HASHERS; migrate/upgrade on next login), and AUDIT LOGGING of every ' +
   'create/update/delete with user id + timestamp. Frontend: attach Bearer access token, refresh ' +
   'on 401, clear on logout; keep login/logout UX + pixel parity. Learnings: Playwright is LOCAL ' +
-  'in clients/web; Django golden runs DEBUG=true + "manage.py seed_parity"; viewport 1280x800. ' +
+  'in frontend; Django golden runs DEBUG=true + "manage.py seed_parity"; viewport 1280x800. ' +
   'CONTRACT DISCIPLINE: implement to the Design api_contract EXACTLY (paths + response keys); the ' +
   'side with passing tests is canonical; never break a passing test to satisfy the other side. ' +
   'Do NOT git commit.'
@@ -94,11 +94,11 @@ phase('Build')
 const [beFound, feFound] = await parallel([
   () => agent(`${CTX}\nAs Backend Engineer, do ONLY the BACKEND FOUNDATION: ${design.backend_foundation}. ` +
     `Implement to api_contract: ${JSON.stringify(design.api_contract)}. Models: ${JSON.stringify(design.models)}. ` +
-    `Run migrations + existing tests (paste output). Touch ONLY appointments/ + petphysio/.`,
+    `Run migrations + existing tests (paste output). Touch ONLY backend/appointments/ + backend/petphysio/.`,
     { agentType: 'general-purpose', label: 'be:foundation', phase: 'Build', schema: BUILD }),
   () => agent(`${CTX}\nAs Frontend Engineer, do ONLY the FRONTEND FOUNDATION: ${design.frontend_foundation}. ` +
     `Consume api_contract EXACTLY: ${JSON.stringify(design.api_contract)}. Keep vet.css byte-identical. ` +
-    `Run "npm run build". Touch ONLY clients/web/.`,
+    `Run "npm run build". Touch ONLY frontend/.`,
     { agentType: 'general-purpose', label: 'fe:foundation', phase: 'Build', schema: BUILD }),
 ])
 const CAP = 6
@@ -121,7 +121,7 @@ log(`Fan-out: ${built.filter(Boolean).length}/${built.length} task agents ok`)
 phase('Contract')
 const runContractCheck = () => agent(
   `${CTX}\nRun the CHEAP CONTRACT SMOKE-TEST (no browser). Start Django (DEBUG=true, ` +
-  `"manage.py seed_parity"). (1) grep clients/web/src for every api("/...")/fetch path and assert ` +
+  `"manage.py seed_parity"). (1) grep frontend/src for every api("/...")/fetch path and assert ` +
   `NONE returns 404 against the running backend. (2) For each list/detail endpoint, confirm the ` +
   `response JSON keys match what the frontend reads (per the api_contract: ${JSON.stringify(design.api_contract)}). ` +
   `Report ok=true only if all paths resolve AND all keys match; otherwise list each defect with ` +
@@ -134,8 +134,8 @@ while (!contract?.ok && cRound < 2) {
   cRound++
   log(`Contract defects found — cross-boundary integration fix (attempt ${cRound})`)
   await agent(
-    `${CTX}\nYou are the CROSS-BOUNDARY INTEGRATION FIXER — you MAY edit BOTH appointments/petphysio ` +
-    `AND clients/web to align the two sides to the canonical contract. Fix ONLY these contract ` +
+    `${CTX}\nYou are the CROSS-BOUNDARY INTEGRATION FIXER — you MAY edit BOTH backend/appointments/petphysio ` +
+    `AND frontend to align the two sides to the canonical contract. Fix ONLY these contract ` +
     `defects, changing the NON-canonical side (never break a passing test): ${JSON.stringify(contract.defects)}. ` +
     `Keep vet.css byte-identical. Run backend tests + npm build.`,
     { agentType: 'general-purpose', label: `integration-fix${cRound}`, phase: 'Contract', schema: BUILD })
@@ -178,9 +178,9 @@ while (true) {
     } else {
       const prev = `Prev fails: func=${JSON.stringify((qa.functional_results||[]).filter(f=>f.result==='FAIL'))} regr=${JSON.stringify((qa.regression_parity||[]).filter(p=>p.parity==='FAIL'))}. `
       await parallel([
-        () => agent(`${CTX}\n${prev}As Backend Engineer (fix ${round}), fix API-side ONLY under appointments/petphysio. Keep tests+migrations green.`,
+        () => agent(`${CTX}\n${prev}As Backend Engineer (fix ${round}), fix API-side ONLY under backend/appointments/petphysio. Keep tests+migrations green.`,
           { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
-        () => agent(`${CTX}\n${prev}As Frontend Engineer (fix ${round}), fix client-side ONLY under clients/web. vet.css byte-identical.`,
+        () => agent(`${CTX}\n${prev}As Frontend Engineer (fix ${round}), fix client-side ONLY under frontend. vet.css byte-identical.`,
           { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
       ])
     }

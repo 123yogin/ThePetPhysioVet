@@ -126,9 +126,9 @@ function staticAssertions() {
     throw new Error("src/mock still exists — the mock fixture must be deleted.");
   }
 
-  // (2) vet.css must be byte-identical to appointments/static/vet.css.
+  // (2) vet.css must be byte-identical to ../backend/appointments/static/vet.css.
   const reactCss = path.resolve("src/styles/vet.css");
-  const djangoCss = path.resolve("../../appointments/static/vet.css");
+  const djangoCss = path.resolve("../backend/appointments/static/vet.css");
   const sha = (p) => crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
   const a = sha(reactCss);
   const b = sha(djangoCss);

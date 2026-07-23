@@ -57,7 +57,7 @@ const SIGNOFF = { type: 'object', required: ['decision', 'next_scope'], properti
   decision: { type: 'string' }, summary: { type: 'string' }, next_scope: { type: 'string' } } }
 
 const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role file under ' +
-  '.claude/agents/. Current state: React SPA (clients/web/) with doctor screens wired to DRF ' +
+  '.claude/agents/. Current state: React SPA (frontend/) with doctor screens wired to DRF ' +
   '/api/v1 (auth session+CSRF, dashboard, appointments, pets; + diagnosis/treatment from Sprint 3), ' +
   'all pixel-identical to Django (vet.css reused VERBATIM — keep byte-identical). SPRINT 4 = ' +
   'PAYMENTS & BILLING (SRS §3.8): Invoice (itemised line items, auto sequential number, subtotal/' +
@@ -68,7 +68,7 @@ const CTX = 'Read CLAUDE.md, docs/UI_PARITY.md, PRODUCT_PLAN.md, and your role f
   'use TEST keys from env or a mock in dev, idempotency key in the webhook, store NO raw card data. ' +
   'New billing screens have no Django HTML golden — build them REUSING vet.css so they look native, ' +
   'and do NOT regress the existing pixel-parity screens. Learnings: Playwright is LOCAL in ' +
-  'clients/web (require from there; chromium cached; not the global install); Django golden runs ' +
+  'frontend (require from there; chromium cached; not the global install); Django golden runs ' +
   'DEBUG=true (else vet.css 404s) and is seeded via "manage.py seed_parity". Viewport 1280x800. ' +
   'Do NOT git commit.'
 
@@ -107,14 +107,14 @@ const [beFound, feFound] = await parallel([
     `${CTX}\nAs Backend Engineer, do ONLY the BACKEND FOUNDATION (shared files, must land before ` +
     `the fan-out): ${design.backend_foundation}. Create the Invoice/Payment/Package models + ` +
     `migrations, wire urls/settings + Razorpay config. Run migrations + existing tests (paste ` +
-    `output). Touch ONLY appointments/ + petphysio/. Design: ${JSON.stringify(design.models)}.`,
+    `output). Touch ONLY backend/appointments/ + backend/petphysio/. Design: ${JSON.stringify(design.models)}.`,
     { agentType: 'general-purpose', label: 'be:foundation', phase: 'Build', schema: BUILD },
   ),
   () => agent(
     `${CTX}\nAs Frontend Engineer, do ONLY the FRONTEND FOUNDATION (shared files): ` +
     `${design.frontend_foundation}. Register the new billing routes + nav entries and shared API ` +
     `hooks/types, reusing vet.css. Keep vet.css byte-identical; do NOT alter existing screens' ` +
-    `markup. Run "npm run build". Touch ONLY clients/web/.`,
+    `markup. Run "npm run build". Touch ONLY frontend/.`,
     { agentType: 'general-purpose', label: 'fe:foundation', phase: 'Build', schema: BUILD },
   ),
 ])
@@ -160,9 +160,9 @@ while (true) {
     const prev = `Previous QA fails: functional=${JSON.stringify((qa.functional_results||[]).filter(f=>f.result==='FAIL'))} regression=${JSON.stringify((qa.regression_parity||[]).filter(p=>p.parity==='FAIL'))} issues=${JSON.stringify(qa.remaining_issues||[])}. `
     phase('Build')
     await parallel([
-      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix API-side causes ONLY under appointments/petphysio. Keep tests + migrations green.`,
+      () => agent(`${CTX}\n${prev}As Backend Engineer (fix round ${round}), fix API-side causes ONLY under backend/appointments/petphysio. Keep tests + migrations green.`,
         { agentType: 'general-purpose', label: `be:fix${round}`, phase: 'Build', schema: BUILD }),
-      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix client-side causes ONLY under clients/web. Keep vet.css byte-identical; don't regress existing screens.`,
+      () => agent(`${CTX}\n${prev}As Frontend Engineer (fix round ${round}), fix client-side causes ONLY under frontend. Keep vet.css byte-identical; don't regress existing screens.`,
         { agentType: 'general-purpose', label: `fe:fix${round}`, phase: 'Build', schema: BUILD }),
     ])
   }
@@ -173,7 +173,7 @@ while (true) {
     `payment mode, Razorpay TEST/mock checkout + webhook updating invoice status (assert idempotency ` +
     `on duplicate webhook), package counter decrement on a Completed appointment, download a PDF ` +
     `receipt, revenue dashboard day/week/month totals. (2) NEW-SCREEN CHECKS — screenshot billing ` +
-    `screens under clients/web/parity-shots/s4-r${round}/, confirm vet.css reuse + no console errors. ` +
+    `screens under frontend/parity-shots/s4-r${round}/, confirm vet.css reuse + no console errors. ` +
     `(3) REGRESSION — local Playwright at 1280x800, re-diff the existing parity screens vs the seeded ` +
     `golden; must still PASS. overall=PASS only if functional PASS AND regression all PASS AND new ` +
     `screens clean. Foundation+tasks: ${JSON.stringify({ beFound, feFound, built: built.filter(Boolean).length })}.`,

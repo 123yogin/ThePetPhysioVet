@@ -9,8 +9,8 @@ A veterinary physiotherapy & rehabilitation platform connecting **Doctors**
 build-out roadmap in `PRODUCT_PLAN.md`.
 
 ## Current reality (as of the last audit)
-- Stack today: a **single Django template monolith** (`petphysio/` project, one
-  `appointments/` app), SQLite/Postgres, server-rendered HTML.
+- Stack today: a **single Django template monolith** (`backend/petphysio/` project, one
+  `backend/appointments/` app), SQLite/Postgres, server-rendered HTML.
 - Only ~1 of 12 SRS areas exists (basic single-doctor appointment CRUD).
 - Only 2 of 13 data entities exist: `DoctorProfile`, `Appointment`. **No Owner, no Pet.**
 - Auth = Django sessions + PBKDF2 (SRS wants JWT + bcrypt≥12).
@@ -52,17 +52,21 @@ tool call, no prompts) with a blanket `Bash`/`WebFetch`/`WebSearch` allow. This 
 prompts on this project. Only `.env`/secrets stay blocked (silently, never prompts).
 Trade-off: this disables all confirmations, including destructive commands — intended.
 
-## Local dev environment (already set up)
-- **Python:** 3.12 venv at `.venv/`. Run backend commands with `./.venv/bin/python`,
-  `./.venv/bin/pip`, `./.venv/bin/pytest` (do NOT use the system `python3`, which is 3.9
-  and too old for Django 6).
-- **Database:** **SQLite** (`db.sqlite3`), configured directly in
-  `petphysio/settings.py` on this `cleanup/sqlite-and-patients` branch. The old
-  Neon/Postgres + Render deployment config was removed here. `.env` and `db.sqlite3` are
-  untracked (git-ignored). When the target OCI Postgres work begins, reintroduce a
-  `DATABASE_URL`-driven config.
-- **Node:** installed (for the React web app). Use `node`/`npm`.
-- Run server: `./.venv/bin/python manage.py runserver`. Migrate: `... manage.py migrate`.
+## Project layout (distributed: backend + frontend)
+- **`backend/`** — Django API: `manage.py`, `petphysio/`, `appointments/`, plus the
+  Python 3.12 venv `backend/.venv/` and SQLite `backend/db.sqlite3` (both git-ignored).
+- **`frontend/`** — React/Vite SPA (renamed from `clients/web`). Playwright is local here.
+- **They connect over HTTP** — no shared code. Dev: the Vite proxy forwards
+  `/api → http://127.0.0.1:8000`. Prod: a gateway / reverse-proxy routes `/api` to Django.
+- All Django paths below are relative to `backend/`; `vet.css` lives at
+  `backend/appointments/static/vet.css` and its verbatim copy at `frontend/src/styles/vet.css`.
+
+## Local dev — run both (two terminals)
+- **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`
+  (use `backend/.venv/bin/python` — NOT system `python3`, which is 3.9 and too old for Django 6).
+- **Frontend:** `cd frontend && npm run dev` → http://localhost:5173 (proxies `/api` to :8000).
+- **Migrate / seed:** `cd backend && ./.venv/bin/python manage.py migrate` (or `seed_parity`).
+- **Tests:** `cd backend && ./.venv/bin/python manage.py test appointments.<module>`.
 
 ## Team (see .claude/agents/)
 - `product-manager` — backlog, user stories, acceptance criteria, sprint scope, sign-off.

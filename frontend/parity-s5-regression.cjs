@@ -58,7 +58,7 @@ function diffImages(aBuf,bBuf){
 
 function staticAssertions(){
   const reactCss=path.resolve("src/styles/vet.css");
-  const djangoCss=path.resolve("../../appointments/static/vet.css");
+  const djangoCss=path.resolve("../backend/appointments/static/vet.css");
   const sha=(p)=>crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
   const a=sha(reactCss),b=sha(djangoCss);
   if(a!==b)throw new Error(`vet.css checksum mismatch: react ${a} !== django ${b}`);
