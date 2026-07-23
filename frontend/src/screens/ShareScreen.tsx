@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "../lib/useTitle";
 import { useShare } from "../api/appointments";
 import { ApiError } from "../lib/http";
@@ -8,6 +8,7 @@ import { ApiError } from "../lib/http";
 export default function ShareScreen() {
   useTitle("Share — ThePetPhysioVet");
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data, isLoading, isError, error } = useShare(Number(id));
 
   const notFound = error instanceof ApiError && error.status === 404;
@@ -27,8 +28,11 @@ export default function ShareScreen() {
           <p style={{ marginTop: 0 }}>Could not load share details. Please try again.</p>
         ) : (
           <>
+            <div className="alert alert-success" style={{ marginTop: 0, marginBottom: 16 }}>
+              ✓ Appointment saved. Sharing with the owner is optional.
+            </div>
             <p style={{ marginTop: 0 }}>
-              Send the owner the details by WhatsApp or text message.
+              Send the owner the details by WhatsApp or text message — or skip and finish.
             </p>
             <div className="share-actions">
               <a className="btn btn-primary share-btn" href={data?.whatsapp_url}
@@ -38,6 +42,10 @@ export default function ShareScreen() {
               <a className="btn btn-ghost share-btn" href={data?.sms_url}>
                 SMS / Text
               </a>
+              <button type="button" className="btn btn-ghost share-btn"
+                onClick={() => navigate("/appointments")}>
+                Skip — done
+              </button>
             </div>
             <p style={{ marginTop: 18, fontSize: 13, color: "var(--brown-500)" }}>
               Message includes pet, date &amp; time, your name, and clinic details from your

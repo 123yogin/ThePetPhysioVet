@@ -191,6 +191,17 @@ class PetQueryThreadView(APIView):
             query.last_message_at = msg.sent_at
             query.save(update_fields=["last_message_at"])
 
+        # Notify the owner that the doctor replied (SRS §3.9 / §3.7).
+        if pet.owner_id:
+            from .models import Notification
+            from .notifications import notify
+
+            notify(
+                pet.owner,
+                Notification.MESSAGE_RECEIVED,
+                f"{pet.name}: your clinic replied to your message.",
+            )
+
         return Response(
             QueryMessageSerializer(msg, context={"request": request}).data,
             status=status.HTTP_201_CREATED,

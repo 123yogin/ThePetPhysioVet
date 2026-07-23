@@ -3,7 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTitle } from "../lib/useTitle";
 import Field from "../components/Field";
-import { useAppointment, useReschedule } from "../api/appointments";
+import {
+  useAppointment,
+  useReschedule,
+  useRescheduleApprove,
+  useRescheduleReject,
+} from "../api/appointments";
 import { ApiError } from "../lib/http";
 
 // Mirrors reschedule.html: sub-header "<pet> — <owner>", form-grid with exactly
@@ -16,8 +21,13 @@ export default function RescheduleScreen() {
   const apptId = Number(id);
   const { data: appointment, isLoading, isError, error } = useAppointment(apptId);
   const reschedule = useReschedule(apptId);
+  const approve = useRescheduleApprove(apptId);
+  const reject = useRescheduleReject(apptId);
 
   const notFound = error instanceof ApiError && error.status === 404;
+  // Owner asked for a new slot (SRS §3.6): the doctor approves (applies it) or
+  // rejects (keeps the current slot). Shown as a banner above the manual form.
+  const ownerRequested = appointment?.status === "Reschedule Requested" && !!appointment?.requested_date;
 
   const errData = reschedule.error instanceof ApiError ? (reschedule.error.data as Record<string, string[]>) : null;
   const nonFieldErrors: string[] = errData?.non_field_errors ?? [];
@@ -56,6 +66,49 @@ export default function RescheduleScreen() {
         ) : isError ? (
           <p>Could not load appointment. Please try again.</p>
         ) : (
+          <>
+          {ownerRequested ? (
+            <div className="alert alert-info full" style={{ marginBottom: 16 }}>
+              <p style={{ margin: "0 0 8px" }}>
+                <strong>{appointment?.owner_name}</strong> requested a new time:{" "}
+                <strong>{appointment?.requested_date} {appointment?.requested_time}</strong>
+                {appointment?.reschedule_reason ? ` — ${appointment.reschedule_reason}` : ""}
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={approve.isPending || reject.isPending}
+                  onClick={() =>
+                    approve.mutate(undefined, {
+                      onSuccess: () => {
+                        queryClient.invalidateQueries({ queryKey: ["appointments"] });
+                        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+                        navigate("/appointments");
+                      },
+                    })
+                  }
+                >
+                  Approve requested time
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={approve.isPending || reject.isPending}
+                  onClick={() =>
+                    reject.mutate(undefined, {
+                      onSuccess: () => {
+                        queryClient.invalidateQueries({ queryKey: ["appointments"] });
+                        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+                      },
+                    })
+                  }
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ) : null}
           <form method="post" className="form-grid" onSubmit={onSubmit}>
             {nonFieldErrors.length > 0 ? (
               <div className="alert alert-danger full">{nonFieldErrors.join(" ")}</div>
@@ -88,6 +141,7 @@ export default function RescheduleScreen() {
               </button>
             </div>
           </form>
+          </>
         )}
       </div>
     </>

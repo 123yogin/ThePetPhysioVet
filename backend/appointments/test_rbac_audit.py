@@ -125,16 +125,22 @@ class RbacMatrixTests(TestCase):
             "diagnoses": f"/api/v1/pets/{self.pet.id}/diagnoses",
             "treatment-plans": f"/api/v1/pets/{self.pet.id}/treatment-plans",
             "invoices": "/api/v1/invoices",
+        }
+        # Shared endpoints (SRS §3.7 Sprint 11): the notification feed is scoped
+        # per-user internally, so ANY authenticated user (doctor OR owner) may
+        # read their OWN feed. It is no longer a doctor-only (IsVet) domain — it
+        # returns 200 for a non-doctor token, not 403. Still 401 without a token.
+        self.shared_endpoints = {
             "notifications": "/api/v1/notifications",
         }
 
     def test_no_token_returns_401_everywhere(self):
         anon = APIClient()  # no Authorization header, no session
-        for domain, url in self.endpoints.items():
+        for domain, url in {**self.endpoints, **self.shared_endpoints}.items():
             with self.subTest(domain=domain):
                 self.assertEqual(anon.get(url).status_code, 401)
 
-    def test_valid_non_doctor_token_returns_403_everywhere(self):
+    def test_valid_non_doctor_token_returns_403_on_doctor_domains(self):
         # A fully-verified token whose role claim != DOCTOR must be rejected by
         # IsVet with 403 (authenticated, but not authorised) — NOT 401.
         token = plain_access(self.doc)
@@ -144,9 +150,18 @@ class RbacMatrixTests(TestCase):
                 c.credentials(**bearer(token))
                 self.assertEqual(c.get(url).status_code, 403)
 
+    def test_valid_non_doctor_token_reads_own_shared_domains(self):
+        # Non-doctor (authenticated) reads their own per-user feed -> 200.
+        token = plain_access(self.doc)
+        for domain, url in self.shared_endpoints.items():
+            with self.subTest(domain=domain):
+                c = APIClient()
+                c.credentials(**bearer(token))
+                self.assertEqual(c.get(url).status_code, 200)
+
     def test_valid_doctor_token_returns_200_everywhere(self):
         token = doctor_access(self.doc)
-        for domain, url in self.endpoints.items():
+        for domain, url in {**self.endpoints, **self.shared_endpoints}.items():
             with self.subTest(domain=domain):
                 c = APIClient()
                 c.credentials(**bearer(token))

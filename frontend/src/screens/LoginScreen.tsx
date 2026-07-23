@@ -33,7 +33,7 @@ export default function LoginScreen() {
       {
         onSuccess: (me: Me) => {
           queryClient.setQueryData(["me"], me);
-          navigate("/dashboard");
+          navigate(me.role === "OWNER" ? "/owner" : "/dashboard");
         },
       },
     );
@@ -81,6 +81,7 @@ export default function LoginScreen() {
       </form>
       <p className="auth-footer">
         New clinic? <Link to="/signup">Create account</Link>
+        {" · "}Pet owner? <Link to="/activate">Activate account</Link>
       </p>
     </AuthShell>
   );

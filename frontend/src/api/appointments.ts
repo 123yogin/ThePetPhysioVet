@@ -8,7 +8,7 @@
 // strings the deleted mock produced — screens & markup stay byte-identical.
 // Serializers keep emitting raw values (no display strings muddying the JSON).
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/http";
 import { dateMedium, formatTime } from "../lib/format";
 import type {
@@ -129,5 +129,28 @@ export function useComplete() {
   return useMutation({
     mutationFn: (id: number) =>
       api<RawAppointment>(`/appointments/${id}/complete`, { method: "POST" }),
+  });
+}
+
+// ----- Doctor: approve / reject an owner's reschedule request (SRS §3.6) -----
+export function useRescheduleApprove(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<RawAppointment>(`/appointments/${id}/reschedule-approve`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointment", id] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+}
+
+export function useRescheduleReject(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<RawAppointment>(`/appointments/${id}/reschedule-reject`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointment", id] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
   });
 }

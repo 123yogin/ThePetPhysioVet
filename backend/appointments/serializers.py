@@ -20,20 +20,76 @@ class MeSerializer(serializers.ModelSerializer):
     """The authenticated doctor. ``clinic_name`` comes from DoctorProfile."""
 
     clinic_name = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "clinic_name"]
+        fields = ["id", "username", "email", "first_name", "last_name", "clinic_name", "role"]
 
     def get_clinic_name(self, obj):
         profile = getattr(obj, "doctor_profile", None)
         return profile.clinic_name if profile is not None else ""
 
+    def get_role(self, obj):
+        # DOCTOR wins if both exist; superusers are doctors.
+        if hasattr(obj, "doctor_profile") or getattr(obj, "is_superuser", False):
+            return "DOCTOR"
+        if hasattr(obj, "owner_profile"):
+            return "OWNER"
+        return "DOCTOR"
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    """Read shape for the account/profile page. Extends the ``me`` fields with
+    the role-specific profile details: clinic name/address/phone for a DOCTOR,
+    contact ``phone`` for an OWNER (empty strings when the field/profile is
+    absent, so the SPA form always has defined values to bind)."""
+
+    role = serializers.SerializerMethodField()
+    clinic_name = serializers.SerializerMethodField()
+    clinic_address = serializers.SerializerMethodField()
+    clinic_phone = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id", "username", "email", "first_name", "last_name", "role",
+            "clinic_name", "clinic_address", "clinic_phone", "phone",
+        ]
+
+    def get_role(self, obj):
+        if hasattr(obj, "doctor_profile") or getattr(obj, "is_superuser", False):
+            return "DOCTOR"
+        if hasattr(obj, "owner_profile"):
+            return "OWNER"
+        return "DOCTOR"
+
+    def get_clinic_name(self, obj):
+        p = getattr(obj, "doctor_profile", None)
+        return p.clinic_name if p is not None else ""
+
+    def get_clinic_address(self, obj):
+        p = getattr(obj, "doctor_profile", None)
+        return p.clinic_address if p is not None else ""
+
+    def get_clinic_phone(self, obj):
+        p = getattr(obj, "doctor_profile", None)
+        return p.clinic_phone if p is not None else ""
+
+    def get_phone(self, obj):
+        p = getattr(obj, "owner_profile", None)
+        return p.phone if p is not None else ""
+
 
 class PetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pet
-        fields = ["id", "name", "pet_type", "owner_name", "owner_phone", "notes"]
+        fields = [
+            "id", "name", "species", "pet_type", "breed", "age", "sex", "weight",
+            "photo", "owner_name", "owner_phone", "owner_email", "medical_history",
+            "complaint", "complaint_started", "referred_by", "notes",
+        ]
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -61,6 +117,9 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "visit_type",
             "visit_type_display",
             "status",
+            "requested_date",
+            "requested_time",
+            "reschedule_reason",
         ]
 
 

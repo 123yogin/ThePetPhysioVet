@@ -20,6 +20,23 @@ class DoctorProfile(models.Model):
         return f"Dr. {self.user.get_full_name() or self.user.username}"
 
 
+class OwnerProfile(models.Model):
+    """Marks a User as a pet Owner (SRS Owner role). Auto-provisioned when a
+    doctor saves a pet carrying an owner email; the owner activates login by
+    setting a password via the claim endpoint. A user with an owner_profile
+    (and no doctor_profile) is treated as role=OWNER."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="owner_profile",
+    )
+    phone = models.CharField(max_length=30, blank=True)
+
+    def __str__(self):
+        return f"Owner {self.user.email or self.user.username}"
+
+
 class Pet(models.Model):
     """A patient record owned by a doctor. Persists across appointments."""
 
@@ -28,11 +45,35 @@ class Pet(models.Model):
         on_delete=models.CASCADE,
         related_name="patients",
     )
+    # SRS §3.1 AC-04: the linked Owner account (auto-provisioned from owner_email).
+    # SET_NULL so removing an owner account never deletes the clinical record.
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_pets",
+    )
     name = models.CharField(max_length=120)
-    pet_type = models.CharField(max_length=80, help_text="e.g. Dog, Cat, Bird")
+    # SRS §3.3 clinical fields. Added additively (all optional) so existing
+    # records + the legacy `pet_type` free-text label keep working.
+    SPECIES_CHOICES = [("Dog", "Dog"), ("Cat", "Cat"), ("Bird", "Bird"), ("Other", "Other")]
+    species = models.CharField(max_length=20, choices=SPECIES_CHOICES, blank=True)
+    pet_type = models.CharField(max_length=80, blank=True, help_text="Legacy free-text species")
+    breed = models.CharField(max_length=120, blank=True)
+    age = models.CharField(max_length=40, blank=True, help_text="e.g. '4 years' / '6 months'")
+    SEX_CHOICES = [("Male", "Male"), ("Female", "Female"), ("Unknown", "Unknown")]
+    sex = models.CharField(max_length=10, choices=SEX_CHOICES, blank=True)
+    weight = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, help_text="kg")
+    photo = models.ImageField(upload_to="pets/", blank=True, null=True)
     owner_name = models.CharField(max_length=120)
     owner_phone = models.CharField(max_length=30)
-    notes = models.TextField(blank=True, help_text="Medical history / general notes")
+    owner_email = models.EmailField(blank=True)
+    medical_history = models.TextField(blank=True)
+    complaint = models.TextField(blank=True, help_text="Presenting complaint (first visit)")
+    complaint_started = models.DateField(null=True, blank=True)
+    referred_by = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True, help_text="General notes")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -42,21 +83,50 @@ class Pet(models.Model):
     def __str__(self):
         return f"{self.name} ({self.owner_name})"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # SRS §3.3 AC-02: pet photo resized server-side to max 800×800.
+        if self.photo:
+            try:
+                from PIL import Image
+                img = Image.open(self.photo.path)
+                if img.width > 800 or img.height > 800:
+                    img.thumbnail((800, 800))
+                    img.save(self.photo.path)
+            except Exception:
+                pass  # never let image processing break the save
+
 
 class Appointment(models.Model):
+    # SRS §3.6 visit types. Legacy Clinic/Home retained for existing rows.
+    VISIT_INITIAL = "Initial"
+    VISIT_FOLLOWUP = "Follow-up"
+    VISIT_REVIEW = "Review"
+    VISIT_EMERGENCY = "Emergency"
     VISIT_CLINIC = "Clinic"
     VISIT_HOME = "Home"
     VISIT_TYPE_CHOICES = [
+        (VISIT_INITIAL, "Initial"),
+        (VISIT_FOLLOWUP, "Follow-up"),
+        (VISIT_REVIEW, "Review"),
+        (VISIT_EMERGENCY, "Emergency"),
         (VISIT_CLINIC, "Clinic"),
         (VISIT_HOME, "Home visit"),
     ]
 
+    # SRS §3.6 status lifecycle. Legacy "Rescheduled" retained for existing rows.
     STATUS_PENDING = "Pending"
+    STATUS_CONFIRMED = "Confirmed"
     STATUS_COMPLETED = "Completed"
+    STATUS_CANCELLED = "Cancelled"
+    STATUS_RESCHEDULE_REQUESTED = "Reschedule Requested"
     STATUS_RESCHEDULED = "Rescheduled"
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
+        (STATUS_CONFIRMED, "Confirmed"),
         (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+        (STATUS_RESCHEDULE_REQUESTED, "Reschedule Requested"),
         (STATUS_RESCHEDULED, "Rescheduled"),
     ]
 
@@ -71,18 +141,23 @@ class Appointment(models.Model):
         related_name="appointments",
     )
     visit_type = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=VISIT_TYPE_CHOICES,
-        default=VISIT_CLINIC,
+        default=VISIT_FOLLOWUP,
     )
     date = models.DateField()
     time = models.TimeField()
     reason_notes = models.TextField(blank=True)
     status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=STATUS_CHOICES,
         default=STATUS_PENDING,
     )
+    # SRS §3.6 owner reschedule-request workflow: owner proposes a new slot +
+    # reason; doctor approves (applies it) or rejects (keeps the original).
+    requested_date = models.DateField(null=True, blank=True)
+    requested_time = models.TimeField(null=True, blank=True)
+    reschedule_reason = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -510,6 +585,7 @@ class Notification(models.Model):
     DIAGNOSIS_UPLOADED = "DIAGNOSIS_UPLOADED"
     TREATMENT_ADDED = "TREATMENT_ADDED"
     REMINDER = "REMINDER"
+    MESSAGE_RECEIVED = "MESSAGE_RECEIVED"  # SRS §3.9 owner<->doctor query message
     TYPE_CHOICES = [
         (APPOINTMENT_CREATED, "Appointment created"),
         (APPOINTMENT_ACCEPTED, "Appointment accepted"),
@@ -520,6 +596,7 @@ class Notification(models.Model):
         (DIAGNOSIS_UPLOADED, "Diagnosis uploaded"),
         (TREATMENT_ADDED, "Treatment plan added"),
         (REMINDER, "Appointment reminder"),
+        (MESSAGE_RECEIVED, "New message"),
     ]
 
     user = models.ForeignKey(

@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCheckoutOrder } from "../api/billing";
+import { useCheckoutOrder, useRecordPayment } from "../api/billing";
 import type { CheckoutOrder } from "../api/billing";
 import { ApiError } from "../lib/http";
 import { formatCurrency } from "../lib/money";
@@ -95,6 +95,7 @@ interface CheckoutButtonProps {
 export default function CheckoutButton({ invoice, className, label }: CheckoutButtonProps) {
   const qc = useQueryClient();
   const checkout = useCheckoutOrder(invoice.id);
+  const recordPayment = useRecordPayment(invoice.id);
   // `busy` covers the whole open→settle window (order create + modal lifetime),
   // which extends past the mutation's own isPending once the widget is open.
   const [busy, setBusy] = useState(false);
@@ -152,9 +153,24 @@ export default function CheckoutButton({ invoice, className, label }: CheckoutBu
       return;
     }
 
-    // Dev/offline path: no real gateway — simulate a settled payment.
+    // Dev/offline path: no real gateway AND no webhook to flip the status, so
+    // settle the invoice directly by recording a full payment (mock ref). This
+    // is what makes the mock "Pay" actually mark the invoice PAID instead of
+    // hanging on "updating…".
     if (order.mock) {
-      onSettled();
+      try {
+        await recordPayment.mutateAsync({
+          amount_paid: invoice.total,
+          gateway_ref: `mock_${order.order_id}`,
+          status: "PAID",
+        });
+      } catch {
+        onError("Mock payment could not be recorded. Please try again.");
+        return;
+      }
+      if (!mounted.current) return;
+      setBusy(false);
+      setFeedback({ kind: "success", text: "Payment received — invoice marked paid." });
       return;
     }
 
@@ -184,7 +200,7 @@ export default function CheckoutButton({ invoice, className, label }: CheckoutBu
     } catch {
       onError("Could not open the payment window. Please try again.");
     }
-  }, [busy, invoice.payment_status, checkout, onSettled, onCancelled, onError]);
+  }, [busy, invoice.payment_status, invoice.total, checkout, recordPayment, onSettled, onCancelled, onError]);
 
   const amountLabel = formatCurrency(invoice.total);
   const buttonText = busy ? "Opening checkout…" : label ?? `Pay ${amountLabel}`;

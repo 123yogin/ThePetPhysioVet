@@ -85,6 +85,10 @@ export function formatTime(hhmm: string): string {
 
 // visit_type -> human display, matching Appointment.VISIT_TYPE_CHOICES.
 const VISIT_TYPE_DISPLAY: Record<VisitType, string> = {
+  Initial: "Initial",
+  "Follow-up": "Follow-up",
+  Review: "Review",
+  Emergency: "Emergency",
   Clinic: "Clinic",
   Home: "Home visit",
 };
@@ -98,7 +102,12 @@ export function badgeClass(status: Status): string {
   switch (status) {
     case "Completed":
       return "badge-completed";
+    case "Confirmed":
+      return "badge-active";
+    case "Cancelled":
+      return "badge-archived";
     case "Rescheduled":
+    case "Reschedule Requested":
       return "badge-rescheduled";
     case "Pending":
     default:

@@ -53,7 +53,19 @@ export default function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       <NavLink className={navClass} to="/appointments" end onClick={onNavigate}>
         <span className="icon">&#128203;</span> View appointments
       </NavLink>
+      {/* Billing + Revenue: intentional divergence from the Django golden shell.
+          Django's UI is being retired and these are React-only features (SRS §3.8),
+          so the shell is now baselined against React, not the Django template. */}
+      <NavLink className={navClass} to="/billing" end onClick={onNavigate}>
+        <span className="icon">&#8377;</span> Billing
+      </NavLink>
+      <NavLink className={navClass} to="/billing/revenue" onClick={onNavigate}>
+        <span className="icon">&#128200;</span> Revenue
+      </NavLink>
       <div className="sidebar-spacer"></div>
+      <NavLink className={navClass} to="/profile" onClick={onNavigate}>
+        <span className="icon">&#128100;</span> Profile
+      </NavLink>
       <a
         className="nav-item"
         href="/login"

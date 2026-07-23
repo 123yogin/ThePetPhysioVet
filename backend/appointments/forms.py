@@ -114,15 +114,28 @@ class DoctorSignupForm(UserCreationForm):
 class PetForm(forms.ModelForm):
     class Meta:
         model = Pet
-        fields = ["name", "pet_type", "owner_name", "owner_phone", "notes"]
+        # SRS §3.3 clinical + owner fields. Only name + owner_name/phone are
+        # required at the model level; the rest are optional (blank/null).
+        fields = [
+            "name", "species", "pet_type", "breed", "age", "sex", "weight", "photo",
+            "owner_name", "owner_phone", "owner_email", "medical_history",
+            "complaint", "complaint_started", "referred_by", "notes",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "input-glass"}),
             "pet_type": forms.TextInput(attrs={"class": "input-glass", "placeholder": "e.g. Dog, Cat"}),
+            "breed": forms.TextInput(attrs={"class": "input-glass"}),
+            "age": forms.TextInput(attrs={"class": "input-glass", "placeholder": "e.g. 4 years"}),
             "owner_name": forms.TextInput(attrs={"class": "input-glass"}),
             "owner_phone": forms.TextInput(attrs={"class": "input-glass"}),
-            "notes": forms.Textarea(attrs={"rows": 3, "class": "input-glass", "placeholder": "Medical history / notes (optional)"}),
+            "owner_email": forms.EmailInput(attrs={"class": "input-glass"}),
+            "medical_history": forms.Textarea(attrs={"rows": 3, "class": "input-glass"}),
+            "complaint": forms.Textarea(attrs={"rows": 2, "class": "input-glass"}),
+            "complaint_started": forms.DateInput(attrs={"type": "date", "class": "input-glass"}),
+            "referred_by": forms.TextInput(attrs={"class": "input-glass"}),
+            "notes": forms.Textarea(attrs={"rows": 3, "class": "input-glass", "placeholder": "General notes (optional)"}),
         }
-        labels = {"name": "Pet name", "pet_type": "Species / type"}
+        labels = {"name": "Pet name", "species": "Species", "pet_type": "Type (legacy)"}
 
 
 class AppointmentForm(forms.ModelForm):

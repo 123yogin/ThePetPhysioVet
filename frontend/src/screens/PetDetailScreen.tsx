@@ -116,16 +116,43 @@ export default function PetDetailScreen() {
         Clinical record — diagnostic reports and treatment plans for this patient.
       </p>
 
-      {/* ----- Pet info ----- */}
+      {/* ----- Clinical profile (SRS §3.3) ----- */}
       <div className="panel">
         {petLoading ? (
           <p style={{ margin: 0 }}>Loading patient…</p>
         ) : pet ? (
           <>
-            <p className="meta-row"><strong>Type:</strong> {pet.pet_type}</p>
-            <p className="meta-row"><strong>Owner:</strong> {pet.owner_name}</p>
-            <p className="meta-row"><strong>Phone:</strong> {pet.owner_phone}</p>
-            {pet.notes ? <p className="meta-row"><strong>Notes:</strong> {pet.notes}</p> : null}
+            {hasVal(pet.photo) ? (
+              <img
+                src={pet.photo as string}
+                alt={`${pet.name} photo`}
+                style={{ maxWidth: "100%", borderRadius: "var(--radius)", marginBottom: 12 }}
+              />
+            ) : null}
+            <MetaRow label="Name" value={pet.name} />
+            <MetaRow label="Species" value={pet.species} />
+            <MetaRow label="Breed" value={pet.breed} />
+            <MetaRow label="Age" value={pet.age} />
+            <MetaRow label="Sex" value={pet.sex} />
+            {hasVal(pet.weight) ? (
+              <p className="meta-row"><strong>Weight:</strong> {pet.weight} kg</p>
+            ) : null}
+            <MetaRow label="Owner" value={pet.owner_name} />
+            <MetaRow label="Phone" value={pet.owner_phone} />
+            <MetaRow label="Email" value={pet.owner_email} />
+            <MetaRow label="Complaint" value={pet.complaint} />
+            {hasVal(pet.complaint_started) ? (
+              <p className="meta-row">
+                <strong>Complaint started:</strong> {dateMedium(pet.complaint_started as string)}
+              </p>
+            ) : null}
+            <MetaRow label="Referred by" value={pet.referred_by} />
+            <MetaRow label="Notes" value={pet.notes} />
+            {/* US-PET-03: medical history — pre-wrap preserves line breaks. */}
+            <p className="meta-row" style={{ whiteSpace: "pre-wrap" }}>
+              <strong>Medical history:</strong>{" "}
+              {hasVal(pet.medical_history) ? pet.medical_history : "No medical history recorded"}
+            </p>
           </>
         ) : (
           <p style={{ margin: 0 }}>Could not load patient.</p>
@@ -283,6 +310,25 @@ export default function PetDetailScreen() {
         )}
       </div>
     </>
+  );
+}
+
+// True only for a meaningful, printable value. Guards against the literal
+// strings "null"/"None"/"undefined" ever reaching the DOM, and treats
+// null/undefined/blank as empty (weight & complaint_started are null-able).
+function hasVal(v: unknown): v is string {
+  if (v == null) return false;
+  const s = String(v).trim();
+  return s !== "" && s !== "null" && s !== "None" && s !== "undefined";
+}
+
+// One §3.3 profile field as a .meta-row; renders nothing when the value is empty.
+function MetaRow({ label, value }: { label: string; value?: string | null }) {
+  if (!hasVal(value)) return null;
+  return (
+    <p className="meta-row">
+      <strong>{label}:</strong> {value}
+    </p>
   );
 }
 

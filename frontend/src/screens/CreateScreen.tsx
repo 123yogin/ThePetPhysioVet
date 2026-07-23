@@ -12,7 +12,7 @@ import { ApiError } from "../lib/http";
 // group with a .field-hint help line above it, rendered as Django's actual
 // RadioSelect DOM (<div id="id_visit_type"><div><label>…).
 const VISIT_HELP =
-  "Clinic = owner comes to you. Home = you visit the pet at their location.";
+  "Initial = first visit · Follow-up = ongoing rehab · Review = re-assessment · Emergency = urgent.";
 
 export default function CreateScreen() {
   useTitle("Create appointment — ThePetPhysioVet");
@@ -72,20 +72,15 @@ export default function CreateScreen() {
 
           <Field label="Visit type" htmlFor="id_visit_type" extra="full" help={VISIT_HELP} errors={fieldErr("visit_type")}>
             <div id="id_visit_type">
-              <div>
-                <label htmlFor="id_visit_type_0">
-                  <input type="radio" name="visit_type" value="Clinic" required
-                    id="id_visit_type_0" defaultChecked />{" "}
-                  Clinic
-                </label>
-              </div>
-              <div>
-                <label htmlFor="id_visit_type_1">
-                  <input type="radio" name="visit_type" value="Home" required
-                    id="id_visit_type_1" />{" "}
-                  Home visit
-                </label>
-              </div>
+              {["Initial", "Follow-up", "Review", "Emergency"].map((v, i) => (
+                <div key={v}>
+                  <label htmlFor={`id_visit_type_${i}`}>
+                    <input type="radio" name="visit_type" value={v} required
+                      id={`id_visit_type_${i}`} defaultChecked={v === "Follow-up"} />{" "}
+                    {v}
+                  </label>
+                </div>
+              ))}
             </div>
           </Field>
 

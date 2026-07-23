@@ -55,10 +55,20 @@ export default function ReceiptDownload({ invoiceId, status }: ReceiptDownloadPr
       const res = await fetch(receiptUrl(invoiceId), {
         method: "GET",
         credentials: "include",
-        headers: { Accept: "application/pdf" },
+        // Include a */* fallback: the API's DRF renderers are JSON-only, so a
+        // bare "application/pdf" Accept fails content negotiation with 406
+        // before the view runs. The server still returns real application/pdf
+        // bytes; */* just lets negotiation succeed (and 409s render as JSON).
+        headers: { Accept: "application/pdf, */*" },
       });
       if (!res.ok) {
-        throw new Error(`Receipt generation failed (${res.status})`);
+        // 409 = invoice isn't paid yet (nothing to receipt), not a real failure.
+        setError(
+          res.status === 409
+            ? "A receipt is available once the invoice is paid."
+            : "Could not generate the receipt. Please try again.",
+        );
+        return;
       }
       const blob = await res.blob();
       objectUrl = URL.createObjectURL(blob);

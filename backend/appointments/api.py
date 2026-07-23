@@ -14,7 +14,7 @@ the caller does not own.
 from decimal import Decimal
 
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db.models import Sum
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -22,8 +22,8 @@ from django.template.defaultfilters import date as date_filter
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.generics import get_object_or_404
-from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import AllowAny, BasePermission
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -46,15 +46,19 @@ from .models import (
     Diagnosis,
     DoctorProfile,
     Invoice,
+    Notification,
+    OwnerProfile,
     Payment,
     Pet,
     TreatmentPlan,
 )
+from .notifications import notify
 from .serializers import (
     AppointmentSerializer,
     DiagnosisSerializer,
     MeSerializer,
     PetSerializer,
+    ProfileSerializer,
     ProgressNoteCreateSerializer,
     ProgressNoteSerializer,
     TreatmentPlanSerializer,
@@ -67,6 +71,58 @@ from .services import share_payload
 # Helpers
 # ---------------------------------------------------------------------------
 DOCTOR_ROLE = "DOCTOR"
+OWNER_ROLE = "OWNER"
+
+
+def _role_of(user):
+    """A user with a doctor_profile is a DOCTOR; one with an owner_profile is an
+    OWNER. (Doctors are never auto-given an owner_profile, so DOCTOR wins.)"""
+    if hasattr(user, "doctor_profile") or getattr(user, "is_superuser", False):
+        return DOCTOR_ROLE
+    if hasattr(user, "owner_profile"):
+        return OWNER_ROLE
+    return DOCTOR_ROLE
+
+
+def _split_name(full_name):
+    """Split a captured ``owner_name`` into (first, last). The first token is the
+    first name; everything after it is the last name. Returns ("", "") for blank."""
+    parts = (full_name or "").strip().split()
+    if not parts:
+        return "", ""
+    return parts[0], " ".join(parts[1:])
+
+
+def link_owner(pet):
+    """SRS §3.1 (doctor-provisioned owners): if the pet carries an owner email,
+    get-or-create a linked Owner account (username=email, unusable password
+    until the owner claims it) + OwnerProfile, and set pet.owner. Idempotent.
+
+    The owner's name is seeded from the doctor-entered ``pet.owner_name`` so the
+    owner's profile isn't blank on first login — but only when the account has no
+    name yet, so an owner who later edits their own name is never overwritten."""
+    email = (pet.owner_email or "").strip().lower()
+    if not email:
+        return
+    User = get_user_model()
+    user, created = User.objects.get_or_create(
+        username=email, defaults={"email": email}
+    )
+    if created:
+        user.set_unusable_password()  # owner activates via the claim endpoint
+        user.save()
+    # Seed first/last name from the captured owner_name when the account has none.
+    if not (user.first_name or user.last_name):
+        first, last = _split_name(pet.owner_name)
+        if first or last:
+            user.first_name, user.last_name = first, last
+            user.save(update_fields=["first_name", "last_name"])
+    OwnerProfile.objects.get_or_create(
+        user=user, defaults={"phone": pet.owner_phone or ""}
+    )
+    if pet.owner_id != user.id:
+        pet.owner = user
+        pet.save(update_fields=["owner"])
 
 
 def form_errors(form):
@@ -84,7 +140,7 @@ def _tokens_for(user):
     role claim. The role is set on the REFRESH token BEFORE deriving the access
     token so the access token (and every future rotated pair) inherits it."""
     refresh = RefreshToken.for_user(user)
-    refresh["role"] = DOCTOR_ROLE
+    refresh["role"] = _role_of(user)
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
@@ -213,10 +269,69 @@ class MeView(APIView):
     """GET current doctor (200) or 401. Also plants the csrftoken cookie so the
     SPA can send X-CSRFToken on subsequent mutations."""
 
-    permission_classes = [IsVet]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response(MeSerializer(request.user).data)
+
+
+class ProfileView(APIView):
+    """GET / PATCH the signed-in user's account profile (any authenticated
+    user — doctor or owner). GET returns the role-aware :class:`ProfileSerializer`
+    shape. PATCH updates the editable account fields (first/last name, email)
+    plus the role-specific profile fields — clinic name/address/phone for a
+    DOCTOR, contact phone for an OWNER. Unknown/blank keys are ignored; a
+    duplicate email (belonging to another account) returns 400."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(ProfileSerializer(request.user).data)
+
+    def patch(self, request):
+        user = request.user
+        data = request.data
+
+        # --- shared account fields -------------------------------------
+        if "first_name" in data:
+            user.first_name = str(data.get("first_name") or "").strip()
+        if "last_name" in data:
+            user.last_name = str(data.get("last_name") or "").strip()
+        if "email" in data:
+            email = str(data.get("email") or "").strip()
+            if email:
+                clash = (
+                    get_user_model()
+                    .objects.filter(email__iexact=email)
+                    .exclude(pk=user.pk)
+                    .exists()
+                )
+                if clash:
+                    return Response(
+                        {"email": ["That email is already in use."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user.email = email
+        user.save()
+
+        # --- role-specific profile -------------------------------------
+        doc = getattr(user, "doctor_profile", None)
+        if doc is not None:
+            for field, key in (
+                ("clinic_name", "clinic_name"),
+                ("clinic_address", "clinic_address"),
+                ("clinic_phone", "clinic_phone"),
+            ):
+                if key in data:
+                    setattr(doc, field, str(data.get(key) or "").strip())
+            doc.save()
+
+        own = getattr(user, "owner_profile", None)
+        if own is not None and "phone" in data:
+            own.phone = str(data.get("phone") or "").strip()
+            own.save()
+
+        return Response(ProfileSerializer(user).data)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -429,21 +544,26 @@ class AppointmentShareView(APIView):
 # ---------------------------------------------------------------------------
 class PetListCreateView(APIView):
     permission_classes = [IsVet]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get(self, request):
         qs = Pet.objects.filter(doctor=request.user)
         q = request.query_params.get("q", "").strip()
         if q:
             qs = (qs.filter(name__icontains=q) | qs.filter(owner_name__icontains=q)).distinct()
-        return Response(PetSerializer(qs, many=True).data)
+        return Response(PetSerializer(qs, many=True, context={"request": request}).data)
 
     def post(self, request):
-        form = PetForm(request.data)
+        form = PetForm(request.data, request.FILES)
         if form.is_valid():
             pet = form.save(commit=False)
             pet.doctor = request.user
             pet.save()
-            return Response(PetSerializer(pet).data, status=status.HTTP_201_CREATED)
+            link_owner(pet)  # SRS §3.1: provision/link the Owner account from owner_email
+            return Response(
+                PetSerializer(pet, context={"request": request}).data,
+                status=status.HTTP_201_CREATED,
+            )
         return Response(form_errors(form), status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -454,7 +574,184 @@ class PetDetailView(APIView):
 
     def get(self, request, pk):
         pet = _owned_pet(request, pk)
-        return Response(PetSerializer(pet).data)
+        return Response(PetSerializer(pet, context={"request": request}).data)
+
+
+# ---------------------------------------------------------------------------
+# Owner portal (SRS §3.1 owner side — doctor-provisioned accounts)
+# ---------------------------------------------------------------------------
+class IsOwner(BasePermission):
+    """Authenticated pet Owner (has owner_profile, is NOT a doctor). When the
+    request is JWT-authenticated the verified token role must be OWNER."""
+
+    message = "This area is for pet owners."
+
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u and u.is_authenticated):
+            return False
+        if hasattr(u, "doctor_profile") or getattr(u, "is_superuser", False):
+            return False
+        if not hasattr(u, "owner_profile"):
+            return False
+        auth = getattr(request, "auth", None)
+        if auth is not None:
+            try:
+                if auth.get("role") != OWNER_ROLE:
+                    return False
+            except (AttributeError, TypeError):
+                return False
+        return True
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class OwnerSetPasswordView(APIView):
+    """POST {email, password} -> activate a doctor-provisioned owner account by
+    setting its password (the 'claim' step). Works only for an existing account
+    that has an owner_profile."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = str(request.data.get("email", "")).strip().lower()
+        password = str(request.data.get("password", ""))
+        if not email or len(password) < 8:
+            return Response(
+                {"non_field_errors": ["Email and a password (min 8 characters) are required."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        User = get_user_model()
+        user = User.objects.filter(username=email, owner_profile__isnull=False).first()
+        if user is None:
+            return Response(
+                {"non_field_errors": ["No owner account for that email — ask your clinic to add your pet first."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.set_password(password)
+        user.save()
+        return Response({"ok": True})
+
+
+class OwnerPetsView(APIView):
+    """GET the owner's OWN pets (SRS §3.1 AC-04)."""
+
+    permission_classes = [IsOwner]
+
+    def get(self, request):
+        qs = Pet.objects.filter(owner=request.user)
+        return Response(PetSerializer(qs, many=True, context={"request": request}).data)
+
+
+class OwnerPetDetailView(APIView):
+    """GET one owned pet + its clinical record (read-only for the owner)."""
+
+    permission_classes = [IsOwner]
+
+    def get(self, request, pk):
+        pet = get_object_or_404(Pet, pk=pk, owner=request.user)
+        data = PetSerializer(pet, context={"request": request}).data
+        data["diagnoses"] = DiagnosisSerializer(
+            Diagnosis.objects.filter(pet=pet), many=True, context={"request": request}
+        ).data
+        data["treatment_plans"] = TreatmentPlanSerializer(
+            TreatmentPlan.objects.filter(pet=pet), many=True, context={"request": request}
+        ).data
+        return Response(data)
+
+
+def _owner_appointment(request, pk):
+    return get_object_or_404(
+        Appointment.objects.select_related("pet", "doctor"), pk=pk, pet__owner=request.user
+    )
+
+
+class OwnerAppointmentsView(APIView):
+    """GET the owner's appointments (for their pets)."""
+
+    permission_classes = [IsOwner]
+
+    def get(self, request):
+        qs = Appointment.objects.filter(pet__owner=request.user).select_related("pet")
+        return Response(AppointmentSerializer(qs, many=True).data)
+
+
+class OwnerAppointmentAcceptView(APIView):
+    """POST — owner accepts a Pending appointment (SRS §3.6) → Confirmed."""
+
+    permission_classes = [IsOwner]
+
+    def post(self, request, pk):
+        appt = _owner_appointment(request, pk)
+        if appt.status != Appointment.STATUS_PENDING:
+            return Response({"detail": "Only a pending appointment can be accepted."}, status=status.HTTP_409_CONFLICT)
+        appt.status = Appointment.STATUS_CONFIRMED
+        appt.save(update_fields=["status", "updated_at"])
+        notify(appt.doctor, Notification.APPOINTMENT_ACCEPTED,
+               f"{appt.pet.name}: owner accepted the {appt.date} appointment.")
+        return Response(AppointmentSerializer(appt).data)
+
+
+class OwnerRescheduleRequestView(APIView):
+    """POST {date,time,reason} — owner requests a reschedule (SRS §3.6)."""
+
+    permission_classes = [IsOwner]
+
+    def post(self, request, pk):
+        appt = _owner_appointment(request, pk)
+        d = str(request.data.get("date", "")).strip()
+        t = str(request.data.get("time", "")).strip()
+        reason = str(request.data.get("reason", "")).strip()
+        if not (d and t and reason):
+            return Response({"non_field_errors": ["New date, time and a reason are required."]},
+                            status=status.HTTP_400_BAD_REQUEST)
+        appt.requested_date = d
+        appt.requested_time = t
+        appt.reschedule_reason = reason
+        appt.status = Appointment.STATUS_RESCHEDULE_REQUESTED
+        appt.save(update_fields=["requested_date", "requested_time", "reschedule_reason", "status", "updated_at"])
+        notify(appt.doctor, Notification.APPOINTMENT_RESCHEDULED,
+               f"{appt.pet.name}: owner requested {d} {t} — {reason}")
+        return Response(AppointmentSerializer(appt).data)
+
+
+class AppointmentRescheduleApproveView(APIView):
+    """Doctor approves the owner's reschedule request → applies it, Confirmed."""
+
+    permission_classes = [IsVet]
+
+    def post(self, request, pk):
+        appt = _owned_appointment(request, pk)
+        if appt.status != Appointment.STATUS_RESCHEDULE_REQUESTED or not appt.requested_date:
+            return Response({"detail": "No reschedule request to approve."}, status=status.HTTP_409_CONFLICT)
+        appt.date = appt.requested_date
+        appt.time = appt.requested_time
+        appt.status = Appointment.STATUS_CONFIRMED
+        appt.requested_date = None
+        appt.requested_time = None
+        appt.reschedule_reason = ""
+        appt.save()
+        if appt.pet.owner_id:
+            notify(appt.pet.owner, Notification.APPOINTMENT_RESCHEDULED,
+                   f"Your reschedule for {appt.pet.name} was approved: {appt.date} {appt.time}.")
+        return Response(AppointmentSerializer(appt).data)
+
+
+class AppointmentRescheduleRejectView(APIView):
+    """Doctor rejects the owner's reschedule request → original kept, Pending."""
+
+    permission_classes = [IsVet]
+
+    def post(self, request, pk):
+        appt = _owned_appointment(request, pk)
+        appt.requested_date = None
+        appt.requested_time = None
+        appt.reschedule_reason = ""
+        appt.status = Appointment.STATUS_PENDING
+        appt.save()
+        if appt.pet.owner_id:
+            notify(appt.pet.owner, Notification.APPOINTMENT_RESCHEDULED,
+                   f"Your reschedule request for {appt.pet.name} was declined; the original time stands.")
+        return Response(AppointmentSerializer(appt).data)
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .api import IsVet
+from rest_framework.permissions import IsAuthenticated
 from .models import Notification
 from .serializers_notifications import NotificationSerializer
 
@@ -51,7 +51,7 @@ def _parse_limit(request):
 class NotificationListView(APIView):
     """Latest-N notification feed for the dashboard, plus unread count."""
 
-    permission_classes = [IsVet]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         limit = _parse_limit(request)
@@ -70,7 +70,7 @@ class NotificationListView(APIView):
 class NotificationUnreadCountView(APIView):
     """Unread badge count for the app shell."""
 
-    permission_classes = [IsVet]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response({"unread_count": _unread_count(request)})
@@ -79,7 +79,7 @@ class NotificationUnreadCountView(APIView):
 class NotificationMarkReadView(APIView):
     """Mark a single owned notification as read (idempotent)."""
 
-    permission_classes = [IsVet]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         # Scope by user so a cross-user pk 404s and never mutates another
@@ -94,7 +94,7 @@ class NotificationMarkReadView(APIView):
 class NotificationMarkAllReadView(APIView):
     """Mark all of the doctor's notifications as read."""
 
-    permission_classes = [IsVet]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)

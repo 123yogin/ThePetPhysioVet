@@ -178,11 +178,15 @@ class NotificationFeedTests(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     # -- permission ------------------------------------------------------
-    def test_non_vet_is_forbidden(self):
+    def test_non_vet_reads_only_their_own_feed(self):
+        # SRS §3.7 (Sprint 11): the feed is per-user (IsAuthenticated), so a
+        # non-vet reads their OWN feed (200) but never sees the doctor's rows.
         plain = User.objects.create_user(username="notavet", password=PASSWORD)
-        make_notification(self.doc)  # exists but caller has no profile
+        make_notification(self.doc)  # doctor's row — must NOT leak to `plain`
         resp = self._list(plain)
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["results"], [])
+        self.assertEqual(resp.data["unread_count"], 0)
 
     def test_unauthenticated_is_forbidden(self):
         request = self.factory.get("/api/v1/notifications")

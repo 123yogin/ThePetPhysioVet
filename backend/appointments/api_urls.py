@@ -5,6 +5,7 @@ from django.urls import path
 from . import (
     api,
     api_devices,
+    api_owner,
     api_invoices,
     api_notification_prefs,
     api_notifications,
@@ -22,8 +23,27 @@ urlpatterns = [
     path("auth/login", api.LoginView.as_view(), name="login"),
     path("auth/logout", api.LogoutView.as_view(), name="logout"),
     path("auth/me", api.MeView.as_view(), name="me"),
+    path("auth/profile", api.ProfileView.as_view(), name="profile"),
     path("auth/signup", api.SignupView.as_view(), name="signup"),
     path("auth/refresh", api.RefreshView.as_view(), name="refresh"),
+    # Owner portal (SRS §3.1 owner side)
+    path("auth/owner-set-password", api.OwnerSetPasswordView.as_view(), name="owner-set-password"),
+    path("owner/pets", api.OwnerPetsView.as_view(), name="owner-pets"),
+    path("owner/pets/<int:pk>", api.OwnerPetDetailView.as_view(), name="owner-pet-detail"),
+    # Owner appointments (SRS §3.6 owner side)
+    path("owner/appointments", api.OwnerAppointmentsView.as_view(), name="owner-appointments"),
+    path("owner/appointments/<int:pk>/accept", api.OwnerAppointmentAcceptView.as_view(), name="owner-appointment-accept"),
+    path("owner/appointments/<int:pk>/reschedule-request", api.OwnerRescheduleRequestView.as_view(), name="owner-appointment-reschedule-request"),
+    # Owner billing (SRS §3.8 owner side) — Sprint 11
+    path("owner/invoices", api_owner.OwnerInvoiceListView.as_view(), name="owner-invoices"),
+    path("owner/invoices/<int:pk>", api_owner.OwnerInvoiceDetailView.as_view(), name="owner-invoice-detail"),
+    path("owner/invoices/<int:pk>/receipt", api_owner.OwnerInvoiceReceiptView.as_view(), name="owner-invoice-receipt"),
+    path("owner/invoices/<int:pk>/payments", api_owner.OwnerInvoicePaymentView.as_view(), name="owner-invoice-payments"),
+    # Owner queries (SRS §3.9 owner side) — Sprint 11
+    path("owner/pets/<int:pet_pk>/queries", api_owner.OwnerPetQueryThreadView.as_view(), name="owner-pet-queries"),
+    # Doctor approve/reject an owner's reschedule request
+    path("appointments/<int:pk>/reschedule-approve", api.AppointmentRescheduleApproveView.as_view(), name="appointment-reschedule-approve"),
+    path("appointments/<int:pk>/reschedule-reject", api.AppointmentRescheduleRejectView.as_view(), name="appointment-reschedule-reject"),
     # Dashboard
     path("dashboard/stats", api.DashboardStatsView.as_view(), name="dashboard-stats"),
     # Appointments

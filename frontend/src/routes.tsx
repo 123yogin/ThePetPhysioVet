@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import RequireAuth from "./components/RequireAuth";
 import AppShell from "./components/AppShell";
 import LoginScreen from "./screens/LoginScreen";
@@ -21,12 +21,39 @@ import RevenueScreen from "./screens/RevenueScreen";
 import NotificationsSettingsScreen from "./screens/NotificationsSettingsScreen";
 import QueryInboxScreen from "./screens/QueryInboxScreen";
 import QueryThreadScreen from "./screens/QueryThreadScreen";
+import ProfileScreen from "./screens/ProfileScreen";
+// Owner portal (SRS §3.1 owner side)
+import RoleLanding from "./components/RoleLanding";
+import OwnerShell from "./components/OwnerShell";
+import OwnerHomeScreen from "./screens/OwnerHomeScreen";
+import OwnerPetDetailScreen from "./screens/OwnerPetDetailScreen";
+import OwnerAppointmentsScreen from "./screens/OwnerAppointmentsScreen";
+import OwnerBillingScreen from "./screens/OwnerBillingScreen";
+import OwnerNotificationsScreen from "./screens/OwnerNotificationsScreen";
+import OwnerClaimScreen from "./screens/OwnerClaimScreen";
 
 // Auth routes are bare; app routes are wrapped in <RequireAuth><AppShell/>.
 export const router = createBrowserRouter([
-  { path: "/", element: <Navigate to="/dashboard" replace /> },
+  { path: "/", element: <RoleLanding /> },
   { path: "/login", element: <LoginScreen /> },
   { path: "/signup", element: <SignupScreen /> },
+  { path: "/activate", element: <OwnerClaimScreen /> },
+  // Owner portal — role-scoped views (owner sees only their own pets, AC-04).
+  {
+    element: (
+      <RequireAuth>
+        <OwnerShell />
+      </RequireAuth>
+    ),
+    children: [
+      { path: "/owner", element: <OwnerHomeScreen /> },
+      { path: "/owner/appointments", element: <OwnerAppointmentsScreen /> },
+      { path: "/owner/billing", element: <OwnerBillingScreen /> },
+      { path: "/owner/notifications", element: <OwnerNotificationsScreen /> },
+      { path: "/owner/profile", element: <ProfileScreen /> },
+      { path: "/owner/pets/:id", element: <OwnerPetDetailScreen /> },
+    ],
+  },
   {
     element: (
       <RequireAuth>
@@ -69,6 +96,8 @@ export const router = createBrowserRouter([
       // "/billing" static-vs-dynamic ranking above.
       { path: "/queries", element: <QueryInboxScreen /> },
       { path: "/queries/:petId", element: <QueryThreadScreen /> },
+      // Account / profile (view + edit). Shared screen, role-aware.
+      { path: "/profile", element: <ProfileScreen /> },
     ],
   },
   // Parity-only shell route: renders the AppShell chrome (sidebar + empty

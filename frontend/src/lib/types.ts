@@ -1,9 +1,13 @@
 // Shared API/domain types. Field names mirror the Django JSON payloads so
 // display formatting can be centralised in lib/format.ts.
 
-export type VisitType = "Clinic" | "Home";
-export type Status = "Pending" | "Completed" | "Rescheduled";
+// SRS §3.6 visit types (+ legacy Clinic/Home for existing rows).
+export type VisitType = "Initial" | "Follow-up" | "Review" | "Emergency" | "Clinic" | "Home";
+// SRS §3.6 status lifecycle (+ legacy "Rescheduled").
+export type Status =
+  | "Pending" | "Confirmed" | "Completed" | "Cancelled" | "Reschedule Requested" | "Rescheduled";
 
+export type Role = "DOCTOR" | "OWNER";
 export interface Me {
   id: number;
   username: string;
@@ -11,6 +15,23 @@ export interface Me {
   first_name: string;
   last_name: string;
   clinic_name?: string;
+  role?: Role; // DOCTOR or OWNER — drives role-based routing
+}
+
+// Account/profile page shape (GET/PATCH /auth/profile). Role-aware: clinic_*
+// fields are meaningful for a DOCTOR, `phone` for an OWNER (all present but
+// empty when not applicable, so the form always binds defined strings).
+export interface Profile {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: Role;
+  clinic_name: string;
+  clinic_address: string;
+  clinic_phone: string;
+  phone: string;
 }
 
 export interface DashboardAppointment {
@@ -49,6 +70,10 @@ export interface Appointment {
   visit_type: VisitType;
   visit_type_display: string;
   status: Status;
+  // SRS §3.6 owner reschedule-request (present when status = Reschedule Requested)
+  requested_date?: string | null;
+  requested_time?: string | null;
+  reschedule_reason?: string;
 }
 
 export interface AppointmentDetail extends Appointment {
@@ -60,12 +85,24 @@ export interface AppointmentDetail extends Appointment {
   time_24h?: string;
 }
 
+// SRS §3.3 clinical fields — all optional (added additively in the backend).
 export interface Pet {
   id: number;
   name: string;
+  species?: string;
   pet_type: string;
+  breed?: string;
+  age?: string;
+  sex?: string;
+  weight?: string | null; // DRF DecimalField → string, or null
+  photo?: string | null; // /media URL, or null
   owner_name: string;
   owner_phone: string;
+  owner_email?: string;
+  medical_history?: string;
+  complaint?: string;
+  complaint_started?: string | null; // ISO date or null
+  referred_by?: string;
   notes?: string;
 }
 
@@ -79,15 +116,9 @@ export interface SharePayload {
 
 // ----- Sprint 3: clinical record (Diagnosis / Treatment) -----
 
-// Pet detail header for the clinical-record hub (GET /pets/<pk>).
-export interface PetDetail {
-  id: number;
-  name: string;
-  pet_type: string;
-  owner_name: string;
-  owner_phone: string;
-  notes?: string;
-}
+// Pet detail header for the clinical-record hub (GET /pets/<pk>). Same shape
+// as Pet now that §3.3 fields are on the model.
+export type PetDetail = Pet;
 
 export type ReportType = "XRAY" | "MRI" | "CT" | "BLOOD" | "OTHER";
 

@@ -9,12 +9,29 @@ behaviour that drives the SPA's RequireAuth guard.
 """
 
 import datetime
+import shutil
+import tempfile
+from io import BytesIO
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from PIL import Image
 from rest_framework.test import APIClient
+
+
+def _png_bytes(size=(32, 32), color=(200, 120, 60)):
+    """Return the bytes of a small in-memory PNG for photo-upload tests."""
+    buf = BytesIO()
+    Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+# Photo-upload tests write into a throwaway MEDIA_ROOT so the real media/ dir is
+# never touched; the tree is removed in PetAPITests.tearDownClass.
+_PET_MEDIA = tempfile.mkdtemp(prefix="ppv-pet-media-")
 
 from .models import Appointment, DoctorProfile, Pet
 from .serializers import AppointmentSerializer
@@ -349,7 +366,13 @@ class AppointmentAPITests(TestCase):
         self.assertEqual(self.client.get(f"/api/v1/appointments/{appt.id}/share").status_code, 404)
 
 
+@override_settings(MEDIA_ROOT=_PET_MEDIA)
 class PetAPITests(TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(_PET_MEDIA, ignore_errors=True)
+        super().tearDownClass()
+
     def setUp(self):
         self.client = APIClient()
         self.doc = make_doctor("drpet")
@@ -370,14 +393,18 @@ class PetAPITests(TestCase):
 
     def test_create_invalid_returns_400_with_field_errors(self):
         # Blank required fields -> 400 with per-field keys matching PetForm.
+        # Per the Sprint-8 contract only name + owner_name/phone are required
+        # (species/pet_type/breed/... are optional clinical fields).
         resp = self.client.post(
             "/api/v1/pets",
-            {"name": "", "pet_type": "", "owner_name": "", "owner_phone": ""},
+            {"name": "", "owner_name": "", "owner_phone": ""},
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
-        for key in ("name", "pet_type", "owner_name", "owner_phone"):
+        for key in ("name", "owner_name", "owner_phone"):
             self.assertIn(key, resp.data)
+        # pet_type is no longer required, so it must NOT appear as an error.
+        self.assertNotIn("pet_type", resp.data)
         self.assertFalse(Pet.objects.filter(doctor=self.doc).exists())
 
     def test_list_scoped_and_search(self):
@@ -391,6 +418,77 @@ class PetAPITests(TestCase):
         self.assertEqual([p["name"] for p in self.client.get("/api/v1/pets", {"q": "rex"}).data], ["Rex"])
         # search by owner name
         self.assertEqual([p["name"] for p in self.client.get("/api/v1/pets", {"q": "tom"}).data], ["Fluffy"])
+
+    def test_json_create_no_photo_still_201_and_photo_null(self):
+        # BE-1: the existing JSON create path must keep working (no photo) and
+        # GET detail returns photo=None when unset.
+        resp = self.client.post(
+            "/api/v1/pets",
+            {"name": "Coco", "pet_type": "Dog", "owner_name": "Neha",
+             "owner_phone": "+919000000001"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertIsNone(resp.data["photo"])
+        pet = Pet.objects.get(name="Coco")
+        self.assertFalse(pet.photo)
+        detail = self.client.get(f"/api/v1/pets/{pet.id}")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIsNone(detail.data["photo"])
+
+    def test_multipart_create_with_photo_sets_photo_and_absolute_url(self):
+        # BE-1: multipart create with a 'photo' file -> 201, pet.photo set, and
+        # GET detail returns photo as a resolvable /media URL (absolute).
+        upload = SimpleUploadedFile("milo.png", _png_bytes(), content_type="image/png")
+        resp = self.client.post(
+            "/api/v1/pets",
+            {"name": "Milo", "pet_type": "Cat", "owner_name": "Ravi",
+             "owner_phone": "+919000000002", "photo": upload},
+            format="multipart",
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        pet = Pet.objects.get(name="Milo")
+        self.assertTrue(pet.photo)
+        self.assertIn("/media/", resp.data["photo"])
+        detail = self.client.get(f"/api/v1/pets/{pet.id}")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn("/media/", detail.data["photo"])
+        self.assertTrue(detail.data["photo"].startswith("http"))
+
+    def test_photo_over_800px_is_resized_and_small_photo_unchanged(self):
+        # AC-02 (US-PET-01): a photo larger than 800x800 is resized server-side
+        # so that max(width, height) <= 800, aspect ratio preserved; a photo
+        # already within 800x800 is stored unchanged.
+        big = SimpleUploadedFile(
+            "big.png", _png_bytes(size=(1000, 1200)), content_type="image/png"
+        )
+        resp = self.client.post(
+            "/api/v1/pets",
+            {"name": "Jumbo", "pet_type": "Dog", "owner_name": "Sam",
+             "owner_phone": "+919000000003", "photo": big},
+            format="multipart",
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        pet = Pet.objects.get(name="Jumbo")
+        with Image.open(pet.photo.path) as img:
+            self.assertLessEqual(max(img.width, img.height), 800)
+            # longer side scaled down to the 800 cap, aspect ratio preserved
+            self.assertEqual(img.height, 800)
+            self.assertAlmostEqual(img.width / img.height, 1000 / 1200, places=2)
+
+        small = SimpleUploadedFile(
+            "small.png", _png_bytes(size=(400, 300)), content_type="image/png"
+        )
+        resp2 = self.client.post(
+            "/api/v1/pets",
+            {"name": "Tiny", "pet_type": "Cat", "owner_name": "Mia",
+             "owner_phone": "+919000000004", "photo": small},
+            format="multipart",
+        )
+        self.assertEqual(resp2.status_code, 201, resp2.data)
+        tiny = Pet.objects.get(name="Tiny")
+        with Image.open(tiny.photo.path) as img:
+            self.assertEqual((img.width, img.height), (400, 300))  # untouched
 
 
 class AuthzAPITests(TestCase):
