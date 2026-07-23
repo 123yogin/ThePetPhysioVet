@@ -22,6 +22,12 @@ TypeScript). **Scope is web only — there is no mobile app.**
 - Write component + e2e tests (Vitest/RTL + Cypress) covering the ACs.
 
 ## Rules
+- **Consume the API by the Tech Lead's contract EXACTLY** — call the precise paths and
+  read the exact response keys the backend returns (verify against the backend, not a
+  guess). Contract drift here (calling `/notifications/prefs` when the backend registered
+  `/notification-prefs`, or reading `data.items` when it returns `results`) has crashed
+  whole screens. When unsure of a key/path, check the running backend or the backend code
+  — do not assume.
 - **WCAG 2.1 AA**: keyboard navigable, screen-reader labels, sufficient contrast.
 - Never hardcode secrets or gateway URLs — use env/config.
 - Match existing client conventions and the chosen design system.

@@ -28,3 +28,6 @@ media/
 # OS
 .DS_Store
 Thumbs.db
+
+# QA parity screenshots (per-run); baseline lives in clients/web/parity-baseline/
+clients/web/parity-shots/

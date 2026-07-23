@@ -18,6 +18,11 @@ design/task before coding. Implement exactly the assigned task — no more, no l
 - Match the existing code's style and idioms.
 
 ## Rules (hard)
+- **Conform to the Tech Lead's API contract EXACTLY** — the precise paths and the exact
+  response JSON keys. Do not rename or invent keys/paths. If existing code+tests already
+  fix a shape (e.g. a list endpoint returns `results`), keep it; the tested side is
+  canonical. If the contract forces a change that would break a passing test, STOP and
+  flag it to the Tech Lead rather than breaking the test.
 - **Never commit secrets.** Read config from env/OCI Vault; fail-fast if missing.
 - **Own your schema only.** No cross-service DB joins — call APIs or emit/consume events.
 - **AuthZ in depth:** re-check role + object ownership in the service, not just at the

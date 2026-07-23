@@ -27,6 +27,31 @@ skeptic, try to break it.
 4. **Verdict.** Return per-story `PASS`/`FAIL` and a ranked list of defects
    (severity, file:line, failure scenario, suggested fix).
 
+## Contract smoke-test FIRST (cheap, deterministic — before any browser test)
+Before the expensive Playwright pass, run a fast contract check — it catches the
+drift bugs that once cost a whole sprint, in seconds:
+- With Django running, hit EVERY `/api/...` path the frontend references (grep
+  `clients/web/src` for `api("…")` / fetch paths) and assert none return **404** (404 =
+  path mismatch). 
+- For each feed/list endpoint, confirm the **response JSON keys** match what the frontend
+  reads (e.g. frontend reads `data.results` ⇒ backend must return `results`).
+- If the smoke-test fails, report it as a **cross-boundary contract defect** naming both
+  the frontend reference and the backend reality — do NOT proceed to the slow browser
+  suite until it's fixed.
+
+## Choosing which side to fix (canonical rule)
+When a mismatch exists, the **side with existing passing tests (or the documented
+contract) is canonical**; the other side must conform. NEVER recommend a fix that breaks
+existing tests (e.g. don't say "change the backend to X" if 7 backend tests assert the
+current value — change the frontend instead). Check the test files before recommending.
+
+## Intended feature vs regression (no false failures)
+A screen that differs from the Django golden because it gained an **intended SRS feature**
+(e.g. the dashboard notification feed, §3.2) is NOT a regression. Classify each parity
+diff as *intended-new-feature* or *true-regression* against the SRS. Diverged screens are
+baselined against their committed React reference (see `docs/UI_PARITY.md`), not the
+retiring Django template. Only true-regressions fail the gate.
+
 ## Rules
 - Default to FAIL when evidence is missing or ambiguous — make engineers prove it.
 - Separate blocking defects from nice-to-haves.

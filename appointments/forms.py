@@ -1,8 +1,49 @@
+import os
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 
-from .models import Appointment, DoctorProfile, Pet
+from .models import Appointment, Diagnosis, DoctorProfile, Pet
+from .services import sanitize_html
+
+# --- Diagnostic-report upload validation (SRS §3.4) ------------------------
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
+
+# Allowlist by BOTH file extension and content mime. DICOM is frequently sent
+# as application/octet-stream (or with no type at all), so those are accepted
+# only for the .dcm/.dicom extensions.
+ALLOWED_UPLOAD_TYPES = {
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".png": {"image/png"},
+    ".pdf": {"application/pdf"},
+    ".dcm": {"application/dicom", "application/octet-stream", ""},
+    ".dicom": {"application/dicom", "application/octet-stream", ""},
+}
+
+_TYPE_ERROR = (
+    "Unsupported file type. Upload an image (.jpg/.jpeg/.png), a PDF (.pdf), "
+    "or a DICOM file (.dcm/.dicom)."
+)
+
+
+def validate_upload(uploaded):
+    """Validate an uploaded diagnostic report by extension + mime + size.
+
+    Raises ``forms.ValidationError`` with a clear message on failure.
+    """
+    ext = os.path.splitext(uploaded.name or "")[1].lower()
+    if ext not in ALLOWED_UPLOAD_TYPES:
+        raise forms.ValidationError(_TYPE_ERROR)
+    mime = (getattr(uploaded, "content_type", "") or "").lower()
+    allowed = ALLOWED_UPLOAD_TYPES[ext]
+    image_ok = ext in (".jpg", ".jpeg", ".png") and mime.startswith("image/")
+    if mime not in allowed and not image_ok:
+        raise forms.ValidationError(_TYPE_ERROR)
+    if uploaded.size > MAX_UPLOAD_SIZE:
+        raise forms.ValidationError("File exceeds the 20MB limit.")
+    return uploaded
 
 
 class DoctorLoginForm(AuthenticationForm):
@@ -119,3 +160,26 @@ class RescheduleForm(forms.ModelForm):
             "date": forms.DateInput(attrs={"type": "date", "class": "input-glass"}),
             "time": forms.TimeInput(attrs={"type": "time", "class": "input-glass"}),
         }
+
+
+class DiagnosisUploadForm(forms.Form):
+    """Validate a diagnostic-report upload (report_type + notes + file)."""
+
+    report_type = forms.ChoiceField(choices=Diagnosis.REPORT_TYPE_CHOICES)
+    notes = forms.CharField(required=False, widget=forms.Textarea)
+    file = forms.FileField()
+
+    def clean_notes(self):
+        return sanitize_html(self.cleaned_data.get("notes", ""))
+
+    def clean_file(self):
+        return validate_upload(self.cleaned_data["file"])
+
+
+class DiagnosisReplaceForm(forms.Form):
+    """Validate a replacement file for an existing diagnosis (same rules)."""
+
+    file = forms.FileField()
+
+    def clean_file(self):
+        return validate_upload(self.cleaned_data["file"])

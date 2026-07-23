@@ -1,5 +1,4 @@
 from functools import wraps
-from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
@@ -11,6 +10,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import AppointmentForm, DoctorLoginForm, DoctorSignupForm, PetForm, RescheduleForm
 from .models import Appointment, DoctorProfile, Pet
+from .services import build_share_urls, share_body
 
 
 def vet_required(view_func):
@@ -77,44 +77,12 @@ def logout_view(request):
     return redirect("login")
 
 
-def _share_body(request, appt: Appointment) -> str:
-    profile = request.user.doctor_profile
-    doctor_name = appt.doctor.get_full_name().strip() or appt.doctor.get_username()
-    clinic = (profile.clinic_name or "").strip() or getattr(
-        settings, "DEFAULT_CLINIC_NAME", "Veterinary Clinic"
-    )
-    addr = (profile.clinic_address or "").strip() or getattr(settings, "DEFAULT_CLINIC_ADDRESS", "")
-    clinic_phone = (profile.clinic_phone or "").strip()
-    visit_line = appt.get_visit_type_display()
-    if appt.visit_type == Appointment.VISIT_CLINIC:
-        visit_detail = "Please come to the clinic at the address below."
-    else:
-        visit_detail = "Home visit — the veterinarian will come to you. Confirm the address by reply if needed."
-
-    lines = [
-        f"Hello {appt.owner_name},",
-        "",
-        f"Pet: {appt.pet_name} ({appt.pet_type})",
-        f"Visit type: {visit_line}",
-        visit_detail,
-        f"Appointment: {appt.date} at {appt.time}",
-        f"Doctor: Dr. {doctor_name}",
-        f"Clinic: {clinic}",
-    ]
-    if addr:
-        lines.append(f"Clinic address: {addr}")
-    if clinic_phone:
-        lines.append(f"Clinic phone: {clinic_phone}")
-    if appt.reason_notes.strip():
-        lines.extend(["", "Notes:", appt.reason_notes.strip()])
-    lines.extend(["", "— Sent via ThePetPhysioVet"])
-    return "\n".join(lines)
-
-
 @login_required
 @vet_required
 def dashboard(request):
-    today = timezone.localdate()
+    # PARITY_TODAY pins "today" during the UI-parity check; it is None (real
+    # clock) unless the env var is set, so production behaviour is unchanged.
+    today = getattr(settings, "PARITY_TODAY", None) or timezone.localdate()
     today_qs = (
         Appointment.objects.filter(doctor=request.user, date=today)
         .exclude(status=Appointment.STATUS_COMPLETED)
@@ -186,15 +154,8 @@ def create_appointment(request):
 @vet_required
 def share_appointment(request, pk):
     appt = get_object_or_404(Appointment, pk=pk, doctor=request.user)
-    body = _share_body(request, appt)
-    encoded = quote(body, safe="")
-    digits = "".join(c for c in appt.owner_phone if c.isdigit())
-    if len(digits) >= 8:
-        whatsapp_url = f"https://wa.me/{digits}?text={encoded}"
-    else:
-        whatsapp_url = f"https://wa.me/?text={encoded}"
-    sms_target = appt.owner_phone.strip() or digits
-    sms_url = f"sms:{sms_target}?body={quote(body)}" if sms_target else "#"
+    body = share_body(request, appt)
+    whatsapp_url, sms_url = build_share_urls(appt, body)
     return render(
         request,
         "vet/share.html",
@@ -219,7 +180,7 @@ def appointment_list(request):
         request,
         "vet/appointments.html",
         {
-            "appointments": qs.order_by("-date", "-time"),
+            "appointments": qs.order_by("-date", "-time", "-id"),
             "filter_pet": pet,
             "filter_owner": owner,
             "filter_date": date,
@@ -257,3 +218,16 @@ def mark_complete(request, pk):
     if nxt == "list":
         return redirect("appointment_list")
     return redirect("dashboard")
+
+
+@login_required
+@vet_required
+def parity_shell(request):
+    """Parity-only view: renders the app_base shell with an EMPTY content block.
+
+    Registered only when ``settings.PARITY_MODE`` is set (see appointments/urls.py),
+    so it never exists in production. Its url_name ('parity_shell') matches none
+    of the nav conditions in app_base.html, so NO nav item is 'active' — this
+    mirrors the React shell route and lets the sidebar/shell be diffed 1:1.
+    """
+    return render(request, "vet/parity_shell.html")

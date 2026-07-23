@@ -1,0 +1,462 @@
+/* Sprint-3 clinical UI additions — Diagnosis & Treatment screens.
+ *
+ * This file is imported AFTER vet.css in main.tsx. It exists ONLY so the new
+ * clinical screens (which have NO Django golden / no pixel target) get the few
+ * classes they need WITHOUT editing vet.css. vet.css stays byte-identical, and
+ * because none of the 9 golden screens reference these classes, their
+ * screenshot parity is untouched. Everything here is modelled on existing
+ * vet.css tokens/looks (glass, brown palette, pill badges, 999px radius). */
+
+/* ----- Status badges (modelled on .badge-* in vet.css) ----- */
+.badge-active {
+    background: rgba(46, 125, 50, 0.18);
+    color: #1b5e20;
+}
+
+.badge-onhold {
+    background: rgba(255, 183, 77, 0.35);
+    color: #6d3600;
+}
+
+.badge-archived {
+    background: rgba(93, 64, 55, 0.16);
+    color: var(--brown-700);
+}
+
+/* ----- Destructive button (red accent from the vet.css palette) ----- */
+.btn-danger {
+    background: linear-gradient(135deg, #c62828, #b71c1c);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(183, 28, 28, 0.25);
+}
+
+.btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgba(183, 28, 28, 0.28);
+}
+
+/* ----- Report-type / therapy chips (small neutral pills) ----- */
+.chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(62, 39, 35, 0.15);
+    color: var(--brown-700);
+    margin: 0 6px 6px 0;
+}
+
+/* ----- Minimal rich-text editor + toolbar ----- */
+.rt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.rt-btn {
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(62, 39, 35, 0.18);
+    background: rgba(255, 255, 255, 0.85);
+    color: var(--brown-700);
+    font: inherit;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rt-btn:hover {
+    border-color: var(--brown-500);
+    box-shadow: 0 2px 10px rgba(62, 39, 35, 0.08);
+}
+
+.rt-editor {
+    min-height: 120px;
+    overflow-y: auto;
+    line-height: 1.5;
+}
+
+/* placeholder for the empty contenteditable box */
+.rt-editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--brown-500);
+    pointer-events: none;
+}
+
+/* Rendered (sanitized) rich-text content — keep block spacing tidy. */
+.rt-content > :first-child {
+    margin-top: 0;
+}
+
+.rt-content > :last-child {
+    margin-bottom: 0;
+}
+
+.rt-content ul,
+.rt-content ol {
+    margin: 6px 0;
+    padding-left: 22px;
+}
+
+/* ----- Progress-note timeline ----- */
+.note-item {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(62, 39, 35, 0.1);
+    margin-bottom: 12px;
+}
+
+.note-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.note-session {
+    font-weight: 700;
+    color: var(--brown-900);
+}
+
+.note-time {
+    font-size: 13px;
+    color: var(--brown-500);
+}
+
+/* ----- Upload progress bar ----- */
+.upload-progress {
+    margin-top: 10px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(62, 39, 35, 0.12);
+    overflow: hidden;
+}
+
+.upload-progress > span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(135deg, #6d4c41, #4e342e);
+    transition: width 0.2s ease;
+}
+
+/* ----- Confirm-dialog overlay (built from a .glass-card) ----- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(62, 39, 35, 0.35);
+    backdrop-filter: blur(2px);
+}
+
+.modal-card {
+    width: min(420px, 100%);
+}
+
+.modal-card h3 {
+    margin: 0 0 8px;
+    font-size: 1.1rem;
+}
+
+.modal-card p {
+    margin: 0 0 18px;
+    color: var(--brown-700);
+    font-size: 14px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* ----- Section header row (title + right-aligned action) ----- */
+.section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.section-head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+}
+
+/* ----- Read-only (archived) plan hint ----- */
+.readonly-note {
+    font-size: 13px;
+    color: var(--brown-500);
+    margin: 0 0 14px;
+}
+
+/* =====================================================================
+ * Sprint-5 notifications & reminders UI (SRS §3.7 + §7).
+ *
+ * All notification styling lives HERE (single-owner foundation file) so
+ * vet.css stays byte-identical. None of the 9 golden screens reference these
+ * classes, so their pixel parity is untouched — and the sidebar unread badge
+ * renders no element at zero unread, keeping the parity shell unchanged.
+ * Modelled on vet.css tokens (glass, brown palette, 999px pills, red accent).
+ * ===================================================================== */
+
+/* ----- Sidebar unread badge (on the dark .sidebar nav-item flex row) ----- */
+.nav-badge {
+    margin-left: auto;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #c62828;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(183, 28, 28, 0.4);
+}
+
+/* ----- Dashboard bell trigger + its count bubble ----- */
+.notif-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--brown-700);
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.notif-bell:hover {
+    transform: translateY(-1px);
+}
+
+.notif-bell-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #c62828;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+/* ----- Feed dropdown panel (a floating glass-card) ----- */
+.notif-dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 45;
+    width: min(360px, calc(100vw - 32px));
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+}
+
+.notif-dropdown-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(62, 39, 35, 0.1);
+}
+
+.notif-dropdown-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--brown-900);
+}
+
+.notif-mark-all {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1565c0;
+    cursor: pointer;
+}
+
+.notif-mark-all:disabled {
+    color: var(--brown-500);
+    cursor: default;
+}
+
+/* ----- Scrollable feed list ----- */
+.notif-feed {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+}
+
+.notif-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(62, 39, 35, 0.08);
+    text-align: left;
+    width: 100%;
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-item:hover {
+    background: rgba(255, 255, 255, 0.6);
+}
+
+/* Unread rows get a warm tint + a left accent bar. */
+.notif-item.unread {
+    background: rgba(46, 125, 50, 0.08);
+    box-shadow: inset 3px 0 0 #2e7d32;
+}
+
+.notif-item-icon {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(93, 64, 55, 0.12);
+    font-size: 0.95rem;
+}
+
+.notif-item-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-item-msg {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--brown-900);
+}
+
+.notif-item-time {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--brown-500);
+}
+
+/* ----- Empty state ----- */
+.notif-empty {
+    margin: 0;
+    padding: 28px 20px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--brown-500);
+}
+
+/* ----- Settings opt-out toggle (accessible checkbox switch) ----- */
+.pref-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+/* Visually-hidden native checkbox — keeps keyboard + screen-reader semantics. */
+.pref-toggle-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.pref-toggle-track {
+    flex: none;
+    position: relative;
+    width: 46px;
+    height: 26px;
+    border-radius: 999px;
+    background: rgba(62, 39, 35, 0.2);
+    transition: background 0.2s;
+}
+
+.pref-toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(62, 39, 35, 0.3);
+    transition: transform 0.2s;
+}
+
+.pref-toggle-input:checked + .pref-toggle-track {
+    background: #c62828;
+}
+
+.pref-toggle-input:checked + .pref-toggle-track .pref-toggle-thumb {
+    transform: translateX(20px);
+}
+
+/* Focus ring for keyboard users (checkbox is visually hidden). */
+.pref-toggle-input:focus-visible + .pref-toggle-track {
+    outline: 2px solid var(--brown-700);
+    outline-offset: 2px;
+}
+
+.pref-toggle-label {
+    font-size: 14px;
+    color: var(--brown-900);
+}

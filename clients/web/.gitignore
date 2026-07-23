@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+dist-tsnode
+*.tsbuildinfo
+*.local
+.vite
+test-results
+playwright-report
+playwright/.cache

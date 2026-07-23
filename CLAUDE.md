@@ -44,6 +44,14 @@ See `PRODUCT_PLAN.md` for the phased roadmap and per-phase acceptance criteria.
 6. **Idempotency** on money-touching mutations (payment webhooks) and event consumers.
 7. Report honestly: if tests fail, say so with output; never mark work done unverified.
 
+## ⚡ Permissions: restart once to activate zero-prompt mode
+`.claude/settings.json` is set to `defaultMode: bypassPermissions` (auto-approve every
+tool call, no prompts) with a blanket `Bash`/`WebFetch`/`WebSearch` allow. This reads
+**only at session start**, so **restart Claude Code once** in this folder (or launch
+`claude --dangerously-skip-permissions`) to make it live. After that: no permission
+prompts on this project. Only `.env`/secrets stay blocked (silently, never prompts).
+Trade-off: this disables all confirmations, including destructive commands — intended.
+
 ## Local dev environment (already set up)
 - **Python:** 3.12 venv at `.venv/`. Run backend commands with `./.venv/bin/python`,
   `./.venv/bin/pip`, `./.venv/bin/pytest` (do NOT use the system `python3`, which is 3.9
