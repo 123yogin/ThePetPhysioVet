@@ -66,7 +66,6 @@ Trade-off: this disables all confirmations, including destructive commands — i
   (use `backend/.venv/bin/python` — NOT system `python3`, which is 3.9 and too old for Django 6).
 - **Frontend:** `cd frontend && npm run dev` → http://localhost:5173 (proxies `/api` to :8000).
 - **Migrate / seed:** `cd backend && ./.venv/bin/python manage.py migrate` (or `seed_parity`).
-- **Tests:** `cd backend && ./.venv/bin/python manage.py test appointments.<module>`.
 
 ## Team (see .claude/agents/)
 - `product-manager` — backlog, user stories, acceptance criteria, sprint scope, sign-off.

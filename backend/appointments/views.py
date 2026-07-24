@@ -10,7 +10,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import AppointmentForm, DoctorLoginForm, DoctorSignupForm, PetForm, RescheduleForm
 from .models import Appointment, DoctorProfile, Pet
-from .services import build_share_urls, share_body
+from .services.html import build_share_urls, share_body
 
 
 def vet_required(view_func):

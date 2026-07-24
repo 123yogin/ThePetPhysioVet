@@ -33,7 +33,7 @@ from .models import (
     Payment,
     TreatmentPlan,
 )
-from .notifications import notify
+from .services.notifications import notify
 
 logger = logging.getLogger(__name__)
 

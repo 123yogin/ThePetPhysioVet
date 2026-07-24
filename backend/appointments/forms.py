@@ -5,7 +5,7 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 
 from .models import Appointment, Diagnosis, DoctorProfile, Pet
-from .services import sanitize_html
+from .services.html import sanitize_html
 
 # --- Diagnostic-report upload validation (SRS §3.4) ------------------------
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB

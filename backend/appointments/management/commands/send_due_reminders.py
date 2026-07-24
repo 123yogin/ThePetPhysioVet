@@ -21,9 +21,9 @@ import datetime
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from ...notifications import notify
+from ...services.notifications import notify
 from ...models import Notification
-from ...reminders import due_reminders
+from ...services.reminders import due_reminders
 
 
 class Command(BaseCommand):

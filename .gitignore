@@ -29,5 +29,5 @@ media/
 .DS_Store
 Thumbs.db
 
-# QA parity screenshots (per-run); baseline lives in clients/web/parity-baseline/
+# QA parity screenshots (per-run); baseline lives in frontend/parity-baseline/
 frontend/parity-shots/

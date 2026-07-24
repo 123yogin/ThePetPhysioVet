@@ -8,3 +8,6 @@ dist-tsnode
 test-results
 playwright-report
 playwright/.cache
+
+# Local demo recordings (videos / generated PDFs) — not source
+recordings
