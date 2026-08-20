@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ThePetPhysioVet</title>
+    <!--
+      Parity fix (does NOT touch vet.css, which stays byte-identical). Django
+      makes `.auth-shell` / `.app-shell` DIRECT children of <body>, so under
+      `body.auth-page{display:flex;align-items:center}` the auth card is the flex
+      item and `width:min(440px,100%)` resolves to 440px. In React those elements
+      sit inside this wrapper <div id="root">; a default display:block wrapper
+      becomes the shrink-to-fit flex item (~251px), collapsing the card. Making
+      #root `display:contents` removes it from layout so its child IS the flex
+      item — reproducing Django's DOM exactly. No visual/UX change otherwise.
+    -->
+    <style>
+      #root { display: contents; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
