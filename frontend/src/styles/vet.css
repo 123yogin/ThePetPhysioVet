@@ -202,21 +202,28 @@ button, input, select, textarea {
     padding: 20px 16px;
   }
 
-  /* Mobile overflow safety net.
-     Many rows are laid out with an inline `display:flex`, which defaults to
-     `flex-wrap: nowrap`. Combined with .main-panel's `overflow-x: hidden`,
-     anything that does not fit is silently CLIPPED rather than scrolled --
-     measured up to 230px past the right edge, leaving buttons like
-     "Complete" and "Reschedule" impossible to see or tap on a phone.
+}
 
-     An inline style only overrides the properties it actually declares, and
-     these rows declare `display` but not `flex-wrap` -- so this rule wins
-     without needing !important. Rows that set flexWrap themselves keep it,
-     and column-direction rows are unaffected. */
-  .main-panel [style*="display: flex"],
-  .main-panel [style*="display:flex"] {
-    flex-wrap: wrap;
-  }
+/* Overflow safety net -- applies at EVERY width, deliberately not inside a
+   media query.
+
+   This started life inside `@media (max-width: 768px)`, which left a dead zone:
+   between 769px and ~1000px the rows stayed `nowrap`, crushing a visit card's
+   owner text to 132px and pushing its "Share" button up to 108px past the edge.
+   Because `.main-panel` sets `overflow-x: hidden`, that content was clipped
+   rather than scrolled -- invisible and untappable. Testing only AT the 768 and
+   1024 breakpoints missed it entirely; the bug lived between them.
+
+   `flex-wrap: wrap` is a no-op when a row already fits, so there is no reason to
+   gate it on a width. Rows wrap exactly when they must, at any viewport.
+
+   An inline style only overrides the properties it actually declares. These rows
+   declare `display` but not `flex-wrap`, so this rule wins without !important.
+   Rows that set flexWrap themselves keep their own value; column-direction rows
+   are unaffected. */
+.main-panel [style*="display: flex"],
+.main-panel [style*="display:flex"] {
+  flex-wrap: wrap;
 }
 
 /* Glass Cards & Panels */
