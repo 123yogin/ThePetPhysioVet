@@ -272,7 +272,7 @@ export const AppointmentsScreen: React.FC = () => {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
                     disabled={processingId === reqAppt.id}
                     onClick={() => handleApproveReschedule(reqAppt.id, reqAppt.pet_name)}
@@ -301,7 +301,7 @@ export const AppointmentsScreen: React.FC = () => {
         <div>
           {/* Month Navigation & Controls */}
           <div className="glass-card" style={{ marginBottom: '20px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <button onClick={prevMonth} className="btn btn-secondary btn-sm">
                 &larr; Prev
               </button>
@@ -316,7 +316,7 @@ export const AppointmentsScreen: React.FC = () => {
               </button>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="text"
                 className="input-glass"

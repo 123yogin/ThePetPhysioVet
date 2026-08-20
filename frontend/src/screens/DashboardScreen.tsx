@@ -31,14 +31,14 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 className="page-title">Clinic Dashboard</h1>
           <p className="page-sub">
             {stats?.today_display || 'Today\'s physical therapy schedule & overview'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <Link to="/appointments/new" className="btn btn-primary">
             + New Appointment
           </Link>
@@ -122,6 +122,8 @@ export const DashboardScreen: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
                   padding: '16px 20px',
                   borderRadius: '12px',
                   background: 'rgba(255, 255, 255, 0.7)',
@@ -142,7 +144,7 @@ export const DashboardScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
                     {humanizeStatus(appt.status)}
                   </span>
