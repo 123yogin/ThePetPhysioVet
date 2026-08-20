@@ -10,6 +10,23 @@ import {
   createOwnerAppointment,
 } from '../api/owner';
 import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
+
+const REPORT_TYPES: { value: string; label: string }[] = [
+  { value: 'XRAY', label: 'X-Ray Radiograph' },
+  { value: 'MRI', label: 'MRI Scan' },
+  { value: 'CT', label: 'CT Scan' },
+  { value: 'ULTRASOUND', label: 'Ultrasound' },
+  { value: 'BLOOD', label: 'Blood Work' },
+  { value: 'OTHER', label: 'Other Report' },
+];
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const OwnerPetDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,10 +39,8 @@ export const OwnerPetDetailScreen: React.FC = () => {
 
   // Diagnosis Modal / Form state
   const [showAddDiag, setShowAddDiag] = useState(false);
-  const [diagTitle, setDiagTitle] = useState('');
-  const [diagFindings, setDiagFindings] = useState('');
-  const [diagSeverity, setDiagSeverity] = useState('MODERATE');
-  const [diagTags, setDiagTags] = useState('Scan, Report');
+  const [diagReportType, setDiagReportType] = useState('XRAY');
+  const [diagNotes, setDiagNotes] = useState('');
   const [diagFile, setDiagFile] = useState<File | null>(null);
 
   // History Edit Modal state
@@ -63,26 +78,24 @@ export const OwnerPetDetailScreen: React.FC = () => {
   // Add Diagnosis Mutation
   const addDiagMutation = useMutation({
     mutationFn: async () => {
-      const fd = new FormData();
-      fd.append('title', diagTitle);
-      fd.append('findings', diagFindings);
-      fd.append('severity', diagSeverity);
-      fd.append('tags', diagTags);
-      if (diagFile) {
-        fd.append('attachments', diagFile);
+      if (!diagFile) {
+        throw new Error('Please attach a scan or report file.');
       }
+      const fd = new FormData();
+      fd.append('report_type', diagReportType);
+      fd.append('notes', diagNotes);
+      fd.append('file', diagFile);
       return addOwnerPetDiagnosis(petId, fd);
     },
     onSuccess: () => {
       addFlash('Diagnostic report uploaded successfully! Your vet has been notified.', 'success');
       queryClient.invalidateQueries({ queryKey: ['ownerPetDetail', petId] });
       setShowAddDiag(false);
-      setDiagTitle('');
-      setDiagFindings('');
+      setDiagNotes('');
       setDiagFile(null);
     },
-    onError: () => {
-      addFlash('Failed to upload diagnostic report.', 'error');
+    onError: (err: any) => {
+      addFlash(err?.message || 'Failed to upload diagnostic report.', 'error');
     },
   });
 
@@ -210,21 +223,21 @@ export const OwnerPetDetailScreen: React.FC = () => {
                 boxShadow: 'var(--shadow-glass)',
               }}
             >
-              🐕
+              {pet.species?.toLowerCase().includes('cat') ? '🐈' : pet.species?.toLowerCase().includes('bird') ? '🐦' : '🐕'}
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h1 style={{ fontSize: '26px', fontWeight: '800', color: 'var(--brown-900)', margin: 0 }}>
                   {pet.name}
                 </h1>
-                <span className="badge badge-success">{pet.species || 'Dog'}</span>
+                <span className="badge badge-neutral">{pet.species || 'Dog'}</span>
               </div>
               <p style={{ color: 'var(--brown-700)', marginTop: '4px', fontSize: '14px' }}>
                 <strong>Breed:</strong> {pet.breed || 'Crossbreed'} &bull; <strong>Age:</strong> {pet.age || 'N/A'} &bull;{' '}
                 <strong>Weight:</strong> {pet.weight ? `${pet.weight} kg` : 'N/A'} &bull; <strong>Sex:</strong> {pet.sex || 'N/A'}
               </p>
-              <p style={{ color: 'var(--brown-600)', fontSize: '12px', marginTop: '4px' }}>
-                👨‍⚕️ <strong>Attending Specialist:</strong> your vet
+              <p style={{ color: 'var(--brown-600)', fontSize: '12px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Icon name="doctor" size={12} /> <strong>Attending Specialist:</strong> your vet
               </p>
             </div>
           </div>
@@ -241,10 +254,10 @@ export const OwnerPetDetailScreen: React.FC = () => {
               }}
               className="btn btn-secondary btn-sm"
             >
-              ✏️ Edit Medical History
+              <Icon name="edit" /> Edit Medical History
             </button>
             <button onClick={() => setShowAddDiag(true)} className="btn btn-primary btn-sm">
-              ➕ Upload Diagnosis Report
+              <Icon name="plus" /> Upload Diagnosis Report
             </button>
           </div>
         </div>
@@ -257,35 +270,35 @@ export const OwnerPetDetailScreen: React.FC = () => {
           onClick={() => setActiveTab('diagnoses')}
           style={{ padding: '8px 16px', fontSize: '14px' }}
         >
-          🩺 Diagnosis Reports ({pet.diagnoses?.length || 0})
+          <Icon name="stethoscope" /> Diagnosis Reports ({pet.diagnoses?.length || 0})
         </button>
         <button
           className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setActiveTab('history')}
           style={{ padding: '8px 16px', fontSize: '14px' }}
         >
-          📋 Medical History & Notes
+          <Icon name="list" /> Medical History & Notes
         </button>
         <button
           className={`btn ${activeTab === 'plans' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setActiveTab('plans')}
           style={{ padding: '8px 16px', fontSize: '14px' }}
         >
-          🏋️‍♂️ Physical Therapy Plans ({pet.treatment_plans?.length || 0})
+          <Icon name="activity" /> Physical Therapy Plans ({pet.treatment_plans?.length || 0})
         </button>
         <button
           className={`btn ${activeTab === 'chat' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setActiveTab('chat')}
           style={{ padding: '8px 16px', fontSize: '14px' }}
         >
-          💬 Message your vet
+          <Icon name="chat" /> Message your vet
         </button>
         <button
           className={`btn ${activeTab === 'book' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setActiveTab('book')}
           style={{ padding: '8px 16px', fontSize: '14px' }}
         >
-          📅 Book Session
+          <Icon name="calendar" /> Book Session
         </button>
       </div>
 
@@ -297,15 +310,15 @@ export const OwnerPetDetailScreen: React.FC = () => {
               Diagnostic Records, Scans & Reports
             </h3>
             <button onClick={() => setShowAddDiag(true)} className="btn btn-primary btn-sm">
-              ➕ Add Diagnosis Report / Scan
+              <Icon name="plus" /> Add Diagnosis Report / Scan
             </button>
           </div>
 
           {/* Modal / Form to Upload Diagnosis */}
           {showAddDiag && (
             <div className="glass-card" style={{ marginBottom: '24px', padding: '20px', border: '2px solid var(--primary)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '12px' }}>
-                📁 Upload New Diagnostic Report or Scan
+              <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="paperclip" /> Upload New Diagnostic Report or Scan
               </h4>
               <form
                 onSubmit={(e) => {
@@ -315,53 +328,34 @@ export const OwnerPetDetailScreen: React.FC = () => {
               >
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                   <div className="field">
-                    <label>Report Title *</label>
-                    <input
-                      type="text"
-                      className="input-glass"
-                      value={diagTitle}
-                      onChange={(e) => setDiagTitle(e.target.value)}
-                      placeholder="e.g. Hip X-Ray Scan or Blood Test"
-                      required
-                    />
-                  </div>
-                  <div className="field">
-                    <label>Severity Level</label>
-                    <select className="input-glass" value={diagSeverity} onChange={(e) => setDiagSeverity(e.target.value)}>
-                      <option value="MILD">Mild</option>
-                      <option value="MODERATE">Moderate</option>
-                      <option value="SEVERE">Severe</option>
+                    <label>Report Type *</label>
+                    <select className="input-glass" value={diagReportType} onChange={(e) => setDiagReportType(e.target.value)}>
+                      {REPORT_TYPES.map((rt) => (
+                        <option key={rt.value} value={rt.value}>
+                          {rt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="field">
-                    <label>Tags / Category</label>
+                    <label>Attach Scan / Report Document (Image or PDF) *</label>
                     <input
-                      type="text"
+                      type="file"
                       className="input-glass"
-                      value={diagTags}
-                      onChange={(e) => setDiagTags(e.target.value)}
-                      placeholder="e.g. X-Ray, Scan, Lab Report"
+                      onChange={(e) => setDiagFile(e.target.files ? e.target.files[0] : null)}
+                      required
                     />
                   </div>
                 </div>
 
                 <div className="field" style={{ marginTop: '12px' }}>
-                  <label>Findings / Report Details</label>
+                  <label>Notes for your vet</label>
                   <textarea
                     className="input-glass"
                     rows={3}
-                    value={diagFindings}
-                    onChange={(e) => setDiagFindings(e.target.value)}
-                    placeholder="Enter diagnostic summary, radiologist findings, or notes..."
-                  />
-                </div>
-
-                <div className="field" style={{ marginTop: '12px' }}>
-                  <label>Attach Scan / Report Document (Image or PDF)</label>
-                  <input
-                    type="file"
-                    className="input-glass"
-                    onChange={(e) => setDiagFile(e.target.files ? e.target.files[0] : null)}
+                    value={diagNotes}
+                    onChange={(e) => setDiagNotes(e.target.value)}
+                    placeholder="Anything you'd like your vet to know about this report or scan..."
                   />
                 </div>
 
@@ -381,54 +375,43 @@ export const OwnerPetDetailScreen: React.FC = () => {
             <div className="glass-card" style={{ padding: '30px', textAlign: 'center' }}>
               <p style={{ color: 'var(--brown-600)', marginBottom: '12px' }}>No diagnostic records or scans uploaded yet.</p>
               <button onClick={() => setShowAddDiag(true)} className="btn btn-secondary btn-sm">
-                ➕ Upload First Report
+                <Icon name="plus" /> Upload First Report
               </button>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {pet.diagnoses.map((diag: any) => (
+              {pet.diagnoses.map((diag) => (
                 <div key={diag.id} className="glass-card" style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)', margin: 0 }}>
-                        {diag.title}
+                        {diag.original_filename || 'Diagnostic Report'}
                       </h4>
-                      <p style={{ fontSize: '12px', color: 'var(--brown-600)', marginTop: '2px' }}>
-                        📅 Date: {diag.date}
+                      <p style={{ fontSize: '12px', color: 'var(--brown-600)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Icon name="calendar" size={12} /> {diag.uploaded_at ? diag.uploaded_at.substring(0, 10) : '—'}
+                        {diag.size ? ` • ${formatFileSize(diag.size)}` : ''}
                       </p>
                     </div>
-                    <span
-                      className={`badge ${
-                        diag.severity === 'SEVERE'
-                          ? 'badge-danger'
-                          : diag.severity === 'MILD'
-                          ? 'badge-success'
-                          : 'badge-warning'
-                      }`}
-                    >
-                      {diag.severity || 'MODERATE'}
-                    </span>
+                    <span className="badge badge-confirmed">{diag.report_type_display || diag.report_type}</span>
                   </div>
 
-                  <p style={{ color: 'var(--brown-800)', marginTop: '10px', fontSize: '14px', whiteSpace: 'pre-line' }}>
-                    {diag.findings || diag.description}
-                  </p>
+                  {diag.notes && (
+                    <p style={{ color: 'var(--brown-800)', marginTop: '10px', fontSize: '14px', whiteSpace: 'pre-line' }}>
+                      {diag.notes}
+                    </p>
+                  )}
 
-                  {/* Attachments list */}
-                  {diag.attachments && diag.attachments.length > 0 && (
-                    <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {diag.attachments.map((att: any) => (
-                        <a
-                          key={att.id}
-                          href={att.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-secondary btn-sm"
-                          style={{ fontSize: '12px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          📎 {att.original_filename || 'View Attached Report'}
-                        </a>
-                      ))}
+                  {diag.file_url && (
+                    <div style={{ marginTop: '12px' }}>
+                      <a
+                        href={diag.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '12px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Icon name="paperclip" size={13} /> {diag.original_filename || 'View Attached Report'}
+                      </a>
                     </div>
                   )}
                 </div>
@@ -456,14 +439,14 @@ export const OwnerPetDetailScreen: React.FC = () => {
               }}
               className="btn btn-secondary btn-sm"
             >
-              ✏️ Update Details
+              <Icon name="edit" /> Update Details
             </button>
           </div>
 
           {showEditHistory && (
             <div className="glass-card" style={{ marginBottom: '24px', padding: '20px', border: '2px solid var(--primary)' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '12px' }}>
-                ✏️ Update Medical History & Profile
+              <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="edit" /> Update Medical History & Profile
               </h4>
               <form
                 onSubmit={(e) => {
@@ -581,22 +564,30 @@ export const OwnerPetDetailScreen: React.FC = () => {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {pet.treatment_plans.map((plan: any) => (
+              {pet.treatment_plans.map((plan) => (
                 <div key={plan.id} className="glass-card" style={{ padding: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h4 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', margin: 0 }}>
-                      🏋️‍♂️ {plan.title || 'Rehabilitation Plan'}
+                    <h4 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Icon name="activity" /> Rehab Regimen #{plan.id}
                     </h4>
-                    <span className="badge badge-success">{plan.status || 'ACTIVE'}</span>
+                    <span className={`badge badge-${(plan.status || 'unknown').toLowerCase()}`}>{plan.status || 'Unknown'}</span>
                   </div>
                   <p style={{ color: 'var(--brown-800)', marginTop: '8px', fontSize: '14px' }}>
-                    {plan.description || plan.goal}
+                    <strong>Therapies:</strong> {plan.therapies?.join(', ') || '—'}
+                  </p>
+                  <p style={{ color: 'var(--brown-700)', marginTop: '4px', fontSize: '14px' }}>
+                    <strong>Frequency:</strong> {plan.frequency_custom || plan.frequency || '—'} &bull;{' '}
+                    <strong>Duration:</strong> {plan.duration_custom || plan.duration || '—'}
                   </p>
 
-                  {plan.protocols && (
+                  {plan.progress_notes && plan.progress_notes.length > 0 && (
                     <div style={{ marginTop: '12px', background: 'rgba(255,255,255,0.6)', padding: '12px', borderRadius: '8px' }}>
-                      <strong style={{ fontSize: '13px', color: 'var(--brown-900)' }}>Prescribed Modalities:</strong>
-                      <p style={{ fontSize: '13px', color: 'var(--brown-700)', margin: '4px 0 0' }}>{plan.protocols}</p>
+                      <strong style={{ fontSize: '13px', color: 'var(--brown-900)' }}>Session Progress Notes</strong>
+                      {plan.progress_notes.map((note) => (
+                        <div key={note.id} style={{ fontSize: '13px', color: 'var(--brown-700)', margin: '8px 0 0' }}>
+                          <strong>Session {note.session_no}:</strong> {note.notes}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -609,8 +600,8 @@ export const OwnerPetDetailScreen: React.FC = () => {
       {/* TAB 4: CHAT WITH DR. DHANVI PATEL */}
       {activeTab === 'chat' && (
         <div>
-          <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px' }}>
-            💬 Direct Message your vet
+          <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="chat" /> Direct Message your vet
           </h3>
 
           <div className="glass-card" style={{ padding: '20px', marginBottom: '20px', minHeight: '200px' }}>
@@ -627,7 +618,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {chatThread.messages.map((msg: any) => (
+                {chatThread.messages.map((msg) => (
                   <div
                     key={msg.id}
                     style={{
@@ -647,7 +638,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
 
                     {msg.attachments && msg.attachments.length > 0 && (
                       <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {msg.attachments.map((att: any) => (
+                        {msg.attachments.map((att) => (
                           <a
                             key={att.id}
                             href={att.url}
@@ -657,9 +648,12 @@ export const OwnerPetDetailScreen: React.FC = () => {
                               color: msg.sender_role === 'OWNER' ? '#fff' : 'var(--primary)',
                               fontSize: '12px',
                               textDecoration: 'underline',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
                             }}
                           >
-                            📎 {att.original_filename}
+                            <Icon name="paperclip" size={12} /> {att.original_filename}
                           </a>
                         ))}
                       </div>
@@ -706,7 +700,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
       {activeTab === 'book' && (
         <div className="glass-card" style={{ padding: '24px', maxWidth: '600px', margin: '0 auto' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px' }}>
-            📅 Book Therapy Appointment for {pet.name}
+            <Icon name="calendar" /> Book Therapy Appointment for {pet.name}
           </h3>
           <form
             onSubmit={(e) => {

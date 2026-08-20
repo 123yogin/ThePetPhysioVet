@@ -47,7 +47,7 @@ export const OwnerBillingScreen: React.FC = () => {
                   <td>{inv.pet_name || '—'}</td>
                   <td>{inv.created_at?.substring(0, 10) || '—'}</td>
                   <td>₹{inv.total ?? '—'}</td>
-                  <td><span className="badge badge-confirmed">{inv.payment_status || 'Unknown'}</span></td>
+                  <td><span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>{inv.payment_status || 'Unknown'}</span></td>
                 </tr>
               ))}
             </tbody>

@@ -1,5 +1,5 @@
 import { http } from '../lib/http';
-import { Pet, Appointment, Invoice, QueryThread, QueryMessage } from '../lib/types';
+import { Pet, Appointment, Invoice, QueryThread, QueryMessage, Diagnosis, TreatmentPlan } from '../lib/types';
 
 export async function fetchOwnerPets(): Promise<Pet[]> {
   return http<Pet[]>('/owner/pets');
@@ -25,12 +25,14 @@ export async function createOwnerAppointment(data: {
   });
 }
 
-export async function fetchOwnerPetDetail(id: number): Promise<Pet & { diagnoses: any[]; treatment_plans: any[] }> {
+export async function fetchOwnerPetDetail(
+  id: number
+): Promise<Pet & { diagnoses: Diagnosis[]; treatment_plans: TreatmentPlan[] }> {
   return http(`/owner/pets/${id}`);
 }
 
-export async function addOwnerPetDiagnosis(petId: number, formData: FormData): Promise<any> {
-  return http(`/owner/pets/${petId}/diagnoses`, {
+export async function addOwnerPetDiagnosis(petId: number, formData: FormData): Promise<Diagnosis> {
+  return http<Diagnosis>(`/owner/pets/${petId}/diagnoses`, {
     method: 'POST',
     data: formData,
   });

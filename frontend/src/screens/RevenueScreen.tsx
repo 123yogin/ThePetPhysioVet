@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRevenueStats } from '../api/billing';
+import { Icon } from '../components/Icon';
 
 export const RevenueScreen: React.FC = () => {
   const [range, setRange] = useState('month');
@@ -46,7 +47,7 @@ export const RevenueScreen: React.FC = () => {
         <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Could not load revenue data. No figures are shown below to avoid displaying inaccurate numbers.</span>
           <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
-            🔄 Retry
+            <Icon name="refresh" /> Retry
           </button>
         </div>
       )}

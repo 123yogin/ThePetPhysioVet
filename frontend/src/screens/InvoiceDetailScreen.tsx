@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchInvoiceDetail, addPayment } from '../api/billing';
 import { useFlash } from '../lib/flash';
+import { humanizeStatus } from '../lib/labels';
 
 export const InvoiceDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -72,7 +73,7 @@ export const InvoiceDetailScreen: React.FC = () => {
           </div>
           <div style={{ textAlign: 'right' }}>
             <span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>
-              {inv.payment_status || 'Unknown'}
+              {humanizeStatus(inv.payment_status)}
             </span>
             <div style={{ fontSize: '13px', color: 'var(--brown-500)', marginTop: '4px' }}>
               Date: {inv.created_at?.substring(0, 10) || '—'}

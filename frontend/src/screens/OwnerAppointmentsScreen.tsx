@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchOwnerAppointments, acceptOwnerAppointment, requestOwnerReschedule } from '../api/owner';
 import { useFlash } from '../lib/flash';
 import { Appointment } from '../lib/types';
+import { Icon } from '../components/Icon';
+import { humanizeStatus } from '../lib/labels';
 
 export const OwnerAppointmentsScreen: React.FC = () => {
   const { addFlash } = useFlash();
@@ -96,9 +98,9 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                 style={{
                   padding: '20px',
                   borderLeft: isReschedulePending
-                    ? '5px solid #F59E0B'
+                    ? '5px solid #0d47a1'
                     : isDoctorRescheduled
-                    ? '5px solid #3B82F6'
+                    ? '5px solid var(--brown-500)'
                     : '5px solid var(--primary)',
                 }}
               >
@@ -109,12 +111,12 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                         🐕 {a.pet_name}
                       </span>
                       <span className={`badge badge-${isReschedulePending ? 'pending' : (a.status || "confirmed").toLowerCase().replace(/\s+/g, "-")}`}>
-                        {isReschedulePending ? '⏳ Reschedule Pending Doctor Approval' : a.status}
+                        {isReschedulePending ? 'Reschedule Pending Doctor Approval' : humanizeStatus(a.status)}
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '14px', color: 'var(--brown-800)', fontWeight: '600' }}>
-                      📅 <strong>Current Scheduled Time:</strong> {a.date} @ {a.time?.substring(0, 5) || '--:--'}
+                    <div style={{ fontSize: '14px', color: 'var(--brown-800)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Icon name="calendar" size={14} /> <strong>Current Scheduled Time:</strong> {a.date} @ {a.time?.substring(0, 5) || '--:--'}
                     </div>
 
                     <div style={{ fontSize: '13px', color: 'var(--brown-600)', marginTop: '4px' }}>
@@ -128,10 +130,10 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                           marginTop: '12px',
                           padding: '12px 16px',
                           borderRadius: '8px',
-                          background: 'rgba(245, 158, 11, 0.1)',
-                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          background: 'rgba(21, 101, 192, 0.1)',
+                          border: '1px solid rgba(21, 101, 192, 0.25)',
                           fontSize: '13px',
-                          color: '#B45309',
+                          color: '#0d47a1',
                         }}
                       >
                         <strong>Requested New Slot:</strong> {a.requested_date} @ {a.requested_time ? a.requested_time.substring(0, 5) : '10:00'}
@@ -140,8 +142,8 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                             <strong>Reason:</strong> "{a.reschedule_reason}"
                           </div>
                         )}
-                        <div style={{ marginTop: '4px', fontSize: '12px' }}>
-                          ℹ️ Your vet will review and approve or suggest another time.
+                        <div style={{ marginTop: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Icon name="info" size={12} /> Your vet will review and approve or suggest another time.
                         </div>
                       </div>
                     )}
@@ -153,13 +155,16 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                           marginTop: '12px',
                           padding: '12px 16px',
                           borderRadius: '8px',
-                          background: 'rgba(59, 130, 246, 0.1)',
-                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          background: 'var(--brown-100)',
+                          border: '1px solid rgba(62, 39, 35, 0.18)',
                           fontSize: '13px',
-                          color: '#1D4ED8',
+                          color: 'var(--brown-700)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
                         }}
                       >
-                        🔔 <strong>Your vet updated this appointment slot.</strong> Please confirm if this new time works for you.
+                        <Icon name="bell" size={14} /> <strong>Your vet updated this appointment slot.</strong> Please confirm if this new time works for you.
                       </div>
                     )}
                   </div>
@@ -170,7 +175,7 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                         onClick={() => handleAcceptDoctorReschedule(a.id)}
                         className="btn btn-primary btn-sm"
                       >
-                        ✓ Accept New Time
+                        <Icon name="check" /> Accept New Time
                       </button>
                     )}
 
@@ -179,7 +184,7 @@ export const OwnerAppointmentsScreen: React.FC = () => {
                         onClick={() => openRescheduleModal(a)}
                         className="btn btn-secondary btn-sm"
                       >
-                        🔄 Request Reschedule
+                        <Icon name="refresh" /> Request Reschedule
                       </button>
                     )}
                   </div>
@@ -210,19 +215,30 @@ export const OwnerAppointmentsScreen: React.FC = () => {
               width: '100%',
               maxWidth: '520px',
               padding: '28px',
-              background: '#FFFDF9',
+              background: '#fff9f4',
               boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)', margin: 0 }}>
-                🔄 Request Appointment Reschedule
+              <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="refresh" /> Request Appointment Reschedule
               </h3>
               <button
                 onClick={() => setRescheduleTarget(null)}
-                style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--brown-600)' }}
+                aria-label="Close"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--brown-600)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '44px',
+                  minHeight: '44px',
+                }}
               >
-                ✕
+                <Icon name="close" size={20} />
               </button>
             </div>
 

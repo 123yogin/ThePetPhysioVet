@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchOwnerPets, createOwnerPet, createOwnerAppointment } from '../api/owner';
 import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
 
 export const OwnerHomeScreen: React.FC = () => {
   const queryClient = useQueryClient();
@@ -92,11 +93,11 @@ export const OwnerHomeScreen: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => setShowAddPet(!showAddPet)} className="btn btn-primary btn-sm">
-            ➕ Add New Pet
+            <Icon name="plus" /> Add New Pet
           </button>
           {pets && pets.length > 0 && (
             <button onClick={() => { setSelectedPetId(pets[0].id); setShowApptModal(true); }} className="btn btn-secondary btn-sm">
-              📅 Book Appointment
+              <Icon name="calendar" /> Book Appointment
             </button>
           )}
         </div>
@@ -105,8 +106,8 @@ export const OwnerHomeScreen: React.FC = () => {
       {/* Add Pet Form / Card */}
       {showAddPet && (
         <div className="glass-card" style={{ marginBottom: '24px', padding: '24px', border: '2px solid var(--primary)' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px' }}>
-            🐾 Register Your Pet Profile
+          <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="paw" /> Register Your Pet Profile
           </h3>
           <form
             onSubmit={(e) => {
@@ -202,8 +203,8 @@ export const OwnerHomeScreen: React.FC = () => {
       {/* Book Appointment Modal / Card */}
       {showApptModal && (
         <div className="glass-card" style={{ marginBottom: '24px', padding: '24px', border: '2px solid var(--primary)' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px' }}>
-            📅 Book Therapy Appointment with your vet
+          <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="calendar" /> Book Therapy Appointment with your vet
           </h3>
           <form
             onSubmit={(e) => {
@@ -296,42 +297,51 @@ export const OwnerHomeScreen: React.FC = () => {
         <p>Loading your pets...</p>
       ) : isError ? null : !pets || pets.length === 0 ? (
         <div className="glass-card" style={{ textAlign: 'center', padding: '40px' }}>
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>🐾</div>
+          <div style={{ marginBottom: '12px', color: 'var(--brown-500)', display: 'flex', justifyContent: 'center' }}>
+            <Icon name="paw" size={40} />
+          </div>
           <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)' }}>No Pets Registered Yet</h3>
           <p style={{ color: 'var(--brown-600)', margin: '8px 0 20px' }}>
             Register your pet profile so your vet can assess and design custom physiotherapy care plans.
           </p>
           <button onClick={() => setShowAddPet(true)} className="btn btn-primary">
-            ➕ Register Your First Pet
+            <Icon name="plus" /> Register Your First Pet
           </button>
         </div>
       ) : (
         <div className="grid-cards">
-          {pets.map((p) => (
-            <div key={p.id} className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--brown-900)' }}>
-                  🐕 {p.name}
+          {pets.map((p) => {
+            // Join only the parts that actually exist so a missing weight
+            // doesn't leave a trailing "&bull;" with nothing after it.
+            const metaParts = [p.breed || 'Rehab Patient', p.age || 'Age N/A', p.weight ? `${p.weight} kg` : null].filter(
+              Boolean
+            );
+            return (
+              <div key={p.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '230px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--brown-900)' }}>
+                    🐕 {p.name}
+                  </div>
+                  <span className="badge badge-neutral">
+                    {p.species || 'Patient'}
+                  </span>
                 </div>
-                <span className="badge badge-success">
-                  {p.species || 'Patient'}
-                </span>
-              </div>
-              <p style={{ color: 'var(--brown-700)', margin: '8px 0', fontSize: '14px' }}>
-                {p.breed || 'Rehab Patient'} &bull; {p.age || 'Age N/A'} &bull; {p.weight ? `${p.weight} kg` : ''}
-              </p>
-              {p.complaint && (
-                <p style={{ fontSize: '12px', color: 'var(--brown-600)', background: 'rgba(0,0,0,0.03)', padding: '8px', borderRadius: '8px', marginTop: '8px' }}>
-                  <strong>Condition:</strong> {p.complaint}
+                <p style={{ color: 'var(--brown-700)', margin: '8px 0', fontSize: '14px' }}>
+                  {metaParts.join(' • ')}
                 </p>
-              )}
-              <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
-                <Link to={`/owner/pets/${p.id}`} className="btn btn-secondary btn-sm" style={{ flex: 1, textDecoration: 'none', textAlign: 'center' }}>
-                  View Care Records &rarr;
-                </Link>
+                {p.complaint && (
+                  <p style={{ fontSize: '12px', color: 'var(--brown-600)', background: 'var(--brown-100)', padding: '8px', borderRadius: '8px', marginTop: '8px' }}>
+                    <strong>Condition:</strong> {p.complaint}
+                  </p>
+                )}
+                <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', gap: '8px' }}>
+                  <Link to={`/owner/pets/${p.id}`} className="btn btn-secondary btn-sm" style={{ flex: 1, textDecoration: 'none', textAlign: 'center' }}>
+                    View Care Records &rarr;
+                  </Link>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

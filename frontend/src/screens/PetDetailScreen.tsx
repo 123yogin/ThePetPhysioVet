@@ -7,6 +7,7 @@ import { fetchPetTreatmentPlans, createTreatmentPlan, addProgressNote } from '..
 import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
 
 export const PetDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -273,8 +274,8 @@ export const PetDetailScreen: React.FC = () => {
                     </div>
                     <div>{d.notes || 'No notes'}</div>
                     {d.file_url && (
-                      <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ marginTop: '12px', display: 'inline-block' }}>
-                        📎 View File ({d.original_filename})
+                      <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ marginTop: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <Icon name="paperclip" size={13} /> View File ({d.original_filename})
                       </a>
                     )}
                   </div>
@@ -341,7 +342,7 @@ export const PetDetailScreen: React.FC = () => {
             <div key={plan.id} className="glass-card" style={{ marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h4 style={{ margin: 0, fontSize: '16px' }}>Rehab Regimen #{plan.id}</h4>
-                <span className="badge badge-completed">{plan.status || 'Unknown'}</span>
+                <span className={`badge badge-${(plan.status || 'unknown').toLowerCase()}`}>{plan.status || 'Unknown'}</span>
               </div>
               <p><strong>Therapies:</strong> {plan.therapies?.join(', ') || '—'}</p>
               <p><strong>Frequency & Duration:</strong> {plan.frequency || '—'} &bull; {plan.duration || '—'}</p>
@@ -404,7 +405,7 @@ export const PetDetailScreen: React.FC = () => {
                       <td>{inv.invoice_no}</td>
                       <td>{inv.created_at?.substring(0, 10) || '—'}</td>
                       <td>₹{inv.total ?? '—'}</td>
-                      <td><span className="badge badge-confirmed">{inv.payment_status || 'Unknown'}</span></td>
+                      <td><span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>{inv.payment_status || 'Unknown'}</span></td>
                       <td>
                         <Link to={`/invoices/${inv.id}`} className="btn btn-secondary btn-sm">
                           View Invoice

@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchDashboardStats, completeAppointment } from '../api/appointments';
 import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
+import { humanizeStatus } from '../lib/labels';
 
 export const DashboardScreen: React.FC = () => {
   const { addFlash } = useFlash();
@@ -50,7 +52,7 @@ export const DashboardScreen: React.FC = () => {
         <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Could not load dashboard stats. Please try again.</span>
           <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
-            🔄 Retry
+            <Icon name="refresh" /> Retry
           </button>
         </div>
       )}
@@ -97,8 +99,8 @@ export const DashboardScreen: React.FC = () => {
       {/* Today's Appointments Section */}
       <div className="glass-card" style={{ marginTop: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', margin: 0 }}>
-            📅 Today's Visits ({stats?.today_appointments?.length ?? 0})
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="calendar" /> Today's Visits ({stats?.today_appointments?.length ?? 0})
           </h2>
           <Link to="/appointments" className="btn btn-ghost btn-sm">
             View All Schedule &rarr;
@@ -141,8 +143,8 @@ export const DashboardScreen: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase()}`}>
-                    {appt.status}
+                  <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
+                    {humanizeStatus(appt.status)}
                   </span>
 
                   {appt.status !== 'Completed' && (
@@ -150,7 +152,7 @@ export const DashboardScreen: React.FC = () => {
                       onClick={() => handleComplete(appt.id)}
                       className="btn btn-secondary btn-sm"
                     >
-                      ✓ Complete
+                      <Icon name="check" /> Complete
                     </button>
                   )}
 

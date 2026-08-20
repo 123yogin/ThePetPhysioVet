@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login, signup } from '../api/auth';
 import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
 
 export const LoginScreen: React.FC = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -75,7 +76,9 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
-        <h1 className="auth-brand" style={{ fontSize: '26px' }}>🐾 The Pet Physio Vet</h1>
+        <h1 className="auth-brand" style={{ fontSize: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <Icon name="paw" size={24} /> The Pet Physio Vet
+        </h1>
 
         {/* Mode Selector Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.6)', padding: '4px', borderRadius: '12px' }}>

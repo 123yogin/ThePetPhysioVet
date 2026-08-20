@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { logout } from '../api/auth';
 import { FlashStack } from './FlashStack';
 import { ErrorBoundary } from './ErrorBoundary';
+import { Icon } from './Icon';
 
 export const OwnerShell: React.FC = () => {
   const navigate = useNavigate();
@@ -28,8 +29,8 @@ export const OwnerShell: React.FC = () => {
         gap: '12px',
       }}>
         <div>
-          <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)' }}>
-            🐾 Pet Physio Owner Portal
+          <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="paw" size={20} /> Pet Physio Owner Portal
           </div>
           <div style={{ fontSize: '12px', color: 'var(--brown-600)', fontWeight: '500' }}>
             Attending Specialist: <strong>your vet</strong>

@@ -72,7 +72,7 @@ export const PatientsScreen: React.FC = () => {
               {pets.map((pet) => (
                 <tr key={pet.id}>
                   <td style={{ fontWeight: 700 }}>
-                    <Link to={`/patients/${pet.id}`} style={{ color: 'var(--brown-900)' }}>
+                    <Link to={`/patients/${pet.id}`} className="table-link">
                       🐕 {pet.name}
                     </Link>
                   </td>

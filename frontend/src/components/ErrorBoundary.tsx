@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './Icon';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -53,7 +54,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
     const panel = (
       <div className="glass-card" style={{ maxWidth: '520px', width: '100%', padding: '36px', textAlign: 'center' }}>
-        <div style={{ fontSize: '40px', marginBottom: '12px' }} aria-hidden="true">&#9888;&#65039;</div>
+        <div style={{ marginBottom: '12px', color: 'var(--brown-700)' }}>
+          <Icon name="warning" size={40} />
+        </div>
         <h1 className="page-title" style={{ marginBottom: '8px' }}>Something went wrong</h1>
         <p className="page-sub" style={{ marginBottom: '20px' }}>
           This screen hit an unexpected error and could not be displayed. This is usually caused by a

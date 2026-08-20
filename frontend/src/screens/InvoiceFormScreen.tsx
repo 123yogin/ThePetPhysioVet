@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from '../components/Icon';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { createInvoice } from '../api/billing';
@@ -98,7 +99,7 @@ export const InvoiceFormScreen: React.FC = () => {
 
         <h3 style={{ margin: '20px 0 12px 0', fontSize: '16px' }}>Line Items</h3>
         {items.map((item, idx) => (
-          <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 40px', gap: '8px', marginBottom: '8px' }}>
+          <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 44px', gap: '8px', marginBottom: '8px' }}>
             <input
               type="text"
               className="input-glass"
@@ -124,8 +125,14 @@ export const InvoiceFormScreen: React.FC = () => {
               required
             />
             {items.length > 1 && (
-              <button type="button" onClick={() => handleRemoveItem(idx)} className="btn btn-ghost btn-sm" style={{ color: '#b71c1c' }}>
-                ✕
+              <button
+                type="button"
+                onClick={() => handleRemoveItem(idx)}
+                className="btn btn-ghost btn-sm"
+                style={{ color: '#b71c1c', padding: '6px' }}
+                aria-label={`Remove line item ${idx + 1}`}
+              >
+                <Icon name="close" size={14} />
               </button>
             )}
           </div>

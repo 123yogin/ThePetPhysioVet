@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchInvoices } from '../api/billing';
+import { humanizeStatus } from '../lib/labels';
 
 export const InvoiceListScreen: React.FC = () => {
   const { data: invoices, isLoading, isError, refetch } = useQuery({
@@ -53,7 +54,7 @@ export const InvoiceListScreen: React.FC = () => {
               {invoices.map((inv) => (
                 <tr key={inv.id}>
                   <td style={{ fontWeight: 700 }}>
-                    <Link to={`/invoices/${inv.id}`} style={{ color: 'var(--brown-900)' }}>
+                    <Link to={`/invoices/${inv.id}`} className="table-link" style={{ color: 'var(--brown-900)' }}>
                       {inv.invoice_no}
                     </Link>
                   </td>
@@ -62,7 +63,7 @@ export const InvoiceListScreen: React.FC = () => {
                   <td>₹{inv.total ?? '—'}</td>
                   <td>
                     <span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>
-                      {inv.payment_status || 'Unknown'}
+                      {humanizeStatus(inv.payment_status)}
                     </span>
                   </td>
                   <td>

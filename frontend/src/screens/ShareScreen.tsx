@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchShareAppointment } from '../api/appointments';
+import { Icon } from '../components/Icon';
 
 export const ShareScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +37,9 @@ export const ShareScreen: React.FC = () => {
   return (
     <div style={{ maxWidth: '540px', margin: '0 auto', textAlign: 'center' }}>
       <div className="glass-card" style={{ padding: '36px 24px' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+        <div style={{ marginBottom: '16px', color: '#1b5e20', display: 'flex', justifyContent: 'center' }}>
+          <Icon name="celebrate" size={48} />
+        </div>
         <h1 className="page-title" style={{ marginBottom: '8px' }}>Appointment Confirmed!</h1>
         <p className="page-sub" style={{ marginBottom: '24px' }}>
           Session booked for <strong>{shareData?.pet_name}</strong> (Owner: {shareData?.owner_name})
@@ -51,7 +54,7 @@ export const ShareScreen: React.FC = () => {
               className="btn btn-primary"
               style={{ background: '#25D366', borderColor: '#25D366' }}
             >
-              💬 Share via WhatsApp
+              <Icon name="chat" /> Share via WhatsApp
             </a>
           )}
           {shareData?.sms_url && (
@@ -59,7 +62,7 @@ export const ShareScreen: React.FC = () => {
               href={shareData.sms_url}
               className="btn btn-secondary"
             >
-              📱 Send SMS Confirmation
+              <Icon name="phone" /> Send SMS Confirmation
             </a>
           )}
           {!shareData?.whatsapp_url && !shareData?.sms_url && (

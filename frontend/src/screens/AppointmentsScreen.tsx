@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchAppointments, completeAppointment, approveReschedule, rejectReschedule } from '../api/appointments';
 import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
+import { humanizeStatus } from '../lib/labels';
 
 export const AppointmentsScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
@@ -154,11 +156,13 @@ export const AppointmentsScreen: React.FC = () => {
             <button
               type="button"
               onClick={() => setViewMode('calendar')}
+              aria-pressed={viewMode === 'calendar'}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '7px 16px',
+                minHeight: '44px',
                 fontSize: '13px',
                 fontWeight: '700',
                 borderRadius: '20px',
@@ -170,16 +174,18 @@ export const AppointmentsScreen: React.FC = () => {
                 boxShadow: viewMode === 'calendar' ? '0 2px 6px rgba(62, 39, 35, 0.2)' : 'none',
               }}
             >
-              📅 Calendar View
+              <Icon name="calendar" /> Calendar View
             </button>
             <button
               type="button"
               onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '7px 16px',
+                minHeight: '44px',
                 fontSize: '13px',
                 fontWeight: '700',
                 borderRadius: '20px',
@@ -191,7 +197,7 @@ export const AppointmentsScreen: React.FC = () => {
                 boxShadow: viewMode === 'list' ? '0 2px 6px rgba(62, 39, 35, 0.2)' : 'none',
               }}
             >
-              📋 List View
+              <Icon name="list" /> List View
             </button>
           </div>
 
@@ -217,13 +223,13 @@ export const AppointmentsScreen: React.FC = () => {
           style={{
             marginBottom: '24px',
             padding: '20px',
-            borderLeft: '6px solid #F59E0B',
-            background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.5), rgba(255, 251, 235, 0.9))',
+            borderLeft: '6px solid #0d47a1',
+            background: 'rgba(21, 101, 192, 0.1)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '20px' }}>📩</span>
-            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#B45309', margin: 0 }}>
+            <Icon name="mail" size={20} style={{ color: '#0d47a1' }} />
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0d47a1', margin: 0 }}>
               Pending Reschedule Requests from Pet Owners ({pendingReschedules.length})
             </h3>
           </div>
@@ -233,11 +239,11 @@ export const AppointmentsScreen: React.FC = () => {
               <div
                 key={reqAppt.id}
                 style={{
-                  background: '#FFFFFF',
+                  background: '#ffffff',
                   borderRadius: '12px',
                   padding: '16px 20px',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                  border: '1px solid rgba(62, 39, 35, 0.12)',
+                  boxShadow: '0 2px 8px rgba(62, 39, 35, 0.04)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -254,13 +260,13 @@ export const AppointmentsScreen: React.FC = () => {
                     <div style={{ color: 'var(--brown-700)' }}>
                       <strong>Original Slot:</strong> <span style={{ textDecoration: 'line-through' }}>{reqAppt.date} @ {reqAppt.time?.substring(0, 5) || '--:--'}</span>
                     </div>
-                    <div style={{ color: '#B45309', fontWeight: '700' }}>
-                      ➡️ <strong>Requested Slot:</strong> {reqAppt.requested_date} @ {reqAppt.requested_time ? reqAppt.requested_time.substring(0, 5) : '10:00'}
+                    <div style={{ color: 'var(--brown-700)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Icon name="arrowRight" size={14} /> <strong>Requested Slot:</strong> {reqAppt.requested_date} @ {reqAppt.requested_time ? reqAppt.requested_time.substring(0, 5) : '10:00'}
                     </div>
                   </div>
 
                   {reqAppt.reschedule_reason && (
-                    <div style={{ marginTop: '8px', fontSize: '13px', background: 'rgba(245, 158, 11, 0.1)', padding: '8px 12px', borderRadius: '6px', color: '#92400E' }}>
+                    <div style={{ marginTop: '8px', fontSize: '13px', background: 'rgba(62, 39, 35, 0.06)', padding: '8px 12px', borderRadius: '6px', color: 'var(--brown-700)' }}>
                       <strong>Owner's Reason:</strong> "{reqAppt.reschedule_reason}"
                     </div>
                   )}
@@ -270,18 +276,18 @@ export const AppointmentsScreen: React.FC = () => {
                   <button
                     disabled={processingId === reqAppt.id}
                     onClick={() => handleApproveReschedule(reqAppt.id, reqAppt.pet_name)}
-                    className="btn btn-primary btn-sm"
-                    style={{ background: '#10B981', borderColor: '#10B981' }}
+                    className="btn btn-secondary btn-sm"
+                    style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
                   >
-                    {processingId === reqAppt.id ? 'Approving...' : '✓ Approve Request'}
+                    <Icon name="check" /> {processingId === reqAppt.id ? 'Approving...' : 'Approve Request'}
                   </button>
                   <button
                     disabled={processingId === reqAppt.id}
                     onClick={() => handleRejectReschedule(reqAppt.id, reqAppt.pet_name)}
                     className="btn btn-ghost btn-sm"
-                    style={{ color: '#DC2626', borderColor: '#FCA5A5' }}
+                    style={{ color: '#b71c1c', borderColor: 'rgba(198, 40, 40, 0.25)' }}
                   >
-                    {processingId === reqAppt.id ? 'Declining...' : '✕ Decline Request'}
+                    <Icon name="close" /> {processingId === reqAppt.id ? 'Declining...' : 'Decline Request'}
                   </button>
                 </div>
               </div>
@@ -351,7 +357,7 @@ export const AppointmentsScreen: React.FC = () => {
 
               {/* Blank Offset Cells */}
               {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
-                <div key={`empty-${idx}`} style={{ minHeight: '90px', opacity: 0.25, background: 'rgba(0,0,0,0.02)', borderRadius: '8px' }} />
+                <div key={`empty-${idx}`} style={{ minHeight: '90px', opacity: 0.25, background: 'rgba(62, 39, 35, 0.04)', borderRadius: '8px' }} />
               ))}
 
               {/* Days of Month */}
@@ -376,7 +382,7 @@ export const AppointmentsScreen: React.FC = () => {
                       background: isSelected
                         ? 'var(--brown-100)'
                         : isToday
-                        ? 'rgba(217, 119, 6, 0.08)'
+                        ? 'var(--cream-deep)'
                         : 'rgba(255, 255, 255, 0.6)',
                       border: isSelected
                         ? '2px solid var(--primary)'
@@ -419,15 +425,15 @@ export const AppointmentsScreen: React.FC = () => {
                             padding: '3px 6px',
                             borderRadius: '4px',
                             background: a.status === 'Reschedule Requested'
-                              ? '#FEF3C7'
+                              ? 'rgba(21, 101, 192, 0.1)'
                               : a.status === 'Completed'
                               ? 'var(--success-light)'
                               : 'rgba(255, 255, 255, 0.9)',
                             borderLeft: `3px solid ${
                               a.status === 'Reschedule Requested'
-                                ? '#F59E0B'
+                                ? '#0d47a1'
                                 : a.status === 'Completed'
-                                ? '#10B981'
+                                ? '#1b5e20'
                                 : 'var(--primary)'
                             }`,
                             color: 'var(--brown-900)',
@@ -437,7 +443,8 @@ export const AppointmentsScreen: React.FC = () => {
                             fontWeight: '600',
                           }}
                         >
-                          {a.time?.substring(0, 5) || '--:--'} {a.pet_name} {a.status === 'Reschedule Requested' ? '⏳' : ''}
+                          {a.time?.substring(0, 5) || '--:--'} {a.pet_name}{' '}
+                          {a.status === 'Reschedule Requested' && <Icon name="clock" size={11} />}
                         </div>
                       ))}
                       {dayAppts.length > 2 && (
@@ -456,8 +463,8 @@ export const AppointmentsScreen: React.FC = () => {
           {selectedCalendarDate && (
             <div className="glass-card" style={{ padding: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)', margin: 0 }}>
-                  📅 Visits Scheduled for {selectedCalendarDate} {selectedCalendarDate === todayStr ? '(Today)' : ''}
+                <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Icon name="calendar" /> Visits Scheduled for {selectedCalendarDate} {selectedCalendarDate === todayStr ? '(Today)' : ''}
                 </h3>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <Link to={`/appointments/new?date=${selectedCalendarDate}`} className="btn btn-secondary btn-sm">
@@ -484,8 +491,8 @@ export const AppointmentsScreen: React.FC = () => {
                         justifyContent: 'space-between',
                         padding: '16px 20px',
                         borderRadius: '12px',
-                        background: appt.status === 'Reschedule Requested' ? '#FFFBEB' : 'rgba(255, 255, 255, 0.8)',
-                        border: appt.status === 'Reschedule Requested' ? '1px solid #F59E0B' : '1px solid var(--glass-border)',
+                        background: appt.status === 'Reschedule Requested' ? 'rgba(21, 101, 192, 0.1)' : 'rgba(255, 255, 255, 0.8)',
+                        border: appt.status === 'Reschedule Requested' ? '1px solid rgba(21, 101, 192, 0.25)' : '1px solid var(--glass-border)',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -493,8 +500,8 @@ export const AppointmentsScreen: React.FC = () => {
                           {appt.time?.substring(0, 5) || '--:--'}
                         </div>
                         <div>
-                          <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)' }}>
-                            <Link to={`/patients/${appt.pet_id}`} style={{ textDecoration: 'none', color: 'var(--brown-900)' }}>
+                          <div style={{ fontSize: '16px', fontWeight: '700' }}>
+                            <Link to={`/patients/${appt.pet_id}`} className="table-link" style={{ textDecoration: 'none' }}>
                               🐕 {appt.pet_name}
                             </Link>
                           </div>
@@ -504,8 +511,8 @@ export const AppointmentsScreen: React.FC = () => {
                           </div>
 
                           {appt.status === 'Reschedule Requested' && (
-                            <div style={{ marginTop: '6px', fontSize: '13px', color: '#B45309', background: 'rgba(245, 158, 11, 0.15)', padding: '6px 10px', borderRadius: '6px' }}>
-                              ⏳ <strong>Requested New Slot:</strong> {appt.requested_date} @ {appt.requested_time ? appt.requested_time.substring(0, 5) : '10:00'}
+                            <div style={{ marginTop: '6px', fontSize: '13px', color: '#0d47a1', background: 'rgba(21, 101, 192, 0.1)', padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Icon name="clock" size={13} /> <strong>Requested New Slot:</strong> {appt.requested_date} @ {appt.requested_time ? appt.requested_time.substring(0, 5) : '10:00'}
                               {appt.reschedule_reason && <span> — <em>"{appt.reschedule_reason}"</em></span>}
                             </div>
                           )}
@@ -520,7 +527,7 @@ export const AppointmentsScreen: React.FC = () => {
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
-                          {appt.status}
+                          {humanizeStatus(appt.status)}
                         </span>
 
                         {appt.status === 'Reschedule Requested' ? (
@@ -528,8 +535,8 @@ export const AppointmentsScreen: React.FC = () => {
                             <button
                               disabled={processingId === appt.id}
                               onClick={() => handleApproveReschedule(appt.id, appt.pet_name)}
-                              className="btn btn-primary btn-sm"
-                              style={{ background: '#10B981', borderColor: '#10B981' }}
+                              className="btn btn-secondary btn-sm"
+                              style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
                             >
                               Approve
                             </button>
@@ -537,7 +544,7 @@ export const AppointmentsScreen: React.FC = () => {
                               disabled={processingId === appt.id}
                               onClick={() => handleRejectReschedule(appt.id, appt.pet_name)}
                               className="btn btn-ghost btn-sm"
-                              style={{ color: '#DC2626' }}
+                              style={{ color: '#b71c1c' }}
                             >
                               Decline
                             </button>
@@ -549,7 +556,7 @@ export const AppointmentsScreen: React.FC = () => {
                                 onClick={() => handleComplete(appt.id)}
                                 className="btn btn-secondary btn-sm"
                               >
-                                ✓ Complete
+                                <Icon name="check" /> Complete
                               </button>
                             )}
 
@@ -641,7 +648,7 @@ export const AppointmentsScreen: React.FC = () => {
                         {appt.date} @ {appt.time?.substring(0, 5) || '--:--'}
                       </td>
                       <td>
-                        <Link to={`/patients/${appt.pet_id}`} style={{ fontWeight: 600, color: 'var(--brown-900)' }}>
+                        <Link to={`/patients/${appt.pet_id}`} className="table-link">
                           🐕 {appt.pet_name}
                         </Link>
                       </td>
@@ -649,10 +656,10 @@ export const AppointmentsScreen: React.FC = () => {
                       <td>{appt.visit_type_display || appt.visit_type}</td>
                       <td>
                         <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
-                          {appt.status}
+                          {humanizeStatus(appt.status)}
                         </span>
                         {appt.status === 'Reschedule Requested' && (
-                          <div style={{ fontSize: '11px', color: '#B45309', marginTop: '4px' }}>
+                          <div style={{ fontSize: '11px', color: '#0d47a1', marginTop: '4px' }}>
                             Req: {appt.requested_date} @ {appt.requested_time ? appt.requested_time.substring(0, 5) : '10:00'}<br />
                             <em>"{appt.reschedule_reason}"</em>
                           </div>
@@ -665,8 +672,8 @@ export const AppointmentsScreen: React.FC = () => {
                               <button
                                 disabled={processingId === appt.id}
                                 onClick={() => handleApproveReschedule(appt.id, appt.pet_name)}
-                                className="btn btn-primary btn-sm"
-                                style={{ background: '#10B981', borderColor: '#10B981' }}
+                                className="btn btn-secondary btn-sm"
+                                style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
                               >
                                 Approve
                               </button>
@@ -674,7 +681,7 @@ export const AppointmentsScreen: React.FC = () => {
                                 disabled={processingId === appt.id}
                                 onClick={() => handleRejectReschedule(appt.id, appt.pet_name)}
                                 className="btn btn-ghost btn-sm"
-                                style={{ color: '#DC2626' }}
+                                style={{ color: '#b71c1c' }}
                               >
                                 Decline
                               </button>
