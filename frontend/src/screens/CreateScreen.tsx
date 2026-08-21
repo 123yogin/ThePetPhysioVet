@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { createAppointment } from '../api/appointments';
+import { createAppointment, fetchAppointmentOptions } from '../api/appointments';
 import { fetchPets } from '../api/pets';
 import { useFlash } from '../lib/flash';
 
@@ -14,7 +14,7 @@ export const CreateScreen: React.FC = () => {
   const dateParam = searchParams.get('date') || '';
 
   const [petId, setPetId] = useState(defaultPetId);
-  const [visitType, setVisitType] = useState('Initial');
+  const [visitType, setVisitType] = useState('');
   const [date, setDate] = useState(dateParam || new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState('10:00');
   const [reasonNotes, setReasonNotes] = useState('');
@@ -25,9 +25,30 @@ export const CreateScreen: React.FC = () => {
     queryFn: () => fetchPets(),
   });
 
+  const {
+    data: apptOptions,
+    isLoading: optionsLoading,
+    isError: optionsError,
+    refetch: refetchOptions,
+  } = useQuery({
+    queryKey: ['appointmentOptions'],
+    queryFn: () => fetchAppointmentOptions(),
+  });
+
+  const visitTypes = apptOptions?.visit_types ?? [];
+
+  // Default to the first valid option once the list loads, instead of
+  // guessing a value that might not exist on the backend.
+  useEffect(() => {
+    if (!visitType && visitTypes.length > 0) {
+      setVisitType(visitTypes[0].value);
+    }
+  }, [visitTypes, visitType]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!petId) return addFlash('Please select a patient', 'error');
+    if (!visitType) return addFlash('Please select a visit type', 'error');
 
     setLoading(true);
     try {
@@ -86,13 +107,31 @@ export const CreateScreen: React.FC = () => {
         </div>
 
         <div className="field">
-          <label>Visit Type</label>
-          <select className="input-glass" value={visitType} onChange={(e) => setVisitType(e.target.value)}>
-            <option value="Initial">Initial Consultation & Assessment</option>
-            <option value="Follow-up">Follow-up Rehabilitation Session</option>
-            <option value="Hydrotherapy">Hydrotherapy Session</option>
-            <option value="Laser Therapy">Class IV Laser Therapy</option>
+          <label>Visit Type *</label>
+          <select
+            className="input-glass"
+            value={visitType}
+            onChange={(e) => setVisitType(e.target.value)}
+            required
+            disabled={optionsLoading || visitTypes.length === 0}
+          >
+            <option value="">
+              {optionsLoading ? 'Loading visit types...' : optionsError ? 'Could not load visit types' : 'Select visit type...'}
+            </option>
+            {visitTypes.map((vt) => (
+              <option key={vt.value} value={vt.value}>
+                {vt.label}
+              </option>
+            ))}
           </select>
+          {optionsError && (
+            <div className="alert alert-danger" style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Could not load visit types.</span>
+              <button type="button" onClick={() => refetchOptions()} className="btn btn-ghost btn-sm">
+                Retry
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>

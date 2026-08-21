@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchDashboardStats, completeAppointment } from '../api/appointments';
+import { fetchDashboardStats, completeAppointment, confirmAppointment } from '../api/appointments';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
 import { humanizeStatus } from '../lib/labels';
 
 export const DashboardScreen: React.FC = () => {
   const { addFlash } = useFlash();
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
 
   const {
     data: stats,
@@ -26,6 +27,19 @@ export const DashboardScreen: React.FC = () => {
       refetch();
     } catch (err: any) {
       addFlash(err.message || 'Failed to complete appointment', 'error');
+    }
+  };
+
+  const handleConfirm = async (apptId: number) => {
+    setConfirmingId(apptId);
+    try {
+      await confirmAppointment(apptId);
+      addFlash('Appointment confirmed', 'success');
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to confirm appointment', 'error');
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -94,6 +108,18 @@ export const DashboardScreen: React.FC = () => {
             Ongoing rehab & physical therapy regimens
           </div>
         </div>
+
+        <div className="glass-card">
+          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--brown-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Pending Payments
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
+            {isLoading ? '...' : `${stats?.currency || '₹'}${stats?.pending_payments ?? 0}`}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--brown-700)', marginTop: '4px' }}>
+            Outstanding across unpaid & partially paid invoices
+          </div>
+        </div>
       </div>
 
       {/* Today's Appointments Section */}
@@ -148,6 +174,17 @@ export const DashboardScreen: React.FC = () => {
                   <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
                     {humanizeStatus(appt.status)}
                   </span>
+
+                  {appt.status === 'Pending' && (
+                    <button
+                      disabled={confirmingId === appt.id}
+                      onClick={() => handleConfirm(appt.id)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
+                    >
+                      <Icon name="check" /> {confirmingId === appt.id ? 'Confirming…' : 'Confirm'}
+                    </button>
+                  )}
 
                   {appt.status !== 'Completed' && (
                     <button

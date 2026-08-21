@@ -71,7 +71,11 @@ class PetContractTests(ApiTestCase):
             owner=self.owner_a, doctor=nameless_doctor, name="Fido", species="Dog",
             owner_name="Alice Aye", owner_phone="9991110001",
         )
-        self.auth(self.doctor)
+        # Fetched as the pet's OWN assigned doctor (not self.doctor): after
+        # the 2026-08-21 L1 follow-up fix, `/pets/:id` is doctor-scoped, so a
+        # different doctor's patient correctly 404s. That is exactly the
+        # defect this route now closes — see `_doctor_scoped` in views.py.
+        self.auth(nameless_doctor)
         r = self.client.get(f"{API}/pets/{pet.id}")
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data["doctor_name"], "drnoname")
@@ -178,7 +182,8 @@ class AppointmentContractTests(ApiTestCase):
     REQUIRED = ["id", "pet_id", "pet_name", "owner_name", "owner_phone",
                 "date", "time", "visit_type", "status"]
     OPTIONAL = ["visit_type_display", "requested_date", "requested_time",
-                "reschedule_reason", "reason_notes", "share"]
+                "reschedule_reason", "reason_notes", "share",
+                "species", "pet_type"]
 
     def test_appointment_list_shape(self):
         self.auth(self.doctor)
@@ -204,6 +209,117 @@ class AppointmentContractTests(ApiTestCase):
         assert_keys(self, r.data,
                     ["whatsapp_url", "sms_url", "pet_name", "owner_name",
                      "owner_phone"], label="share")
+
+    def test_species_and_pet_type_are_derived_from_the_linked_pet(self):
+        """The frontend needs `species` to pick the right animal icon on the
+        patient list / calendar / inbox — it previously had no way to get
+        this without a second `GET /pets` round trip per render.
+        """
+        self.pet_a.species = "Cat"
+        self.pet_a.pet_type = "Persian Cat"
+        self.pet_a.save()
+        self.auth(self.doctor)
+        r = self.client.get(f"{API}/appointments/{self.appt_a.id}")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["species"], "Cat")
+        self.assertEqual(r.data["pet_type"], "Persian Cat")
+
+    def test_species_appears_on_appointment_list_and_create(self):
+        self.auth(self.doctor)
+        listed = self.client.get(f"{API}/appointments")
+        self.assertEqual(listed.status_code, 200, listed.content)
+        self.assertEqual(
+            {a["id"]: a["species"] for a in listed.data}[self.appt_a.id],
+            self.pet_a.species,
+        )
+        created = self.client.post(f"{API}/appointments", {
+            "pet": self.pet_a.id, "visit_type": "Followup",
+            "date": "2030-01-02", "time": "09:30"}, format="json")
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.data["species"], self.pet_a.species)
+
+    def test_species_and_pet_type_are_not_writable(self):
+        """Declared with `source="pet.*"` and `read_only=True` — the same
+        pattern as `pet_id` — so a client-supplied value must be silently
+        ignored on create, never reassigning the appointment's pet.
+        """
+        self.auth(self.doctor)
+        r = self.client.post(f"{API}/appointments", {
+            "pet": self.pet_a.id, "visit_type": "Initial",
+            "date": "2030-01-03", "time": "09:30",
+            "species": "Dragon", "pet_type": "Mythical"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["species"], self.pet_a.species)
+        self.assertNotEqual(r.data["species"], "Dragon")
+        self.assertEqual(r.data["pet_type"], self.pet_a.pet_type)
+        self.assertNotEqual(r.data["pet_type"], "Mythical")
+
+
+class AppointmentListQueryCountTests(ApiTestCase):
+    """Mirrors PetListQueryCountTests above: AppointmentSerializer now derives
+    `species`/`pet_type` from the linked Pet (added 2026-08-21, coordinator
+    follow-up), which is an N+1 hazard on any endpoint returning many
+    appointments unless the view uses `select_related("pet")`.
+    """
+
+    def _make_appointments(self, doctor, pet, count, prefix):
+        from appointments.models import Appointment
+        today = self.appt_a.date
+        for i in range(count):
+            Appointment.objects.create(
+                pet=pet, doctor=doctor, pet_name=pet.name,
+                owner_name=pet.owner_name, owner_phone=pet.owner_phone,
+                date=today, time=f"{8 + i:02d}:00", visit_type="Initial",
+            )
+
+    def test_doctor_appointment_list_query_count_is_flat(self):
+        self.auth(self.doctor)
+
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as small:
+            r = self.client.get(f"{API}/appointments")
+        self.assertEqual(r.status_code, 200, r.content)
+        small_count = len(small.captured_queries)
+
+        self._make_appointments(self.doctor, self.pet_a, 5, "FlatA")
+        self._make_appointments(self.doctor, self.pet_b, 5, "FlatB")
+
+        with CaptureQueriesContext(connection) as large:
+            r = self.client.get(f"{API}/appointments")
+        self.assertEqual(r.status_code, 200, r.content)
+        large_count = len(large.captured_queries)
+
+        self.assertEqual(
+            small_count, large_count,
+            f"query count grew with row count ({small_count} -> {large_count}); "
+            "select_related('pet') regressed",
+        )
+
+    def test_owner_appointment_list_query_count_is_flat(self):
+        self.auth(self.owner_a)
+
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as small:
+            r = self.client.get(f"{API}/owner/appointments")
+        self.assertEqual(r.status_code, 200, r.content)
+        small_count = len(small.captured_queries)
+
+        self._make_appointments(self.doctor, self.pet_a, 5, "OwnFlatA")
+
+        with CaptureQueriesContext(connection) as large:
+            r = self.client.get(f"{API}/owner/appointments")
+        self.assertEqual(r.status_code, 200, r.content)
+        large_count = len(large.captured_queries)
+
+        self.assertEqual(
+            small_count, large_count,
+            f"query count grew with row count ({small_count} -> {large_count}); "
+            "select_related('pet') regressed",
+        )
 
 
 class DiagnosisContractTests(ApiTestCase):
@@ -376,12 +492,65 @@ class QueryContractTests(ApiTestCase):
         assert_keys(self, r.data, self.THREAD_REQUIRED, self.THREAD_OPTIONAL,
                     "QueryThread")
         assert_keys(self, r.data["pet"], ["id", "name", "owner_name"],
-                    ["pet_type"], "QueryThread.pet")
+                    ["pet_type", "species"], "QueryThread.pet")
         assert_keys(self, r.data["messages"][0],
                     ["id", "sender_role", "sender_name", "message",
                      "attachments", "sent_at"], label="QueryMessage")
         assert_keys(self, r.data["last_message"],
                     ["snippet", "sent_at", "sender_role"], label="last_message")
+
+    def test_thread_pet_species_matches_the_actual_pet_not_the_breed_like_pet_type(self):
+        """Regression for the reported bug: `pet_type` can hold breed text
+        ("Golden Retriever") with no animal word in it, so picking an icon
+        off `pet_type` misidentified every dog while a cat breed happened to
+        work by coincidence. `species` is the real `Dog`/`Cat` value and is
+        now returned alongside it.
+        """
+        self.pet_a.species = "Dog"
+        self.pet_a.pet_type = "Golden Retriever"
+        self.pet_a.save()
+        self.auth(self.doctor)
+        self.client.post(f"{API}/pets/{self.pet_a.id}/queries",
+                         {"message": "hello"}, format="multipart")
+        r = self.client.get(f"{API}/pets/{self.pet_a.id}/queries")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["pet"]["species"], "Dog")
+        self.assertEqual(r.data["pet"]["pet_type"], "Golden Retriever")
+
+    def test_thread_pet_species_present_before_any_message_exists(self):
+        """The D3 "no phantom thread" GET path (`_empty_thread_payload`)
+        must carry the same `species` field as the persisted-thread path so
+        the two response shapes never drift apart.
+        """
+        fresh_pet = Pet.objects.create(
+            owner=self.owner_a, doctor=self.doctor, name="Fresh", species="Cat",
+            owner_name="Alice Aye", owner_phone="9991110001",
+        )
+        self.auth(self.doctor)
+        r = self.client.get(f"{API}/pets/{fresh_pet.id}/queries")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["pet"]["species"], "Cat")
+
+    def test_thread_pet_species_is_not_writable(self):
+        """`get_pet()` derives every field straight from `obj.pet` — there is
+        no request-body path that can influence it.
+        """
+        self.auth(self.doctor)
+        self.client.post(f"{API}/pets/{self.pet_a.id}/queries",
+                         {"message": "hi", "pet": "Dragon"}, format="multipart")
+        r = self.client.get(f"{API}/pets/{self.pet_a.id}/queries")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["pet"]["species"], self.pet_a.species)
+        self.assertNotEqual(r.data["pet"]["species"], "Dragon")
+
+    def test_inbox_thread_pet_includes_species(self):
+        self.auth(self.doctor)
+        self.client.post(f"{API}/pets/{self.pet_a.id}/queries",
+                         {"message": "hi"}, format="multipart")
+        r = self.client.get(f"{API}/queries/inbox")
+        self.assertEqual(r.status_code, 200, r.content)
+        thread = next(t for t in r.data["results"] if t["pet"]["id"] == self.pet_a.id)
+        self.assertEqual(thread["pet"]["species"], self.pet_a.species)
 
     def test_inbox_envelope(self):
         self.auth(self.doctor)

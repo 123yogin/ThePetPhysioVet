@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
@@ -203,12 +204,54 @@ class OwnerPetHistorySerializer(serializers.ModelSerializer):
 
 class AppointmentSerializer(serializers.ModelSerializer):
     pet = serializers.PrimaryKeyRelatedField(queryset=Pet.objects.all(), write_only=True)
+
+    def __init__(self, *args, **kwargs):
+        """Scope the writable `pet` field to pets the caller may act on.
+
+        CLAUDE.md rule 4. Every `get_object_or_404` in views.py is now
+        doctor-scoped, but this field bypassed all of that: `queryset=
+        Pet.objects.all()` let a doctor POST an appointment against ANY pet id,
+        including another practice's, and let an owner book against a pet they
+        do not own. The object-level checks in the views never see it because
+        the pet arrives as validated serializer input, not as a URL lookup.
+
+        Doctors keep the same "claimable pool" posture the views use — their own
+        pets plus unassigned ones — so a brand-new owner's first pet stays
+        bookable. Owners are restricted to pets they own.
+
+        Falls back to the unrestricted queryset only when there is no request in
+        context (management commands, tests constructing the serializer bare).
+        """
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return
+        if getattr(user, "role", None) == "OWNER":
+            self.fields["pet"].queryset = Pet.objects.filter(owner=user)
+        else:
+            self.fields["pet"].queryset = Pet.objects.filter(
+                Q(doctor=user) | Q(doctor__isnull=True)
+            )
+
     pet_id = serializers.IntegerField(source="pet.id", read_only=True)
+    # Read-only, derived from the linked Pet — same pattern as `pet_id` above
+    # and `doctor_name` on PetSerializer. Added so the frontend can pick the
+    # right animal icon on the patient list / calendar / inbox without an
+    # extra `GET /pets` round trip just to look up species by `pet_id`
+    # (previously AppointmentsScreen re-fetched the whole pet list on every
+    # render for exactly this, and OwnerAppointmentsScreen couldn't do even
+    # that, falling back to a neutral paw icon). Callers must
+    # `select_related("pet")` on the queryset or this reintroduces an N+1 —
+    # see PetListQueryCountTests-style coverage in test_contract.py.
+    species = serializers.CharField(source="pet.species", read_only=True)
+    pet_type = serializers.CharField(source="pet.pet_type", read_only=True)
 
     class Meta:
         model = Appointment
         fields = [
-            "id", "pet", "pet_id", "pet_name", "owner_name", "owner_phone",
+            "id", "pet", "pet_id", "pet_name", "species", "pet_type",
+            "owner_name", "owner_phone",
             "date", "time", "visit_type", "visit_type_display", "status",
             "requested_date", "requested_time", "reschedule_reason", "reason_notes",
         ]
@@ -222,6 +265,14 @@ class AppointmentSerializer(serializers.ModelSerializer):
         validated_data.setdefault("pet_name", pet.name)
         validated_data.setdefault("owner_name", pet.owner_name)
         validated_data.setdefault("owner_phone", pet.owner_phone)
+        # B5 fix: visit_type_display is a stored column but was never
+        # actually written by the API (read_only here, only ever populated
+        # by seed_data) — every appointment rendered "Initial Consultation"
+        # regardless of its real visit_type. Derive it from VISIT_TYPES.
+        visit_type = validated_data.get("visit_type", "Initial")
+        validated_data["visit_type_display"] = dict(Appointment.VISIT_TYPES).get(
+            visit_type, visit_type,
+        )
         return super().create(validated_data)
 
 
@@ -413,9 +464,19 @@ class QueryThreadSerializer(serializers.ModelSerializer):
         fields = ["pet", "messages", "last_message", "awaiting_reply", "message_count"]
 
     def get_pet(self, obj):
+        # `species` added 2026-08-21 (coordinator follow-up): the doctor's
+        # inbox previously picked an animal icon off `pet_type`, which holds
+        # the *breed* ("Golden Retriever", "Persian Cat") — that string
+        # contains no dog-related word for most dog breeds, so every dog
+        # fell back to a generic paw while cat breeds happened to work by
+        # coincidence (whenever the breed string itself contained "Cat").
+        # `species` is the actual `Dog`/`Cat` value and should be preferred
+        # by callers; `pet_type` is left in place for backwards
+        # compatibility (existing callers may still read it).
         return {
             "id": obj.pet.id,
             "name": obj.pet.name,
+            "species": obj.pet.species,
             "pet_type": obj.pet.pet_type or obj.pet.species,
             "owner_name": obj.pet.owner_name,
         }

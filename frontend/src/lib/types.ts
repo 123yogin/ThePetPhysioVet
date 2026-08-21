@@ -34,6 +34,10 @@ export interface Appointment {
   id: number;
   pet_id: number;
   pet_name: string;
+  /** Read-only, from the linked Pet. `species` ("Dog") drives the icon —
+   *  `pet_type` is breed text and rarely names the animal. */
+  species?: string;
+  pet_type?: string;
   owner_name: string;
   owner_phone: string;
   date: string;
@@ -165,6 +169,8 @@ export interface QueryThread {
   pet: {
     id: number;
     name: string;
+    /** "Dog"/"Cat" — decides the icon. `pet_type` is the breed, not the species. */
+    species?: string;
     pet_type?: string;
     owner_name: string;
   };

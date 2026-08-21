@@ -16,6 +16,7 @@ from .views import (
     appointments_view, appointment_detail_view, appointment_reschedule_view,
     appointment_complete_view, appointment_reschedule_approve_view,
     appointment_reschedule_reject_view, appointment_share_view,
+    appointment_confirm_view, appointment_options_view,
     # Billing
     invoices_view, invoice_detail_view, invoice_payments_view, revenue_view,
     # Notifications
@@ -25,7 +26,8 @@ from .views import (
     # Owner portal
     owner_pets_view, owner_pet_detail_view, owner_pet_diagnoses_view, owner_pet_history_view,
     owner_appointments_view, owner_appointment_accept_view, owner_appointment_reschedule_request_view,
-    owner_invoices_view, owner_pet_queries_view,
+    owner_appointment_cancel_view, owner_invoices_view, owner_invoice_detail_view,
+    owner_pet_queries_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -78,6 +80,8 @@ urlpatterns = [
         name="appointment-reschedule-reject",
     ),
     path("appointments/<int:pk>/share", appointment_share_view, name="appointment-share"),
+    path("appointments/<int:pk>/confirm", appointment_confirm_view, name="appointment-confirm"),
+    path("appointment-options", appointment_options_view, name="appointment-options"),
 
     # --- Billing ---
     path("invoices", invoices_view, name="invoices"),
@@ -110,5 +114,11 @@ urlpatterns = [
         owner_appointment_reschedule_request_view,
         name="owner-appointment-reschedule-request",
     ),
+    path(
+        "owner/appointments/<int:pk>/cancel",
+        owner_appointment_cancel_view,
+        name="owner-appointment-cancel",
+    ),
     path("owner/invoices", owner_invoices_view, name="owner-invoices"),
+    path("owner/invoices/<int:pk>", owner_invoice_detail_view, name="owner-invoice-detail"),
 ]

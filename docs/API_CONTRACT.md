@@ -3,6 +3,31 @@
 **Status:** approved by Tech Lead, 2026-08-20. Supersedes ad-hoc endpoint invention.
 **Traceability:** SRS §3.1–§3.9; PRODUCT_PLAN phases 2–7. CLAUDE.md rules 1, 2, 4, 6.
 
+**AMENDED 2026-08-21 (post-launch audit fixes).** Summary of changes — see the
+relevant sections below for full detail:
+- `Appointment.VISIT_TYPES` extended with `Hydrotherapy` and `LaserTherapy`
+  (existing codes unchanged); new `GET /appointment-options` exposes the
+  canonical list (§3 Appointments).
+- `visit_type_display` is now derived server-side from `visit_type` on
+  create — it is no longer a dead column that always read "Initial
+  Consultation" (§3 Appointments).
+- `POST /appointments/:id/reschedule` (doctor route) now actually moves
+  `date`/`time` and sets `status: "Rescheduled"`, instead of enqueuing an
+  owner-style reschedule request against itself (§3 Appointments).
+- `POST /appointments/:id/reschedule-reject` no longer clears
+  `reschedule_reason` (§3 Appointments).
+- `POST /pets` now links the new pet to a matching `OWNER` account when
+  `owner_phone` unambiguously matches exactly one such account (§2, Pet
+  ownership note).
+- New: `POST /appointments/:id/confirm` (doctor, Pending → Confirmed), `POST
+  /owner/appointments/:id/cancel`, `GET /owner/invoices/:id`.
+- Doctor-facing list/aggregate endpoints (`GET /pets`, `GET /appointments`,
+  `GET /invoices`, `GET /revenue`, `GET /queries/inbox`, the money tiles on
+  `GET /dashboard/stats`) are now scoped to the requesting doctor (§4 AuthZ).
+- `GET /queries/inbox` only returns threads with at least one message; a
+  plain `GET` on a pet's thread no longer creates a persistent empty thread
+  (§3 Queries).
+
 ## How this document was derived
 
 `frontend/src/lib/types.ts` and `frontend/src/api/*.ts` were written against a complete,
@@ -60,6 +85,36 @@ parallel alias, do not drop a field because it seems redundant. Notable traps:
   The current text-based `Diagnosis` model does not satisfy it.
 - `TreatmentPlan.therapies` is a **list of strings**, not free text.
 - Money fields serialize as numbers or numeric strings; `currency` is `"INR"`.
+- `Appointment` includes `species` and `pet_type` (added 2026-08-21) — **read-only,
+  derived** from the linked `Pet` (`source="pet.species"` / `"pet.pet_type"`, the same
+  `read_only` pattern as `pet_id`), not stored columns on `Appointment` itself. Added
+  so the frontend can render the correct animal icon on the patient list, calendar,
+  and inbox screens without a second `GET /pets` round trip purely to look up species
+  by `pet_id`. A client-supplied `species`/`pet_type` in a `POST /appointments` or
+  `POST /owner/appointments` body is silently ignored — same as `pet_id`, it cannot
+  be used to spoof or reassign the appointment's actual pet. `GET /appointments` and
+  `GET /owner/appointments` use `select_related("pet")` to serve this without an N+1
+  query per row. The same addition was made to `QueryThread.pet` (see Queries below)
+  for the identical reason — the doctor's inbox had the same icon bug.
+- **`Pet.pet_type` vs `Pet.species` vs `Pet.breed` (findings, 2026-08-21 — no schema
+  change made).** Investigated while fixing the icon bug above; flagged for the Tech
+  Lead to decide whether to deprecate one. `Pet` has all three columns. The doctor
+  pet-creation form (`frontend/src/screens/PetFormScreen.tsx`) submits `pet_type` as
+  a **byte-for-byte copy of `species`** (`formData.append('pet_type', species)`) —
+  every pet created through that form has `pet_type === species`, and `breed` is
+  submitted separately as genuine free text. So for real, form-created pets,
+  `pet_type` carries zero information `species` doesn't already have; `breed` is the
+  only field actually holding breed-level detail. `seed_data.py`, however, populates
+  `pet_type` with breed-like strings instead ("Golden Retriever", "Persian Cat",
+  "Labrador Retriever" — sometimes matching `breed`, sometimes not: Luna is
+  `pet_type="Persian Cat"` but `breed="Persian"`), which is inconsistent with what the
+  live form writes and is the direct root cause of the icon bug this session fixed:
+  code that inferred species from `pet_type` worked for Luna only because her breed
+  string happens to contain the word "Cat", and failed for every dog. Recommendation
+  for consideration: `pet_type` looks like a deprecation candidate (drop it, or stop
+  the frontend form from writing `species` into it and give it a real, distinct
+  purpose) — `species` + `breed` already cover the same ground without the
+  duplication. Not changed here per instruction; this is a finding, not an action.
 - `Pet` includes `doctor_name` — a **read-only, derived** display string
   (`first_name + " " + last_name`, falling back to `username` when both are blank),
   built from `Pet.doctor`. It is `null` when `Pet.doctor` is unset. It is
@@ -75,6 +130,15 @@ parallel alias, do not drop a field because it seems redundant. Notable traps:
   stays `null` and `doctor_name` renders as "Not yet assigned" until a doctor claims
   the pet some other way. A client-supplied `doctor` field in the POST body is
   ignored on both paths (not a serializer field).
+- `Pet.owner` assignment on `POST /pets` (fixed 2026-08-21 — B4). A doctor-created
+  pet previously never had `owner` set, so it never showed up in that pet owner's
+  own portal (`GET /owner/pets`) even when the doctor entered the owner's exact
+  phone number. The view now links the new pet when the entered `owner_phone`
+  unambiguously matches **exactly one** `UserProfile` with `role="OWNER"`.
+  `UserProfile.phone` is not unique — 0 or >1 matches leave `owner` `null` rather
+  than guessing. Migration `0010_backfill_pet_owner_by_phone` applies the same rule
+  to pre-existing rows. `POST /owner/pets` is unaffected (it already force-assigns
+  `owner = request.user`).
 
 ---
 
@@ -127,45 +191,106 @@ anywhere in the codebase.
 | GET | `/dashboard/stats` | — | `DashboardStats` |
 
 `today_appointments` = today's appointments for the requesting doctor.
-`active_treatments` = TreatmentPlan status ACTIVE. `pending_payments` = sum of
-`balance_due` over unpaid invoices. `today_revenue` / `monthly_revenue` = sum of
-`Payment.amount_paid` in range. **All computed from the database. No constants.**
+`active_treatments` = TreatmentPlan status ACTIVE (clinic-wide — not doctor-scoped;
+out of scope for the 2026-08-21 L1 fix, which covered the money tiles specifically —
+flagged for the Tech Lead as a related follow-on). `pending_payments` = sum of
+`balance_due` over unpaid invoices
+**for the requesting doctor** (amended 2026-08-21 — L1; same `pet__doctor` / orphan
+posture as `/invoices`). `today_revenue` / `monthly_revenue` = sum of
+`Payment.amount_paid` in range, same doctor-scoping. **All computed from the
+database. No constants.** Before this amendment the "today's visits" tile was
+doctor-scoped but the three money tiles were not — an inconsistency within the same
+endpoint; verified as a no-op against the (single-doctor) seed data.
 
 ### Pets
-| GET | `/pets?q=` | search name/breed/owner_name/owner_phone | `Pet[]` |
+| GET | `/pets?q=` | search name/breed/owner_name/owner_phone | `Pet[]` — **doctor-scoped** (amended 2026-08-21, L1; see §4.6 for the `doctor=NULL` claimable-pool rule) |
 | POST | `/pets` | multipart, `photo` optional | `Pet` |
-| GET | `/pets/:id` | — | `Pet` |
-| PATCH | `/pets/:id` | partial | `Pet` |
+| GET | `/pets/:id` | — | `Pet` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up: previously reachable by any doctor by ID even after the list was scoped) |
+| PATCH | `/pets/:id` | partial | `Pet` — same scoping as `GET` |
 
 ### Appointments
-| GET | `/appointments?pet=&owner=&date=` | | `Appointment[]` |
+| GET | `/appointments?pet=&owner=&date=` | | `Appointment[]` — **doctor-scoped** (amended 2026-08-21, L1; see §4.6 for the `doctor=NULL` claimable-pool rule) |
 | POST | `/appointments` | `{pet, visit_type, date, time, reason_notes?}` | `Appointment` |
-| GET | `/appointments/:id` | | `Appointment` |
-| POST | `/appointments/:id/reschedule` | `{date, time}` | `Appointment` |
-| POST | `/appointments/:id/complete` | | `Appointment` |
-| POST | `/appointments/:id/reschedule-approve` | | `Appointment` |
-| POST | `/appointments/:id/reschedule-reject` | | `Appointment` |
-| GET | `/appointments/:id/share` | | `{whatsapp_url, sms_url, pet_name, owner_name, owner_phone}` |
+| GET | `/appointments/:id` | | `Appointment` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up) |
+| POST | `/appointments/:id/reschedule` | `{date, time}` | `Appointment` — doctor-scoped |
+| POST | `/appointments/:id/complete` | | `Appointment` — doctor-scoped |
+| POST | `/appointments/:id/confirm` | | `Appointment` — **new, 2026-08-21 (G1)**, doctor-scoped |
+| POST | `/appointments/:id/reschedule-approve` | | `Appointment` — doctor-scoped |
+| POST | `/appointments/:id/reschedule-reject` | | `Appointment` — doctor-scoped |
+| GET | `/appointments/:id/share` | | `{whatsapp_url, sms_url, pet_name, owner_name, owner_phone}` — doctor-scoped |
+| GET | `/appointment-options` | | `{visit_types: [{value, label}]}` — **new, 2026-08-21 (B1/B2)** |
+
+**`species`/`pet_type` (added 2026-08-21).** `Appointment` responses now include
+read-only `species` and `pet_type`, derived from the linked `Pet` — see §2 above for
+the full rationale and the N+1 note.
+
+**`visit_type` codes (amended 2026-08-21 — B1/B2).** `Appointment.VISIT_TYPES` is
+`Initial` / `Followup` / `Reassessment` / `Hydrotherapy` / `LaserTherapy`. The first
+three are unchanged from launch; the last two were added because the clinic offers
+hydrotherapy and laser therapy and the model never had codes for them — every
+booking attempting one of those services 400'd. `GET /appointment-options` (any
+authenticated role) returns the canonical `{value, label}` list so the frontend has
+one source of truth instead of three independently hardcoded vocabularies (the
+actual root cause of the original defect).
+
+**`visit_type_display` (amended 2026-08-21 — B5).** Previously a stored column that
+defaulted to `"Initial Consultation"` and was never written by the API (read-only in
+the serializer, only ever populated by `seed_data`) — every appointment booked
+through the API displayed "Initial Consultation" regardless of its real
+`visit_type`. `AppointmentSerializer.create` now derives it from `VISIT_TYPES`.
+Migration `0009_backfill_visit_type_display` corrects pre-existing rows the same way.
+
+**Doctor reschedule vs. owner reschedule-request (amended 2026-08-21 — B3).**
+`POST /appointments/:id/reschedule` is a **doctor-only** route and moves `date`/
+`time` directly, sets `status: "Rescheduled"`, and clears any stale
+`requested_date`/`requested_time`. It is **not** the same flow as
+`POST /owner/appointments/:id/reschedule-request` (owner-only, sets
+`status: "Reschedule Requested"` and leaves the change pending until the doctor
+calls `reschedule-approve`/`reschedule-reject`) — that flow is unchanged.
+
+**`reschedule-reject` preserves `reschedule_reason` (amended 2026-08-21 — D8).**
+Declining a reschedule request used to wipe `reschedule_reason`, destroying the only
+record of what the owner had asked for. It is now left in place; only the pending
+`requested_date`/`requested_time` are cleared and `status` returns to `Confirmed`.
+
+**`POST /appointments/:id/confirm` (new, 2026-08-21 — G1).** Doctor-only, scoped to
+the requesting doctor's own appointments (a mismatch is **404**, not 403 — this
+codebase's "existence must not leak" posture applies here too even though it's a
+doctor route). Only a `Pending` appointment (i.e. one created via
+`POST /owner/appointments`) can be confirmed; confirming anything else is a 400.
+Moves `status: "Pending"` → `"Confirmed"`.
 
 ### Diagnostic reports
-| GET | `/pets/:id/diagnoses` | | `Diagnosis[]` |
-| POST | `/pets/:id/diagnoses` | multipart `{file, report_type, notes?}` | `Diagnosis` |
-| DELETE | `/diagnoses/:id` | | 204 |
+| GET | `/pets/:id/diagnoses` | | `Diagnosis[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
+| POST | `/pets/:id/diagnoses` | multipart `{file, report_type, notes?}` | `Diagnosis` — same scoping as `GET` |
+| DELETE | `/diagnoses/:id` | | 204 — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up: previously any doctor could delete another practice's diagnostic report by ID) |
 
 Validate upload: max 10 MB, allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
 
 ### Treatment plans
-| GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` |
-| POST | `/pets/:id/treatment-plans` | plan body | `TreatmentPlan` |
-| GET | `/treatment-plans/:id` | | `TreatmentPlan` |
-| POST | `/treatment-plans/:id/progress-notes` | `{session_no?, notes}` | `ProgressNote` |
+| GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
+| POST | `/pets/:id/treatment-plans` | plan body | `TreatmentPlan` — same scoping as `GET` |
+| GET | `/treatment-plans/:id` | | `TreatmentPlan` — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up) |
+| POST | `/treatment-plans/:id/progress-notes` | `{session_no?, notes}` | `ProgressNote` — same scoping |
 
 ### Billing
-| GET | `/invoices?pet=` | | `Invoice[]` |
-| POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` |
-| GET | `/invoices/:id` | | `Invoice` |
-| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` |
+| GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
+| POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |
+| GET | `/invoices/:id` | | `Invoice` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up: previously reachable by any doctor by ID) |
+| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID) |
+
+**Doctor-scoping and orphan invoices (amended 2026-08-21 — L1, extended to detail
+routes the same day).** `Invoice` has no direct `doctor` FK; doctor-scoping on
+`GET/POST /invoices`, `GET /invoices/:id`, `POST /invoices/:id/payments`, and `GET
+/revenue` all join through `Invoice.pet.doctor` via the shared `_doctor_scoped()`
+helper. An invoice with `pet = null` (the handful of legacy rows an ownership
+backfill couldn't match — see §1) is not linked to any doctor either; per §4.6's
+NULL-doctor "claimable pool" decision, it remains visible to **every** doctor
+rather than being hidden from all of them — the same rule now applies uniformly
+whether the invoice is reached via the list or by ID. Verified against the
+(single-doctor) seed data and base test fixtures: this is a no-op there, since
+neither creates a `pet = null` invoice.
 
 **Money guards (added after QA round 1).** `amount_paid` must be `> 0` **and
 `<= invoice.balance_due`** — overpayment is rejected with 400, never allowed to drive
@@ -174,7 +299,7 @@ a negative `unit_price` previously minted a negative invoice and dragged
 `/revenue.total_revenue` below zero. `invoice_no` must be derived from
 `Max(invoice_no)` inside `select_for_update()` (or a DB sequence) — a `COUNT()`-based
 scheme collides after any delete and races under concurrent POSTs, returning 500.
-| GET | `/revenue?range=today\|month\|year` | | `{range, total_revenue, collected, pending, currency, series[]}` |
+| GET | `/revenue?range=today\|month\|year` | | `{range, total_revenue, collected, pending, currency, series[]}` — **doctor-scoped** (amended 2026-08-21, L1; same `pet__doctor` / orphan-invoice posture as `/invoices`) |
 
 Server computes `subtotal` from line items, `total = subtotal + tax`,
 `amount_paid = sum(payments)`, `balance_due = total - amount_paid`, and derives
@@ -188,12 +313,34 @@ Server computes `subtotal` from line items, `total = subtotal + tax`,
 | PUT | `/notification-prefs` | `{owner_phone, sms_opt_out}` | pref |
 
 ### Queries
-| GET | `/queries/inbox` | | `{results: QueryThread[]}` |
-| GET | `/pets/:id/queries` | | `QueryThread` |
-| POST | `/pets/:id/queries` | multipart `{message, attachments[]}` (max 5) | `QueryMessage` |
+| GET | `/queries/inbox` | | `{results: QueryThread[]}` — **doctor-scoped, messages-only** (amended 2026-08-21, D3 + L1) |
+| GET | `/pets/:id/queries` | | `QueryThread` — **doctor-scoped** (amended 2026-08-21, L1 follow-up: previously any doctor could read/post into another practice's patient conversation by pet ID) |
+| POST | `/pets/:id/queries` | multipart `{message, attachments[]}` (max 5) | `QueryMessage` — same scoping as `GET` |
 
 Threads are append-only. No edit, no delete — messages are audit-retained.
 `sender_name` is derived from `request.user`, **never** taken from the request body.
+
+**No phantom threads (amended 2026-08-21 — D3).** A plain `GET` on
+`/pets/:id/queries` or `/owner/pets/:id/queries` no longer creates a `QueryThread`
+row as a side effect — it used to call `get_or_create`, so merely *viewing* a
+patient with no prior conversation created a permanent empty thread that then
+showed up in `GET /queries/inbox` forever. GET now reads without creating, and
+returns the same `QueryThread` shape (`messages: []`, `message_count: 0`,
+`awaiting_reply: false`) whether or not a thread row exists yet; `POST` is
+unaffected and still creates the thread on first use. `GET /queries/inbox` itself
+only returns threads with **at least one message**, and is scoped to the
+requesting doctor's own patients (`pet__doctor=request.user`).
+
+**`QueryThread.pet.species` (added 2026-08-21).** The nested `pet` object
+(`{id, name, pet_type, owner_name}`) now also carries `species`. `pet_type` holds
+breed-level text (e.g. "Golden Retriever", "Persian Cat"), not the `Dog`/`Cat`
+species value — most dog breed strings contain no dog-related word, so any caller
+picking an animal icon off `pet_type` misidentified every dog while a cat breed
+happened to work only when its text coincidentally contained "Cat". `species` is
+the field that actually answers "what animal is this". `pet_type` is left in the
+payload for existing callers; new code should prefer `species`. See §2 for the
+identical addition on `Appointment`, and the `pet_type`/`species`/`breed`
+redundancy note there.
 
 ### Owner portal
 | GET | `/owner/pets` | | `Pet[]` — only `owner=request.user` |
@@ -205,9 +352,23 @@ Threads are append-only. No edit, no delete — messages are audit-retained.
 | POST | `/owner/appointments` | `{pet_id, date, time, visit_type, reason_notes?}` | `Appointment` |
 | POST | `/owner/appointments/:id/accept` | | `Appointment` |
 | POST | `/owner/appointments/:id/reschedule-request` | `{date, time, reason}` | `Appointment` |
+| POST | `/owner/appointments/:id/cancel` | | `Appointment` — **new, 2026-08-21 (G2)** |
 | GET | `/owner/invoices` | | `Invoice[]` — own only |
+| GET | `/owner/invoices/:id` | | `Invoice` — own only — **new, 2026-08-21 (G3)** |
 | GET | `/owner/pets/:id/queries` | | `QueryThread` |
 | POST | `/owner/pets/:id/queries` | multipart | `QueryMessage` |
+
+**`POST /owner/appointments/:id/cancel` (new, 2026-08-21 — G2).** Owner-only,
+object-scoped — a cross-owner request is **404**, not 403 (§4.3). Moves any
+non-terminal status to `"Cancelled"` (already a valid `Appointment.STATUS_CHOICES`
+value). Rejected with 400: an appointment that is already `Completed` or
+`Cancelled` (nothing left to undo — and "cancelling" a visit that already happened
+would corrupt the clinical/billing record), or one whose `date` is in the past.
+
+**`GET /owner/invoices/:id` (new, 2026-08-21 — G3).** Owner-only, object-scoped
+(cross-owner is 404). Read-only — same `Invoice` shape as the doctor-facing
+`GET /invoices/:id` (line items, `amount_paid`, `balance_due`, etc.); no payment
+capability here.
 
 ---
 
@@ -226,6 +387,52 @@ Threads are append-only. No edit, no delete — messages are audit-retained.
    `UserProfile.objects.filter(role="DOCTOR").first()` default.
 5. Object-level checks live in the view, not only in the queryset — a detail route
    re-verifies ownership before mutating.
+6. **Doctor-scoping (added 2026-08-21 — L1; completed 2026-08-21 in a same-day
+   follow-up).** Every doctor-facing route that fetches a `Pet`, `Appointment`,
+   `DiagnosticReport`, `TreatmentPlan`, `Invoice`, `Payment`, or `QueryThread` —
+   list **and** single-object (detail/action) — is scoped to the requesting
+   doctor via the shared `_doctor_scoped()` helper in `views.py`. This includes
+   every list endpoint in this document already marked "doctor-scoped" above,
+   **and** every by-ID detail/action route on those same resources: `GET/PATCH
+   /pets/:id`, `GET/POST /pets/:id/diagnoses`, `DELETE /diagnoses/:id`, `GET/POST
+   /pets/:id/treatment-plans`, `GET /treatment-plans/:id`, `POST
+   /treatment-plans/:id/progress-notes`, `GET /appointments/:id`, `POST
+   /appointments/:id/{reschedule,complete,confirm,reschedule-approve,
+   reschedule-reject}`, `GET /appointments/:id/share`, `GET /invoices/:id`, `POST
+   /invoices/:id/payments`, the `pet_id` lookup inside `POST /invoices`, and
+   `GET/POST /pets/:id/queries`. A mismatch is **404**, not 403, on every one of
+   these (§4.3's "existence must not leak" posture, applied here even though
+   these are doctor routes rather than owner ones).
+
+   The initial L1 pass fixed only the list endpoints; a second doctor could
+   still read, reschedule, complete, invoice, and take payment on another
+   practice's patient by ID — objectively worse than being uniformly unscoped,
+   because the fixed list endpoints made it look closed. This is now closed
+   uniformly across list and detail.
+
+   **NULL-doctor decision (deliberate, not a guess).** A row whose doctor FK
+   (`doctor` directly, or `pet__doctor`/`invoice__pet__doctor` where the model
+   has no direct FK) is `NULL` is a **claimable pool**: visible to **any**
+   doctor, not hidden from all of them. Rationale: a brand-new owner's first
+   pet has `doctor = null` whenever `owner_pets_view` can't unambiguously infer
+   one (see §2, Pet ownership note), and nothing else in this codebase ever
+   lets a doctor claim a patient afterwards — treating `NULL` as "nobody's"
+   would make that pet, and everything hanging off it (appointments, its
+   diagnostic reports, its treatment plans, its invoices), permanently
+   unreachable by any doctor the moment scoping is strict. This mirrors, and is
+   now applied consistently with, the pre-existing "doctor-visible to all,
+   never owner-visible" posture already used for orphan (`pet = null`)
+   invoices. `_doctor_scoped(Model, request, lookup=...)` implements this as
+   `Q(**{lookup: request.user}) | Q(**{f"{lookup}__isnull": True})` for both
+   the list queryset and the `get_object_or_404` base queryset, so list and
+   detail can never drift apart on this again.
+
+   `DiagnosticReport` and `TreatmentPlan` have no direct `doctor` FK and are
+   scoped via `pet__doctor`; `Invoice`/`Payment` via `pet__doctor` /
+   `invoice__pet__doctor` respectively — `pet__doctor__isnull=True` correctly
+   matches both "the pet has no doctor" and "there is no pet at all" through
+   the same LEFT OUTER JOIN, so no separate `pet__isnull=True` clause is
+   needed.
 
 ## 5. Configuration (rule 1)
 

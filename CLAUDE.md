@@ -90,25 +90,74 @@ the doctor nav was completely unreachable on every phone width — an off-canvas
 produces no overflow. Any responsive check here must assert **reachability** (every nav
 control hit-testable, through the drawer if necessary), not just overflow.
 
+## Simplification sprint — 2026-08-21 (second pass)
+
+A full feature audit (19 routes, 15 models, 39 endpoints) found that **booking did not
+work**. `Appointment.VISIT_TYPES` allowed three values; three booking forms had each
+invented their own vocabulary, so **every option on both owner forms and three of the
+doctor's four returned HTTP 400**. Owners could not book at all.
+
+Root cause was duplication, so the fix is a single source of truth: **`GET
+/appointment-options`** now serves the list and all three forms read it. Never hardcode
+visit types again.
+
+**Also fixed and verified live:**
+- Doctor "reschedule" did not reschedule — it wrote `requested_*`, left the real date
+  untouched, claimed success, and sent the owner a WhatsApp message with the **old** time.
+- Every appointment displayed "Initial Consultation" regardless of type
+  (`visit_type_display` was written by nothing but the seeder). Migration 0009 backfills.
+- **Doctor-created pets never reached the owner's portal** (`owner` was never set), so the
+  clinic's main "add patient" flow produced records owners could not see. Now linked by
+  unambiguous phone match; migration 0010 backfills.
+- Doctors never saw photos owners attached to messages — silent clinical data loss.
+- Viewing a patient created an empty message thread, so the inbox filled with every
+  patient ever opened.
+- `AppointmentSerializer.pet` accepted **any** pet id, so a doctor could book against
+  another practice's patient they get a 404 for on the detail route. All doctor object
+  routes are now scoped; **NULL-doctor rows are a deliberate claimable pool**, visible to
+  any doctor, so a new owner's first pet is not stranded.
+- Owner cancel, doctor confirm for Pending, and owner invoice detail added.
+
+**Simplification:** owner pet page 5 tabs → 3 (13 buttons → 5 on a phone); patient form 11
+fields → 4 with the rest behind a toggle; GST auto-computed with a running total before
+the irreversible "Issue"; ~30 clinic-operations strings rewritten in plain English; raw
+enums (`PARTIALLY_PAID`, `ACTIVE`, `XRAY`) removed from owner-facing screens; species icon
+now derived from `species`, not `pet_type` (breed text — "Golden Retriever" contains no
+animal, so every dog rendered as a generic paw while "Persian Cat" worked by coincidence).
+
+**Palette unchanged: 47 distinct colour values before and after, identical sets.**
+
 ## Remediation sprint — still open
 
 **Still open — do not assume these are done:**
-1. **No refresh flow.** `/token/refresh` was removed and nothing calls the refresh
-   token the SPA still stores. Access tokens expire in 45 min → silent logout.
-2. **SRS §3.4 textual diagnosis has no home.** The old free-text `Diagnosis` model
+1. **SRS §3.4 textual diagnosis has no home.** The old free-text `Diagnosis` model
    (diagnosis name, stage, clinical notes) was replaced by `DiagnosticReport`, which
    is a file upload. Both were empty so no data was lost, but the requirement is
    unimplemented.
-3. **Owner-booked appointments for a pet with no doctor** get `doctor=None` and never
-   appear in `dashboard_stats_view`. Narrowed (both pet-creation paths now assign a
-   doctor) but a brand-new owner's first pet can still be unassigned. Needs a product
-   decision, not a one-line fix.
-4. **Doctor list endpoints are not per-doctor scoped** (single-doctor assumption).
-   Multi-doctor clinics will leak across practices.
-5. **Owner-created appointments default to `Pending`** with no doctor-confirm route.
-6. **RFC-7807 error shape is partial** — hand-rolled errors only; DRF validation
-   errors still use the stock `{field: [...]}` shape.
-7. **Still a monolith.** None of the Auth/Core/Notification service split exists.
+2. **A brand-new owner's first pet has no doctor.** `owner_pets_view` inherits one only
+   when the owner's existing pets unambiguously share a doctor, so the very first pet —
+   and any appointment booked for it — is unrouted. Needs a product decision (clinic
+   pool vs manual claim), not a one-line fix.
+3. **RFC-7807 error shape is partial** — hand-rolled errors only; DRF validation
+   errors still use the stock `{field: [...]}` shape. This is user-visible: the SPA
+   falls through to `response.statusText`, so a validation failure flashes the literal
+   words "Bad Request".
+4. **`Notification` and `Package` are dead weight.** Models, serializers and (for
+   Notification) two live endpoints exist; **zero rows have ever been created by the
+   app** — only by `seed_data`. Nothing writes a Notification anywhere, and the invoice
+   form never sends the session count a Package needs. Either wire them or delete them.
+5. **No frontend test suite.** No Vitest, no Playwright in `frontend/`. Every UI defect
+   found so far was caught by an out-of-tree harness or by eye. This is the largest
+   regression risk in the repo.
+6. **Still a monolith.** None of the Auth/Core/Notification service split exists.
+
+**Corrected 2026-08-21 — these were listed as open but were not:**
+- "No refresh flow" — `POST /auth/refresh` exists and rotates (verified live: returns a
+  new `access` *and* `refresh`), and `lib/http.ts` has a single-flight 401 interceptor.
+- "`vet.css` defines no `.badge-*` classes" — 20 badge rules exist and every class the
+  screens generate resolves.
+- `docs/UI_PARITY.md` is stale: it names `backend/appointments/static/` and `templates/`,
+  both deleted, and a `frontend/parity-baseline/` that was never created.
    SQLite, no Redis, no event bus, local `media/`, no Razorpay/FCM/Twilio.
 
 ## Target architecture (approved)

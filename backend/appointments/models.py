@@ -72,10 +72,20 @@ class Pet(models.Model):
 
 
 class Appointment(models.Model):
+    # B1/B2 fix (2026-08-21): the three original codes below did not cover
+    # the services the clinic actually offers (hydrotherapy, laser therapy),
+    # so all three frontend booking forms — each hardcoding its own
+    # vocabulary — sent strings that never matched and every booking 400'd.
+    # Existing codes are left unchanged so current rows stay valid; two new
+    # codes were added for the two missing service types. The canonical list
+    # is also exposed at GET /appointment-options so the frontend never has
+    # to hardcode (or drift from) this vocabulary again.
     VISIT_TYPES = (
         ("Initial", "Initial Consultation"),
         ("Followup", "Follow-up Session"),
         ("Reassessment", "Re-assessment"),
+        ("Hydrotherapy", "Hydrotherapy"),
+        ("LaserTherapy", "Laser Therapy"),
     )
     STATUS_CHOICES = (
         ("Confirmed", "Confirmed"),

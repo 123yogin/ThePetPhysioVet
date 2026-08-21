@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchQueryInbox } from '../api/queries';
+import { petEmoji } from '../lib/labels';
 
 export const QueryInboxScreen: React.FC = () => {
   const { data: inboxData, isLoading, isError, refetch } = useQuery({
@@ -36,7 +37,7 @@ export const QueryInboxScreen: React.FC = () => {
           {threads.map((t, i) => (
             <Link
               key={i}
-              to={`/patients/${t.pet.id}`}
+              to={`/patients/${t.pet.id}?tab=queries`}
               className="glass-card"
               style={{
                 display: 'flex',
@@ -44,18 +45,31 @@ export const QueryInboxScreen: React.FC = () => {
                 alignItems: 'center',
                 textDecoration: 'none',
                 color: 'var(--brown-900)',
+                flexWrap: 'wrap',
+                gap: '12px',
               }}
             >
               <div>
-                <div style={{ fontSize: '18px', fontWeight: '700' }}>
-                  🐕 {t.pet.name} <span style={{ fontSize: '14px', fontWeight: 'normal', color: 'var(--brown-500)' }}>({t.pet.owner_name})</span>
+                <div style={{ fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {petEmoji(t.pet.species || t.pet.pet_type)} {t.pet.name}{' '}
+                  <span style={{ fontSize: '14px', fontWeight: 'normal', color: 'var(--brown-500)' }}>({t.pet.owner_name})</span>
+                  {t.awaiting_reply && (
+                    <span className="badge badge-pending" style={{ fontSize: '11px' }}>
+                      Awaiting Reply
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '14px', color: 'var(--brown-700)', marginTop: '4px' }}>
                   {t.last_message?.snippet || 'New query thread'}
                 </div>
+                {typeof t.message_count === 'number' && (
+                  <div style={{ fontSize: '12px', color: 'var(--brown-500)', marginTop: '4px' }}>
+                    {t.message_count} {t.message_count === 1 ? 'message' : 'messages'}
+                  </div>
+                )}
               </div>
               <div>
-                <span className="btn btn-secondary btn-sm">Reply in Clinical Profile &rarr;</span>
+                <span className="btn btn-secondary btn-sm">Reply &rarr;</span>
               </div>
             </Link>
           ))}

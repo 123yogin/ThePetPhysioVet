@@ -18,8 +18,12 @@ const NAV_BY_ROLE: Record<'DOCTOR' | 'OWNER', NavItem[]> = {
     { to: '/patients', label: 'Patients', icon: 'paw' },
     { to: '/invoices', label: 'Invoices & Billing', icon: 'invoice' },
     { to: '/revenue', label: 'Revenue', icon: 'chart' },
-    { to: '/queries', label: 'Queries / Inbox', icon: 'chat' },
-    { to: '/notifications-settings', label: 'Notifications', icon: 'bell' },
+    { to: '/queries', label: 'Messages', icon: 'chat' },
+    // Named for what it actually is. The screen looks up one owner by phone and
+    // toggles an SMS opt-out flag; there is no notification inbox behind it, and
+    // no SMS integration in the codebase at all. Calling it "Notifications"
+    // promised a feed that exists in the API but has no screen.
+    { to: '/notifications-settings', label: 'SMS Reminders', icon: 'bell' },
     { to: '/profile', label: 'Profile', icon: 'settings' },
   ],
   OWNER: [

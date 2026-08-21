@@ -80,3 +80,13 @@ export async function sendOwnerQueryMessage(petId: number, formData: FormData): 
     data: formData,
   });
 }
+
+/** Owners could previously only ask to move a visit, never to call it off. */
+export async function cancelOwnerAppointment(id: number): Promise<Appointment> {
+  return http<Appointment>(`/owner/appointments/${id}/cancel`, { method: 'POST' });
+}
+
+/** Line items and balance for one of the requesting owner's own invoices. */
+export async function fetchOwnerInvoiceDetail(id: number): Promise<Invoice> {
+  return http<Invoice>(`/owner/invoices/${id}`);
+}

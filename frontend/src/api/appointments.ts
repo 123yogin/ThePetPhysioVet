@@ -67,3 +67,22 @@ export async function rejectReschedule(id: number): Promise<Appointment> {
 export async function fetchShareAppointment(id: number): Promise<any> {
   return http(`/appointments/${id}/share`);
 }
+
+/**
+ * The single source of truth for bookable visit types.
+ *
+ * Three booking forms previously hardcoded three different vocabularies, and
+ * none of them matched the database — every option on both owner forms and
+ * three of the doctor's four were rejected with HTTP 400. Fetch the list
+ * instead of retyping it, and the forms cannot drift again.
+ */
+export async function fetchAppointmentOptions(): Promise<{
+  visit_types: { value: string; label: string }[];
+}> {
+  return http('/appointment-options');
+}
+
+/** Pending -> Confirmed. Owner-requested bookings had no way out of Pending. */
+export async function confirmAppointment(id: number): Promise<Appointment> {
+  return http<Appointment>(`/appointments/${id}/confirm`, { method: 'POST' });
+}

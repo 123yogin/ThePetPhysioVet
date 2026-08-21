@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchAppointments, completeAppointment, approveReschedule, rejectReschedule } from '../api/appointments';
+import { fetchAppointments, completeAppointment, approveReschedule, rejectReschedule, confirmAppointment } from '../api/appointments';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
-import { humanizeStatus } from '../lib/labels';
+import { humanizeStatus, petEmoji } from '../lib/labels';
 
 export const AppointmentsScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
@@ -27,6 +27,33 @@ export const AppointmentsScreen: React.FC = () => {
     queryKey: ['appointments', dateFilter, ownerSearch],
     queryFn: () => fetchAppointments({ date: dateFilter || undefined, owner: ownerSearch || undefined }),
   });
+
+  // The appointment API doesn't return species/pet_type, only pet_name — so
+  // the calendar/list can't tell a dog from a cat from the appointment
+  // record alone. Look it up from the patient list instead of hardcoding a
+  // dog emoji for every species.
+  // species ('Dog') decides the icon, not pet_type ('Golden Retriever') --
+  // breed strings rarely contain the animal, so preferring pet_type made every
+  // dog fall back to a generic paw while 'Persian Cat' worked by coincidence.
+  // The appointment payload now carries the pet's species, so this screen no
+  // longer fetches the entire clinic's pet list on every render just to choose
+  // an icon.
+  const emojiFor = (a: { species?: string; pet_type?: string }) => petEmoji(a.species || a.pet_type);
+
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+
+  const handleConfirm = async (id: number, petName: string) => {
+    setConfirmingId(id);
+    try {
+      await confirmAppointment(id);
+      addFlash(`Confirmed appointment for ${petName}`, 'success');
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to confirm appointment', 'error');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const handleComplete = async (id: number) => {
     try {
@@ -253,7 +280,7 @@ export const AppointmentsScreen: React.FC = () => {
               >
                 <div>
                   <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--brown-900)' }}>
-                    🐕 {reqAppt.pet_name} <span style={{ fontWeight: '500', color: 'var(--brown-700)', fontSize: '14px' }}>— Owner: {reqAppt.owner_name} ({reqAppt.owner_phone})</span>
+                    {emojiFor(reqAppt)} {reqAppt.pet_name} <span style={{ fontWeight: '500', color: 'var(--brown-700)', fontSize: '14px' }}>— Owner: {reqAppt.owner_name} ({reqAppt.owner_phone})</span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '14px', flexWrap: 'wrap' }}>
@@ -471,7 +498,7 @@ export const AppointmentsScreen: React.FC = () => {
                     + Book Session for {selectedCalendarDate}
                   </Link>
                   <button onClick={() => setSelectedCalendarDate(null)} className="btn btn-ghost btn-sm">
-                    Dismiss Panel
+                    Close
                   </button>
                 </div>
               </div>
@@ -502,7 +529,7 @@ export const AppointmentsScreen: React.FC = () => {
                         <div>
                           <div style={{ fontSize: '16px', fontWeight: '700' }}>
                             <Link to={`/patients/${appt.pet_id}`} className="table-link" style={{ textDecoration: 'none' }}>
-                              🐕 {appt.pet_name}
+                              {emojiFor(appt)} {appt.pet_name}
                             </Link>
                           </div>
                           <div style={{ fontSize: '13px', color: 'var(--brown-700)', marginTop: '2px' }}>
@@ -551,6 +578,17 @@ export const AppointmentsScreen: React.FC = () => {
                           </>
                         ) : (
                           <>
+                            {appt.status === 'Pending' && (
+                              <button
+                                disabled={confirmingId === appt.id}
+                                onClick={() => handleConfirm(appt.id, appt.pet_name)}
+                                className="btn btn-secondary btn-sm"
+                                style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
+                              >
+                                <Icon name="check" /> {confirmingId === appt.id ? 'Confirming…' : 'Confirm'}
+                              </button>
+                            )}
+
                             {appt.status !== 'Completed' && (
                               <button
                                 onClick={() => handleComplete(appt.id)}
@@ -649,7 +687,7 @@ export const AppointmentsScreen: React.FC = () => {
                       </td>
                       <td>
                         <Link to={`/patients/${appt.pet_id}`} className="table-link">
-                          🐕 {appt.pet_name}
+                          {emojiFor(appt)} {appt.pet_name}
                         </Link>
                       </td>
                       <td>{appt.owner_name} ({appt.owner_phone})</td>
@@ -688,6 +726,16 @@ export const AppointmentsScreen: React.FC = () => {
                             </>
                           ) : (
                             <>
+                              {appt.status === 'Pending' && (
+                                <button
+                                  disabled={confirmingId === appt.id}
+                                  onClick={() => handleConfirm(appt.id, appt.pet_name)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
+                                >
+                                  {confirmingId === appt.id ? 'Confirming…' : 'Confirm'}
+                                </button>
+                              )}
                               {appt.status !== 'Completed' && (
                                 <button
                                   onClick={() => handleComplete(appt.id)}
