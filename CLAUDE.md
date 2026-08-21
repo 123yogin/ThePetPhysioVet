@@ -66,6 +66,32 @@ fallbacks (a hardcoded ₹15,200 shown whenever `/revenue` failed; a `pet_id || 
 default that could book against another owner's pet; on-screen demo credentials) →
 all removed. No error boundary → `ErrorBoundary` at router and shell level.
 
+## Shell unification — 2026-08-21
+
+The owner portal was migrated onto the doctor's sidebar shell; `OwnerShell` is deleted.
+There is now **one** shell (`AppShell` + `Sidebar`), with nav items selected by role.
+Design and evidence: [`docs/DESIGN_shell-unification.md`](docs/DESIGN_shell-unification.md).
+
+Two severe defects were found by measurement during this work and fixed:
+- **The doctor app was unusable on any phone.** `vet.css` slid the sidebar off-canvas
+  below 768px and expected a `.sidebar-toggle` + `body.sidebar-open` that **no component
+  ever rendered** — 0/8 nav items reachable at 360-768px in Chromium and WebKit, with no
+  way to sign out. Both halves of the drawer now exist.
+- **Sign Out sat below the fold on long desktop pages.** `.app-shell` is a flex row with
+  `min-height: 100vh`, so the sidebar stretched to *content* height. `.sidebar` is now
+  `position: sticky; height: 100vh`.
+
+Also closed: `Pet.doctor` was never assigned by either creation path (so the new
+`doctor_name` was null for every pet made through the app); `['me']` was never cleared on
+logout, so the next user to sign in saw the previous user's name and nav.
+
+**Note on verification.** An overflow-only sweep reported "396 combinations clean" while
+the doctor nav was completely unreachable on every phone width — an off-canvas sidebar
+produces no overflow. Any responsive check here must assert **reachability** (every nav
+control hit-testable, through the drawer if necessary), not just overflow.
+
+## Remediation sprint — still open
+
 **Still open — do not assume these are done:**
 1. **No refresh flow.** `/token/refresh` was removed and nothing calls the refresh
    token the SPA still stores. Access tokens expire in 45 min → silent logout.
@@ -73,9 +99,10 @@ all removed. No error boundary → `ErrorBoundary` at router and shell level.
    (diagnosis name, stage, clinical notes) was replaced by `DiagnosticReport`, which
    is a file upload. Both were empty so no data was lost, but the requirement is
    unimplemented.
-3. **`vet.css` defines no `.badge-*` classes**, so every payment/appointment status
-   badge renders as unstyled plain text. Pre-existing; fixing it touches the
-   pixel-parity baseline.
+3. **Owner-booked appointments for a pet with no doctor** get `doctor=None` and never
+   appear in `dashboard_stats_view`. Narrowed (both pet-creation paths now assign a
+   doctor) but a brand-new owner's first pet can still be unassigned. Needs a product
+   decision, not a one-line fix.
 4. **Doctor list endpoints are not per-doctor scoped** (single-doctor assumption).
    Multi-doctor clinics will leak across practices.
 5. **Owner-created appointments default to `Pending`** with no doctor-confirm route.

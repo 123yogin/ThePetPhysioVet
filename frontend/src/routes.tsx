@@ -7,7 +7,6 @@ import { FlashProvider } from './lib/flash';
 import { RoleLanding } from './components/RoleLanding';
 import { RequireAuth } from './components/RequireAuth';
 import { AppShell } from './components/AppShell';
-import { OwnerShell } from './components/OwnerShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { LoginScreen } from './screens/LoginScreen';
@@ -71,7 +70,7 @@ export const AppRoutes: React.FC = () => {
             <Route
               element={
                 <RequireAuth allowedRoles={['OWNER']}>
-                  <OwnerShell />
+                  <AppShell />
                 </RequireAuth>
               }
             >

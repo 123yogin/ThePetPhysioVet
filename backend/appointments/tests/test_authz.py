@@ -4,7 +4,7 @@ Key rule under test (§4.3): "An owner requesting another owner's pet gets 404,
 not 403 — do not leak existence." Exercised per resource type.
 """
 
-from appointments.models import Invoice, Pet, QueryMessage
+from appointments.models import Invoice, Pet, QueryMessage, UserProfile
 
 from .base import API, ApiTestCase
 
@@ -176,6 +176,99 @@ class OwnerMassAssignmentTests(ApiTestCase):
         self.assertEqual(r.status_code, 201, r.content)
         pet = Pet.objects.get(name="DocPet")
         self.assertIsNone(pet.owner_id)
+
+
+class PetDoctorAssignmentTests(ApiTestCase):
+    """Defect (HIGH, QA 2026-08-21): nothing ever assigns Pet.doctor on the
+    two pet-creation paths, so app-created pets kept doctor=None forever and
+    `doctor_name` rendered "Not yet assigned" in the owner portal.
+    """
+
+    def test_doctor_created_pet_is_assigned_to_creating_doctor(self):
+        self.auth(self.doctor)
+        r = self.client.post(f"{API}/pets", {
+            "name": "NewPet", "species": "Dog",
+            "owner_name": "Alice Aye", "owner_phone": "9991110001"},
+            format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        pet = Pet.objects.get(name="NewPet")
+        self.assertEqual(pet.doctor_id, self.doctor.id)
+        self.assertEqual(r.data["doctor_name"], "Dana Who")
+
+    def test_doctor_cannot_override_doctor_via_post_body(self):
+        other_doctor = UserProfile.objects.create_user(
+            username="drother2", password="D0ctorPass!23", role="DOCTOR",
+            first_name="Otto", last_name="Herr", phone="9990000097",
+        )
+        self.auth(self.doctor)
+        r = self.client.post(f"{API}/pets", {
+            "name": "NotHijacked", "species": "Dog", "doctor": other_doctor.id,
+            "owner_name": "Alice Aye", "owner_phone": "9991110001"},
+            format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        pet = Pet.objects.get(name="NotHijacked")
+        self.assertEqual(pet.doctor_id, self.doctor.id,
+                         "client-supplied `doctor` overrode request.user")
+
+    def test_owner_created_pet_inherits_doctor_when_unambiguous(self):
+        # owner_a already has pet_a with a single doctor (self.doctor) — the
+        # new pet should inherit it.
+        self.auth(self.owner_a)
+        r = self.client.post(f"{API}/owner/pets", {
+            "name": "SecondPet", "species": "Cat"}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        pet = Pet.objects.get(name="SecondPet")
+        self.assertEqual(pet.doctor_id, self.doctor.id)
+        self.assertEqual(r.data["doctor_name"], "Dana Who")
+
+    def test_owner_created_pet_stays_unassigned_with_no_existing_pets(self):
+        fresh_owner = UserProfile.objects.create_user(
+            username="ownerfresh", password="OwnerFreshPass!23", role="OWNER",
+            first_name="Fresh", last_name="Owner", phone="9993330003",
+        )
+        self.auth(fresh_owner)
+        r = self.client.post(f"{API}/owner/pets", {
+            "name": "FirstPet", "species": "Dog",
+            "owner_name": "Fresh Owner", "owner_phone": "9993330003"},
+            format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        pet = Pet.objects.get(name="FirstPet")
+        self.assertIsNone(pet.doctor_id)
+        self.assertIsNone(r.data["doctor_name"])
+
+    def test_owner_created_pet_stays_unassigned_when_doctors_are_ambiguous(self):
+        other_doctor = UserProfile.objects.create_user(
+            username="drsecond", password="D0ctorPass!23", role="DOCTOR",
+            first_name="Sam", last_name="Second", phone="9990000096",
+        )
+        # owner_a's existing pet_a is under self.doctor; give them a second
+        # pet under a different doctor so the rule can no longer be
+        # unambiguous.
+        Pet.objects.create(
+            owner=self.owner_a, doctor=other_doctor, name="Buddy", species="Dog",
+            owner_name="Alice Aye", owner_phone="9991110001",
+        )
+        self.auth(self.owner_a)
+        r = self.client.post(f"{API}/owner/pets", {
+            "name": "ThirdPet", "species": "Dog"}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        pet = Pet.objects.get(name="ThirdPet")
+        self.assertIsNone(pet.doctor_id)
+
+    def test_owner_cannot_set_doctor_via_post_body(self):
+        other_doctor = UserProfile.objects.create_user(
+            username="drthird", password="D0ctorPass!23", role="DOCTOR",
+            first_name="Third", last_name="Doc", phone="9990000095",
+        )
+        self.auth(self.owner_a)
+        r = self.client.post(f"{API}/owner/pets", {
+            "name": "OwnerHijack", "species": "Dog", "doctor": other_doctor.id},
+            format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        pet = Pet.objects.get(name="OwnerHijack")
+        # Inherited from owner_a's unambiguous existing doctor (self.doctor),
+        # NOT the client-supplied `doctor` field.
+        self.assertEqual(pet.doctor_id, self.doctor.id)
 
 
 class InvoiceIsolationTests(ApiTestCase):

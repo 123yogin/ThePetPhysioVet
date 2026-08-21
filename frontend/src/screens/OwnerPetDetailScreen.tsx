@@ -237,7 +237,8 @@ export const OwnerPetDetailScreen: React.FC = () => {
                 <strong>Weight:</strong> {pet.weight ? `${pet.weight} kg` : 'N/A'} &bull; <strong>Sex:</strong> {pet.sex || 'N/A'}
               </p>
               <p style={{ color: 'var(--brown-600)', fontSize: '12px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Icon name="doctor" size={12} /> <strong>Attending Specialist:</strong> your vet
+                <Icon name="doctor" size={12} /> <strong>Attending Specialist:</strong>{' '}
+                {pet.doctor_name || 'Not yet assigned'}
               </p>
             </div>
           </div>

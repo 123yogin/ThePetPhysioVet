@@ -149,6 +149,7 @@ class SignupSerializer(serializers.ModelSerializer):
 
 class PetSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
+    doctor_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Pet
@@ -156,7 +157,18 @@ class PetSerializer(serializers.ModelSerializer):
             "id", "name", "species", "pet_type", "breed", "age", "sex", "weight",
             "photo", "owner_name", "owner_phone", "owner_email",
             "medical_history", "complaint", "complaint_started", "referred_by", "notes",
+            "doctor_name",
         ]
+        # doctor_name is read-only because SerializerMethodField IS read-only —
+        # it has no `to_internal_value`, so client input for it is discarded
+        # before validation. Listing it below documents the intent, but does NOT
+        # add a second control: DRF builds extra_kwargs from read_only_fields
+        # only for fields it generates itself, and explicitly declared fields
+        # bypass that path entirely. Do not treat this line as the thing
+        # stopping an owner reassigning Pet.doctor (CLAUDE.md rule 4) — the
+        # field type is. `doctor` is also absent from `fields` above, so it is
+        # not writable through this serializer at all.
+        read_only_fields = ["doctor_name"]
 
     def get_photo(self, obj):
         if not obj.photo:
@@ -164,6 +176,13 @@ class PetSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         url = obj.photo.url
         return request.build_absolute_uri(url) if request else url
+
+    def get_doctor_name(self, obj):
+        doctor = obj.doctor
+        if not doctor:
+            return None
+        full_name = f"{doctor.first_name} {doctor.last_name}".strip()
+        return full_name or doctor.username
 
 
 class OwnerPetHistorySerializer(serializers.ModelSerializer):

@@ -21,6 +21,8 @@ export interface Pet {
   owner_name: string;
   owner_phone: string;
   owner_email?: string;
+  /** Read-only, derived server-side from Pet.doctor. null when unassigned. */
+  doctor_name?: string | null;
   medical_history?: string;
   complaint?: string;
   complaint_started?: string | null;

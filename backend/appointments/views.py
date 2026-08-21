@@ -249,7 +249,7 @@ def dashboard_stats_view(request):
 def pets_view(request):
     if request.method == "GET":
         q = request.query_params.get("q", "").strip()
-        pets = Pet.objects.all().order_by("-created_at")
+        pets = Pet.objects.select_related("doctor").order_by("-created_at")
         if q:
             pets = pets.filter(
                 Q(name__icontains=q) | Q(breed__icontains=q) |
@@ -259,7 +259,10 @@ def pets_view(request):
 
     serializer = PetSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    pet = serializer.save()
+    # `doctor` is not a serializer field (client cannot set it), so assign it
+    # explicitly. The caller is guaranteed DOCTOR role by IsDoctor above, so
+    # attributing the pet to the creating doctor is unambiguous.
+    pet = serializer.save(doctor=request.user)
     photo = request.FILES.get("photo")
     if photo:
         pet.photo = photo
@@ -780,7 +783,7 @@ def pet_queries_view(request, pk):
 @permission_classes([IsAuthenticated, IsOwner])
 def owner_pets_view(request):
     if request.method == "GET":
-        pets = Pet.objects.filter(owner=request.user).order_by("-created_at")
+        pets = Pet.objects.filter(owner=request.user).select_related("doctor").order_by("-created_at")
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
     data = request.data.copy()
@@ -790,7 +793,27 @@ def owner_pets_view(request):
         data.setdefault("owner_email", request.user.email)
     serializer = PetSerializer(data=data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    pet = serializer.save(owner=request.user)
+    # An owner is never a DOCTOR, so there is no "creating doctor" to assign
+    # (unlike pets_view). Rather than leaving every owner-created pet
+    # perpetually unassigned, inherit the doctor from the owner's existing
+    # pets ONLY when that is unambiguous (all of the owner's other pets share
+    # exactly one doctor). This covers the common case (an owner adding a
+    # second pet to the same clinic) without guessing across multiple
+    # doctors or clinics. We deliberately do NOT default to "the first doctor
+    # in the table" — that is the anti-pattern this codebase removed during
+    # the 2026-08-20 auth remediation (CLAUDE.md); it would silently attach a
+    # new patient to a random practice. If the owner has no pets yet, or
+    # their existing pets are split across more than one doctor, `doctor`
+    # stays NULL and must be assigned later (e.g. at first appointment
+    # confirmation).
+    existing_doctor_ids = set(
+        Pet.objects.filter(owner=request.user)
+        .exclude(doctor__isnull=True)
+        .values_list("doctor_id", flat=True)
+        .distinct()
+    )
+    inherited_doctor_id = existing_doctor_ids.pop() if len(existing_doctor_ids) == 1 else None
+    pet = serializer.save(owner=request.user, doctor_id=inherited_doctor_id)
     photo = request.FILES.get("photo")
     if photo:
         pet.photo = photo

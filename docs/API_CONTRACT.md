@@ -60,6 +60,21 @@ parallel alias, do not drop a field because it seems redundant. Notable traps:
   The current text-based `Diagnosis` model does not satisfy it.
 - `TreatmentPlan.therapies` is a **list of strings**, not free text.
 - Money fields serialize as numbers or numeric strings; `currency` is `"INR"`.
+- `Pet` includes `doctor_name` — a **read-only, derived** display string
+  (`first_name + " " + last_name`, falling back to `username` when both are blank),
+  built from `Pet.doctor`. It is `null` when `Pet.doctor` is unset. It is
+  serializer-derived, not a stored column, and cannot be set via `POST /pets` or
+  `PATCH /pets/:id` — a client-supplied `doctor_name` in the body is silently ignored.
+  Only the doctor's name is exposed; their id/email/phone are not (CLAUDE.md rule 4).
+- `Pet.doctor` assignment on creation (fixed 2026-08-21, previously unset on both
+  paths): `POST /pets` (doctor-facing) always assigns `doctor = request.user` — the
+  caller is guaranteed a DOCTOR by role. `POST /owner/pets` has no creating doctor to
+  assign, so it inherits the doctor from the owner's *other* pets **only when
+  unambiguous** (all of the owner's existing pets share exactly one doctor);
+  otherwise (no existing pets, or more than one distinct doctor among them) `doctor`
+  stays `null` and `doctor_name` renders as "Not yet assigned" until a doctor claims
+  the pet some other way. A client-supplied `doctor` field in the POST body is
+  ignored on both paths (not a serializer field).
 
 ---
 

@@ -75,6 +75,13 @@ button, input, select, textarea {
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 100;
   box-shadow: 2px 0 16px rgba(62, 39, 35, 0.04);
+  /* Sticky, viewport-height sidebar: `.app-shell` is a flex row with
+     min-height: 100vh, so without this the sidebar stretches to CONTENT
+     height and Sign Out ends up below the fold on long pages. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar-brand {
@@ -181,21 +188,53 @@ button, input, select, textarea {
   justify-content: center;
 }
 
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
     top: 0;
     bottom: 0;
     left: 0;
+    height: 100vh;
     transform: translateX(-100%);
+    /* Off-canvas must leave the tab order: translateX alone keeps links
+       focusable, so a keyboard user could tab into invisible controls.
+       Transitioning `visibility` alongside `transform` keeps the slide
+       animation while still removing focusability once fully hidden. */
+    visibility: hidden;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.25s;
   }
 
   body.sidebar-open .sidebar {
     transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0s;
   }
 
   .sidebar-toggle {
     display: flex;
+  }
+
+  /* Lock the page behind an open drawer. The backdrop is a bare fixed overlay
+     with no scroll container of its own, so without this, dragging on it
+     scrolls the content underneath the menu. Scoped to the breakpoint: at
+     desktop the drawer does not exist and locking the body would break the
+     page. */
+  body.sidebar-open {
+    overflow: hidden;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    /* Reuses the rgba(62, 39, 35, ...) triplet already used by
+       .sidebar-toggle's box-shadow -- no new colour value. */
+    background: rgba(62, 39, 35, 0.3);
+    z-index: 90;
   }
 
   .main-panel {

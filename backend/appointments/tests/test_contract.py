@@ -7,7 +7,7 @@ The expected key sets below are transcribed from types.ts. Optional TS fields
 
 from decimal import Decimal
 
-from appointments.models import Notification, ProgressNote, QueryMessage
+from appointments.models import Notification, Pet, ProgressNote, QueryMessage, UserProfile
 
 from .base import API, ApiTestCase, upload
 
@@ -36,7 +36,7 @@ class PetContractTests(ApiTestCase):
     REQUIRED = ["id", "name", "species", "owner_name", "owner_phone"]
     OPTIONAL = ["pet_type", "breed", "age", "sex", "weight", "photo",
                 "owner_email", "medical_history", "complaint",
-                "complaint_started", "referred_by", "notes"]
+                "complaint_started", "referred_by", "notes", "doctor_name"]
 
     def test_pet_list_shape(self):
         self.auth(self.doctor)
@@ -54,6 +54,124 @@ class PetContractTests(ApiTestCase):
         self.auth(self.doctor)
         r = self.client.get(f"{API}/pets?q=Milo")
         self.assertEqual([p["name"] for p in r.data], ["Milo"])
+
+    def test_doctor_name_reflects_assigned_doctor(self):
+        # base fixtures assign self.doctor ("Dana Who") to pet_a.
+        self.auth(self.doctor)
+        r = self.client.get(f"{API}/pets/{self.pet_a.id}")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["doctor_name"], "Dana Who")
+
+    def test_doctor_name_falls_back_to_username_when_names_blank(self):
+        nameless_doctor = UserProfile.objects.create_user(
+            username="drnoname", password="D0ctorPass!23", role="DOCTOR",
+            first_name="", last_name="", phone="9990000099",
+        )
+        pet = Pet.objects.create(
+            owner=self.owner_a, doctor=nameless_doctor, name="Fido", species="Dog",
+            owner_name="Alice Aye", owner_phone="9991110001",
+        )
+        self.auth(self.doctor)
+        r = self.client.get(f"{API}/pets/{pet.id}")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["doctor_name"], "drnoname")
+
+    def test_doctor_name_is_null_when_no_doctor_assigned(self):
+        orphan = Pet.objects.create(
+            owner=self.owner_a, doctor=None, name="Whiskers", species="Cat",
+            owner_name="Alice Aye", owner_phone="9991110001",
+        )
+        self.auth(self.doctor)
+        r = self.client.get(f"{API}/pets/{orphan.id}")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIsNone(r.data["doctor_name"])
+
+    def test_doctor_name_is_not_writable_via_pet_patch(self):
+        # PATCH /pets/:id is the only route that writes Pet via PetSerializer.
+        # A client-supplied doctor_name (or an attempt to move the FK by ID)
+        # must be silently ignored — an owner/doctor must not be able to
+        # reassign Pet.doctor through this field (CLAUDE.md rule 4).
+        other_doctor = UserProfile.objects.create_user(
+            username="drother", password="D0ctorPass!23", role="DOCTOR",
+            first_name="Otto", last_name="Herr", phone="9990000098",
+        )
+        self.auth(self.doctor)
+        r = self.client.patch(
+            f"{API}/pets/{self.pet_a.id}",
+            {"doctor_name": "Otto Herr", "doctor": other_doctor.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.pet_a.refresh_from_db()
+        self.assertEqual(self.pet_a.doctor_id, self.doctor.id)
+        self.assertEqual(r.data["doctor_name"], "Dana Who")
+
+
+class PetListQueryCountTests(ApiTestCase):
+    """Defect (MEDIUM, QA 2026-08-21): `doctor_name` dereferenced obj.doctor
+    per row with no select_related, causing an N+1 on GET /pets and
+    GET /owner/pets. Assert the query count is flat regardless of row count.
+    """
+
+    def _make_pets(self, owner, doctor, count, prefix):
+        for i in range(count):
+            Pet.objects.create(
+                owner=owner, doctor=doctor, name=f"{prefix}{i}", species="Dog",
+                owner_name="Alice Aye", owner_phone="9991110001",
+            )
+
+    def test_doctor_pet_list_query_count_is_flat(self):
+        other_doctor = UserProfile.objects.create_user(
+            username="drqcount", password="D0ctorPass!23", role="DOCTOR",
+            first_name="Q", last_name="Count", phone="9990000094",
+        )
+        self.auth(self.doctor)
+
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as small:
+            r = self.client.get(f"{API}/pets")
+        self.assertEqual(r.status_code, 200, r.content)
+        small_count = len(small.captured_queries)
+
+        self._make_pets(self.owner_a, self.doctor, 5, "Flat")
+        self._make_pets(self.owner_b, other_doctor, 5, "Flat2")
+
+        with CaptureQueriesContext(connection) as large:
+            r = self.client.get(f"{API}/pets")
+        self.assertEqual(r.status_code, 200, r.content)
+        large_count = len(large.captured_queries)
+
+        self.assertEqual(
+            small_count, large_count,
+            f"query count grew with row count ({small_count} -> {large_count}); "
+            "select_related('doctor') regressed",
+        )
+
+    def test_owner_pet_list_query_count_is_flat(self):
+        self.auth(self.owner_a)
+
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as small:
+            r = self.client.get(f"{API}/owner/pets")
+        self.assertEqual(r.status_code, 200, r.content)
+        small_count = len(small.captured_queries)
+
+        self._make_pets(self.owner_a, self.doctor, 5, "OwnFlat")
+
+        with CaptureQueriesContext(connection) as large:
+            r = self.client.get(f"{API}/owner/pets")
+        self.assertEqual(r.status_code, 200, r.content)
+        large_count = len(large.captured_queries)
+
+        self.assertEqual(
+            small_count, large_count,
+            f"query count grew with row count ({small_count} -> {large_count}); "
+            "select_related('doctor') regressed",
+        )
 
 
 class AppointmentContractTests(ApiTestCase):
