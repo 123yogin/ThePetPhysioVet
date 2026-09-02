@@ -558,13 +558,35 @@ class EnquiryCreateSerializer(serializers.ModelSerializer):
     uncapped text field would let a spammer grow the database without limit.
     """
 
+    # What is required here IS the contract the public form advertises with an
+    # asterisk. They had drifted: four of the seven fields were required by
+    # this serializer and marked optional on the form, so a visitor who filled
+    # in exactly what was starred got "lastName: This field may not be blank."
+    # — an API field name, shown to a pet owner, about a field we told them
+    # they could skip. Measured live before this change.
+    #
+    # Required, and starred on the form: the two names, an email, and a phone
+    # number — the confirmation screen promises a call back within four
+    # business hours, which is not possible without one.
     firstName = serializers.CharField(source="first_name", max_length=100, trim_whitespace=True)
-    lastName = serializers.CharField(source="last_name", max_length=100, trim_whitespace=True)
     petName = serializers.CharField(source="pet_name", max_length=100, trim_whitespace=True)
-    speciesBreed = serializers.CharField(source="species_breed", max_length=200, trim_whitespace=True)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(max_length=50, trim_whitespace=True)
-    reason = serializers.CharField(max_length=2000, trim_whitespace=True)
+
+    # Optional, and unstarred on the form. None of these is worth turning a
+    # prospective patient away over — the clinician collects them on the call.
+    lastName = serializers.CharField(
+        source="last_name", max_length=100, required=False, allow_blank=True,
+        default="", trim_whitespace=True,
+    )
+    speciesBreed = serializers.CharField(
+        source="species_breed", max_length=200, required=False, allow_blank=True,
+        default="", trim_whitespace=True,
+    )
+    reason = serializers.CharField(
+        max_length=2000, required=False, allow_blank=True,
+        default="", trim_whitespace=True,
+    )
     preferredDate = serializers.DateField(
         source="preferred_date", required=False, allow_null=True,
     )
