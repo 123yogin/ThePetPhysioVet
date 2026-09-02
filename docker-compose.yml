@@ -1,0 +1,85 @@
+# Portable Docker Compose stack for Pet Physio Vet: Postgres + Django API
+# (gunicorn, behind WhiteNoise for its own static assets) + the React SPA
+# served by nginx. Deliberately vendor-neutral — this is meant to run
+# unmodified on a self-hosted Docker PaaS (Coolify/Dokploy) on a VPS, on
+# Oracle Cloud's Always Free ARM tier, or on a bare `docker compose up` on a
+# laptop; nothing here assumes a specific cloud provider.
+#
+# Configuration comes entirely from environment variables — see
+# .env.example for the full list. Copy it to `.env` and fill in real values
+# before deploying anywhere that matters.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - petphysio
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # Same-origin SPA (nginx proxies /api to this service) means CORS
+      # normally isn't exercised in prod, but it's still wired through in
+      # case the API is ever hit directly from a different origin.
+      DATABASE_URL: postgres://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      # Uploaded diagnostic reports / query attachments must survive
+      # container restarts/recreates, and must be readable by nginx
+      # (mounted read-only there) so it can serve /media directly.
+      - media_data:/app/media
+    expose:
+      - "8000"
+    networks:
+      - petphysio
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/admin/login/", "-o", "/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - media_data:/media:ro
+    networks:
+      - petphysio
+
+volumes:
+  postgres_data:
+  media_data:
+
+networks:
+  petphysio:
+    driver: bridge

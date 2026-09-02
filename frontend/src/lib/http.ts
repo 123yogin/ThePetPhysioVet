@@ -1,216 +1,166 @@
-// Minimal fetch wrapper for the DRF backend.
-// Session auth + CSRF is retained server-side, so we keep credentials:'include'
-// and attach the csrftoken cookie as X-CSRFToken on mutating requests. Sprint 6
-// (Auth Hardening) additionally carries a short-TTL JWT: when an access token is
-// present we attach `Authorization: Bearer <access>`, and on a 401 we transparently
-// refresh once (rotating refresh token) and retry the original request. Same-origin
-// in dev via the Vite proxy, so no CORS handling is needed.
+import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './tokens';
 
-import { getAccess, getRefresh, setTokens, clearTokens } from "./tokens";
+// Endpoints that must never trigger a refresh attempt on 401 — attempting to
+// refresh for any of these would either be nonsensical (login/signup are
+// unauthenticated) or loop forever (refresh itself).
+const NO_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/refresh',
+  // Password reset is the flow a locked-out user reaches for, and they often
+  // still have a stale access token in localStorage from an old session. DRF
+  // applies JWTAuthentication globally, so an expired bearer token 401s these
+  // routes *before* their AllowAny permission is consulted. Without this
+  // exemption the interceptor would then try to refresh with an equally dead
+  // refresh token, fail, clear storage and bounce the user to /login —
+  // silently killing the very reset they were in the middle of.
+  '/auth/password-reset/request',
+  '/auth/password-reset/confirm',
+];
 
-const API_BASE = "/api/v1";
-
-// Auth endpoints must never trigger a refresh/retry — refreshing off their own
-// 401 would loop. (login / refresh / signup issue or rotate tokens directly.)
-const AUTH_NO_REFRESH = ["/auth/login", "/auth/refresh", "/auth/signup"];
-
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
-  return match ? decodeURIComponent(match[2]) : null;
+function isAuthExemptPath(endpoint: string): boolean {
+  const path = endpoint.split('?')[0];
+  return NO_REFRESH_PATHS.some((exempt) => path === exempt || path.endsWith(exempt));
 }
 
-export class ApiError extends Error {
-  status: number;
-  data: unknown;
-  constructor(status: number, data: unknown, message?: string) {
-    super(message ?? `API error ${status}`);
-    this.status = status;
-    this.data = data;
+function redirectToLogin(): void {
+  if (typeof window !== 'undefined') {
+    window.location.assign('/login');
   }
 }
 
-function shouldTryRefresh(path: string): boolean {
-  return !AUTH_NO_REFRESH.some((p) => path === p || path.startsWith(p + "?"));
-}
-
-// Single-flight refresh: concurrent 401s share ONE in-flight refresh promise so
-// they don't stampede the endpoint or rotate the refresh token multiple times.
+// Module-level in-flight promise. Every 401 that needs a refresh awaits this
+// same promise instead of starting its own — so five parallel queries that
+// all 401 at once still trigger exactly one POST /auth/refresh. The promise
+// is cleared (in `finally`) once it settles, so the *next* expiry cycle
+// starts a fresh refresh rather than reusing a stale resolved/rejected one.
 let refreshPromise: Promise<string> | null = null;
 
-async function performRefresh(): Promise<string> {
-  const refresh = getRefresh();
-  if (!refresh) throw new ApiError(401, null, "No refresh token");
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  const csrf = getCookie("csrftoken");
-  if (csrf) headers["X-CSRFToken"] = csrf;
-
-  const res = await fetch(`${API_BASE}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    headers,
-    body: JSON.stringify({ refresh }),
-  });
-  if (!res.ok) throw new ApiError(res.status, null, "Token refresh failed");
-
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!data || !data.access || !data.refresh) {
-    throw new ApiError(500, data, "Malformed refresh response");
-  }
-  setTokens({ access: data.access, refresh: data.refresh });
-  return data.access as string;
-}
-
-function refreshTokens(): Promise<string> {
-  if (!refreshPromise) {
-    refreshPromise = performRefresh().finally(() => {
-      refreshPromise = null;
-    });
-  }
-  return refreshPromise;
-}
-
-// Refresh failed (or none available): behave exactly like an unauthenticated
-// session today — drop tokens and send the user to /login.
-function onRefreshFailure(): void {
-  clearTokens();
-  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-    window.location.href = "/login";
-  }
-}
-
-export interface RequestOptions {
-  method?: string;
-  body?: unknown;
-  params?: Record<string, string | undefined>;
-}
-
-export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, params } = opts;
-
-  let url = `${API_BASE}${path}`;
-  if (params) {
-    const qs = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== "") qs.set(k, v);
-    }
-    const s = qs.toString();
-    if (s) url += `?${s}`;
+async function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) {
+    return refreshPromise;
   }
 
-  const isMutation = method !== "GET" && method !== "HEAD";
+  const refresh = getRefreshToken();
+  if (!refresh) {
+    clearTokens();
+    redirectToLogin();
+    throw new Error('Session expired. Please log in again.');
+  }
 
-  const doFetch = (accessToken: string | null) => {
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (isMutation) {
-      const csrf = getCookie("csrftoken");
-      if (csrf) headers["X-CSRFToken"] = csrf;
-    }
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
-
-    return fetch(url, {
-      method,
-      credentials: "include",
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  };
-
-  let res = await doFetch(getAccess());
-
-  if (res.status === 401 && shouldTryRefresh(path) && getRefresh()) {
+  refreshPromise = (async () => {
+    let response: Response;
     try {
-      const newAccess = await refreshTokens();
-      res = await doFetch(newAccess);
-    } catch {
-      onRefreshFailure();
-      // fall through: the original 401 is surfaced as an ApiError below, exactly
-      // as an unauthenticated request is today.
+      response = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh }),
+      });
+    } catch (err) {
+      // Network failure — do not clear tokens or bounce, this may be
+      // transient. Let the caller surface the original error.
+      throw err instanceof Error ? err : new Error('Network request failed');
+    }
+
+    if (!response.ok) {
+      clearTokens();
+      redirectToLogin();
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!data.access) {
+      clearTokens();
+      redirectToLogin();
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    // /auth/refresh rotates: it returns a new refresh token and blacklists the
+    // one we just presented. Store both, or the next refresh sends a
+    // blacklisted token and the user is logged out anyway. `data.refresh` is
+    // optional so a non-rotating server still works.
+    setTokens(data.access, data.refresh);
+    return data.access as string;
+  })();
+
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
+export async function http<T = any>(
+  endpoint: string,
+  options: RequestInit & { data?: any } = {},
+  _isRetry = false
+): Promise<T> {
+  const { data, headers: customHeaders, ...customConfig } = options;
+
+  let url = endpoint;
+  if (!url.startsWith('http')) {
+    if (!url.startsWith('/api')) {
+      url = `/api/v1${url.startsWith('/') ? '' : '/'}${url}`;
     }
   }
 
-  if (res.status === 204) return undefined as T;
-
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-
-  if (!res.ok) throw new ApiError(res.status, data);
-  return data as T;
-}
-
-export interface UploadOptions {
-  method?: string; // default POST (use PATCH/PUT for replace)
-  onProgress?: (percent: number) => void;
-}
-
-// Multipart upload helper for FileField endpoints (diagnosis upload / replace).
-// Deliberately separate from api(): we must NOT set Content-Type so the browser
-// writes the multipart boundary itself, and we use XMLHttpRequest so the caller
-// can render real upload progress. CSRF + cookies + Bearer + 401 refresh are
-// handled exactly like api().
-export function apiUpload<T>(
-  path: string,
-  form: FormData,
-  opts: UploadOptions = {},
-): Promise<T> {
-  const method = opts.method ?? "POST";
-  const url = `${API_BASE}${path}`;
-
-  const send = (accessToken: string | null): Promise<{ status: number; data: unknown }> =>
-    new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open(method, url, true);
-      xhr.withCredentials = true;
-      xhr.setRequestHeader("Accept", "application/json");
-      const csrf = getCookie("csrftoken");
-      if (csrf) xhr.setRequestHeader("X-CSRFToken", csrf);
-      if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-
-      if (xhr.upload && opts.onProgress) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) opts.onProgress!(Math.round((e.loaded / e.total) * 100));
-        };
-      }
-
-      xhr.onload = () => {
-        const text = xhr.responseText;
-        let data: unknown = null;
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch {
-          data = text;
-        }
-        resolve({ status: xhr.status, data });
-      };
-      xhr.onerror = () => reject(new ApiError(0, null, "Network error during upload"));
-
-      xhr.send(form);
-    });
-
-  const finish = (status: number, data: unknown): T => {
-    if (status >= 200 && status < 300) {
-      return (status === 204 ? undefined : data) as T;
-    }
-    throw new ApiError(status, data);
+  const token = getAccessToken();
+  const headers: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(customHeaders as Record<string, string>),
   };
 
-  return (async () => {
-    let { status, data } = await send(getAccess());
-
-    if (status === 401 && shouldTryRefresh(path) && getRefresh()) {
-      try {
-        const newAccess = await refreshTokens();
-        ({ status, data } = await send(newAccess));
-      } catch {
-        onRefreshFailure();
-      }
+  let body: any = options.body;
+  if (data) {
+    if (data instanceof FormData) {
+      body = data;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(data);
     }
+  }
 
-    return finish(status, data);
-  })();
+  const config: RequestInit = {
+    method: data ? 'POST' : 'GET',
+    headers,
+    body,
+    ...customConfig,
+  };
+
+  const response = await fetch(url, config);
+
+  // On a 401 from any endpoint except login/signup/refresh, try exactly one
+  // silent refresh-and-retry before giving up. `options` (and therefore
+  // `data`) is the original caller-supplied object, untouched by the first
+  // fetch — `data` is only ever converted into `body` here, inside this
+  // function, never consumed as a stream beforehand. So re-invoking `http`
+  // with the same `endpoint`/`options` rebuilds an equivalent request from
+  // scratch (including a fresh Authorization header with the new access
+  // token), which also sidesteps the "FormData can't be replayed" problem —
+  // we never resend the already-sent FormData instance, we hand the browser
+  // the same FormData object again and let it re-serialize it for a brand
+  // new request.
+  if (response.status === 401 && !_isRetry && !isAuthExemptPath(endpoint)) {
+    try {
+      await refreshAccessToken();
+    } catch (refreshError) {
+      throw refreshError instanceof Error ? refreshError : new Error('Session expired. Please log in again.');
+    }
+    return http<T>(endpoint, options, true);
+  }
+
+  if (!response.ok) {
+    if (response.status === 204) {
+      return {} as T;
+    }
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.detail || errorData.message || response.statusText;
+    throw new Error(message || 'Network request failed');
+  }
+
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return response.json();
 }

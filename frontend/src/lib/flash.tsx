@@ -1,57 +1,45 @@
-// Tiny flash-message store so post-mutation redirects can show the same toasts
-// Django's messages framework rendered. Messages survive one navigation.
-
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-
-export type FlashLevel = "success" | "error" | "info";
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
 export interface FlashMessage {
-  id: number;
-  level: FlashLevel;
+  id: string;
+  type: 'success' | 'error' | 'info';
   text: string;
 }
 
-interface FlashContextValue {
+interface FlashContextType {
   messages: FlashMessage[];
-  push: (level: FlashLevel, text: string) => void;
-  clear: () => void;
+  addFlash: (text: string, type?: 'success' | 'error' | 'info') => void;
+  removeFlash: (id: string) => void;
 }
 
-const FlashContext = createContext<FlashContextValue | null>(null);
+const FlashContext = createContext<FlashContextType | undefined>(undefined);
 
-let nextId = 1;
-
-export function FlashProvider({ children }: { children: ReactNode }) {
+export const FlashProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<FlashMessage[]>([]);
 
-  const value = useMemo<FlashContextValue>(
-    () => ({
-      messages,
-      push: (level, text) =>
-        setMessages((prev) => [...prev, { id: nextId++, level, text }]),
-      clear: () => setMessages([]),
-    }),
-    [messages],
+  const addFlash = useCallback((text: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Math.random().toString(36).substring(2);
+    setMessages((prev) => [...prev, { id, type, text }]);
+    setTimeout(() => {
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    }, 4000);
+  }, []);
+
+  const removeFlash = useCallback((id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  return (
+    <FlashContext.Provider value={{ messages, addFlash, removeFlash }}>
+      {children}
+    </FlashContext.Provider>
   );
+};
 
-  return <FlashContext.Provider value={value}>{children}</FlashContext.Provider>;
-}
-
-export function useFlash(): FlashContextValue {
-  const ctx = useContext(FlashContext);
-  if (!ctx) throw new Error("useFlash must be used within <FlashProvider>");
-  return ctx;
-}
-
-// Maps a Django message tag/level to the vet.css alert modifier class.
-export function alertClass(level: FlashLevel): string {
-  if (level === "error") return "alert-danger";
-  if (level === "success") return "alert-success";
-  return "alert-info";
-}
+export const useFlash = () => {
+  const context = useContext(FlashContext);
+  if (!context) {
+    throw new Error('useFlash must be used within a FlashProvider');
+  }
+  return context;
+};

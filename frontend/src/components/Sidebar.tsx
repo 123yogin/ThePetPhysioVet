@@ -1,81 +1,90 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { useLogout } from "../api/auth";
-import { queryClient } from "../api/queryClient";
+import React from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { logout, fetchMe } from '../api/auth';
+import { useFlash } from '../lib/flash';
+import { Icon, IconName } from './Icon';
 
-// Mirrors the <aside class="sidebar"> block of app_base.html EXACTLY. The
-// Django golden shell has no Notifications nav item, so this shared sidebar must
-// not add one — the shell is chrome reused by every authenticated screen and
-// any extra row breaks the byte-identical parity gate on all of them. The
-// doctor reaches the in-app notification feed on the dashboard, and the SMS
-// opt-out screen (/notifications) is linked from that feed's header — neither is
-// a Django-golden shell surface, so parity is preserved.
-// Icons are the exact HTML entities from the template.
-function navClass({ isActive }: { isActive: boolean }): string {
-  return isActive ? "nav-item active" : "nav-item";
+interface NavItem {
+  to: string;
+  label: string;
+  icon: IconName;
 }
 
-export default function Sidebar({ onNavigate }: { onNavigate: () => void }) {
-  const navigate = useNavigate();
-  const logout = useLogout();
+const NAV_BY_ROLE: Record<'DOCTOR' | 'OWNER', NavItem[]> = {
+  DOCTOR: [
+    { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { to: '/appointments', label: 'Appointments', icon: 'calendar' },
+    { to: '/patients', label: 'Patients', icon: 'paw' },
+    { to: '/invoices', label: 'Invoices & Billing', icon: 'invoice' },
+    { to: '/revenue', label: 'Revenue', icon: 'chart' },
+    { to: '/queries', label: 'Messages', icon: 'chat' },
+    // Named for what it actually is. The screen looks up one owner by phone and
+    // toggles an SMS opt-out flag; there is no notification inbox behind it, and
+    // no SMS integration in the codebase at all. Calling it "Notifications"
+    // promised a feed that exists in the API but has no screen.
+    { to: '/notifications-settings', label: 'SMS Reminders', icon: 'bell' },
+    { to: '/profile', label: 'Profile', icon: 'settings' },
+  ],
+  OWNER: [
+    { to: '/owner/home', label: 'My Pets', icon: 'paw' },
+    { to: '/owner/appointments', label: 'Appointments', icon: 'calendar' },
+    { to: '/owner/billing', label: 'Invoices', icon: 'invoice' },
+  ],
+};
 
-  function onLogout() {
-    onNavigate();
-    // Sprint 6 (Auth Hardening): useLogout's mutationFn reads the refresh token
-    // (getRefresh) and POSTs {refresh} so the server BLACKLISTS it, then clears the
-    // local token store. We MUST fire that mutation FIRST and only clear the query
-    // cache + navigate from its onSuccess — never before — so the refresh token is
-    // still present in the store to be sent for server-side revocation. Order:
-    //   mutate -> server revokes refresh + clears session -> onSuccess -> clear() -> /login.
-    logout.mutate(undefined, {
-      onSuccess: () => {
-        // 204 -> drop all cached server state so the next screen re-fetches
-        // as the (now) anonymous session, then return to the login screen.
-        queryClient.clear();
-        navigate("/login");
-      },
-    });
-  }
+export const Sidebar: React.FC = () => {
+  const navigate = useNavigate();
+  const { addFlash } = useFlash();
+
+  // Shares the ['me'] cache with RequireAuth, so this is normally already
+  // warm and doesn't trigger an extra request.
+  const { data: user } = useQuery({ queryKey: ['me'], queryFn: fetchMe });
+  const userName = user
+    ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
+    : null;
+
+  // `|| []` is not redundant despite the closed union on User['role']: the
+  // value comes from the API, not the type system. An unexpected role would
+  // make this `undefined`, and `.map` below would throw -- from a component
+  // rendered OUTSIDE the ErrorBoundary, so it takes the whole shell down
+  // rather than showing an in-page recovery.
+  const navItems = (user && NAV_BY_ROLE[user.role]) || [];
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      addFlash('Logged out successfully', 'info');
+      navigate('/login');
+    } catch {
+      navigate('/login');
+    }
+  };
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">ThePetPhysioVet</div>
-      <NavLink className={navClass} to="/dashboard" end onClick={onNavigate}>
-        <span className="icon">&#128197;</span> Dashboard
-      </NavLink>
-      {/* Patients active on both /patients and /patients/add (no `end`). */}
-      <NavLink className={navClass} to="/patients" onClick={onNavigate}>
-        <span className="icon">&#128054;</span> Patients
-      </NavLink>
-      <NavLink className={navClass} to="/appointments/create" onClick={onNavigate}>
-        <span className="icon">&#10133;</span> Create appointment
-      </NavLink>
-      {/* `end` so it stays inactive on create / reschedule sub-routes. */}
-      <NavLink className={navClass} to="/appointments" end onClick={onNavigate}>
-        <span className="icon">&#128203;</span> View appointments
-      </NavLink>
-      {/* Billing + Revenue: intentional divergence from the Django golden shell.
-          Django's UI is being retired and these are React-only features (SRS §3.8),
-          so the shell is now baselined against React, not the Django template. */}
-      <NavLink className={navClass} to="/billing" end onClick={onNavigate}>
-        <span className="icon">&#8377;</span> Billing
-      </NavLink>
-      <NavLink className={navClass} to="/billing/revenue" onClick={onNavigate}>
-        <span className="icon">&#128200;</span> Revenue
-      </NavLink>
-      <div className="sidebar-spacer"></div>
-      <NavLink className={navClass} to="/profile" onClick={onNavigate}>
-        <span className="icon">&#128100;</span> Profile
-      </NavLink>
-      <a
-        className="nav-item"
-        href="/login"
-        onClick={(e) => {
-          e.preventDefault();
-          onLogout();
-        }}
-      >
-        <span className="icon">&#8594;</span> Logout
-      </a>
+    <aside className="sidebar" id="app-sidebar">
+      <div className="sidebar-brand" style={{ paddingBottom: '12px' }}>
+        <div style={{ fontSize: '18px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Icon name="paw" size={20} /> Pet Physio Vet
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--brown-600)', marginTop: '2px', fontWeight: '600', minHeight: '15px' }}>
+          {userName || ' '}
+        </div>
+      </div>
+
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {navItems.map((item) => (
+          <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Icon name={item.icon} /> {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="sidebar-spacer" />
+
+      <button onClick={handleLogout} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start', color: '#b71c1c' }}>
+        <Icon name="logout" /> Sign Out
+      </button>
     </aside>
   );
-}
+};

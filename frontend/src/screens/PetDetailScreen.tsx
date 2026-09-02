@@ -1,385 +1,668 @@
-import { useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { useTitle } from "../lib/useTitle";
-import Field from "../components/Field";
-import RichText from "../components/RichText";
-import {
-  usePetDetail,
-  useDiagnoses,
-  useUploadDiagnosis,
-} from "../api/diagnoses";
-import { useTreatmentPlans } from "../api/treatment";
-import { ApiError } from "../lib/http";
-import {
-  REPORT_TYPES,
-  dateTimeMedium,
-  humanSize,
-  planStatusBadge,
-  planStatusLabel,
-  reportTypeLabel,
-  therapyLabel,
-  validateUploadFile,
-} from "../lib/clinical";
-import { dateMedium } from "../lib/format";
-import type { TreatmentPlan } from "../lib/types";
+import React, { useEffect, useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { fetchPetDetail } from '../api/pets';
+import { fetchPetDiagnoses, createDiagnosis, deleteDiagnosis } from '../api/diagnoses';
+import { fetchPetTreatmentPlans, createTreatmentPlan, addProgressNote } from '../api/treatment';
+import { fetchInvoices } from '../api/billing';
+import { fetchPetQueries, sendQueryMessage } from '../api/queries';
+import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
+import { humanizeStatus, petEmoji, friendlyDate } from '../lib/labels';
 
-// Clinical-record hub (/patients/:id). Header + pet info, then two sections:
-// Diagnostic reports (inline upload + list) and Treatment plans (active +
-// archived). All markup reuses vet.css classes; the few extras come from
-// clinical.css.
-export default function PetDetailScreen() {
-  const { id } = useParams();
-  const petId = Number(id);
-  const queryClient = useQueryClient();
+type TabKey = 'overview' | 'diagnoses' | 'treatment' | 'billing' | 'queries';
 
-  const { data: pet, isLoading: petLoading, error: petError } = usePetDetail(petId);
-  const petNotFound = petError instanceof ApiError && petError.status === 404;
-  useTitle(`${pet?.name ?? "Patient"} — ThePetPhysioVet`);
+const VALID_TABS: TabKey[] = ['overview', 'diagnoses', 'treatment', 'billing', 'queries'];
 
-  const { data: diagnoses, isLoading: diagLoading, isError: diagError } = useDiagnoses(petId);
-  const { data: plans, isLoading: plansLoading, isError: plansError } = useTreatmentPlans(petId);
+// Sex codes are database enums, not something an owner or clinician should
+// have to decode. humanizeStatus() only title-cases underscores, which
+// doesn't help two-letter codes, so map the known ones here.
+const SEX_LABELS: Record<string, string> = {
+  M: 'Male',
+  F: 'Female',
+  MN: 'Male (Neutered)',
+  FS: 'Female (Spayed)',
+};
+function sexLabel(sex?: string | null): string {
+  if (!sex) return 'N/A';
+  return SEX_LABELS[sex] || humanizeStatus(sex);
+}
 
-  const upload = useUploadDiagnosis(petId);
+export const PetDetailScreen: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  // useParams gives `string | undefined`. Previously this was `Number(id)`,
+  // which quietly turned a missing param into NaN and requested /NaN; an empty
+  // string makes the bad case obvious instead of silently 404-ing.
+  const petId = id ?? '';
+  const { addFlash } = useFlash();
+  const [searchParams] = useSearchParams();
 
-  // Controlled upload-form state.
-  const [reportType, setReportType] = useState<string>("XRAY");
-  const [notes, setNotes] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
-  const [clientError, setClientError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
-  // key forces the RichText + file <input> to remount (reset) after a success.
-  const [formKey, setFormKey] = useState(0);
+  const tabParam = searchParams.get('tab') as TabKey | null;
+  const initialTab: TabKey = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'overview';
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
-  const serverErr =
-    upload.error instanceof ApiError ? (upload.error.data as Record<string, string[]>) : null;
-  const fieldErr = (name: string): string[] | undefined => serverErr?.[name];
-  const nonFieldErrors: string[] = serverErr?.non_field_errors ?? [];
+  // If the deep-link query param changes (e.g. navigating here again from the
+  // inbox while already on this route), follow it.
+  useEffect(() => {
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabParam]);
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    setClientError(f ? validateUploadFile(f) : null);
-  }
+  // Form states
+  const [diagNotes, setDiagNotes] = useState('');
+  const [diagFile, setDiagFile] = useState<File | null>(null);
+  const [diagType, setDiagType] = useState('XRAY');
+  const [uploadingDiagnosis, setUploadingDiagnosis] = useState(false);
+  const [deletingDiagnosisId, setDeletingDiagnosisId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  function onUpload(e: FormEvent<HTMLFormElement>) {
+  const [therapies, setTherapies] = useState('');
+  const [frequency, setFrequency] = useState('WEEKLY');
+  const [duration, setDuration] = useState('4WK');
+  const [creatingPlan, setCreatingPlan] = useState(false);
+
+  const [noteTextByPlan, setNoteTextByPlan] = useState<Record<string, string>>({});
+  const [savingNotePlanId, setSavingNotePlanId] = useState<string | null>(null);
+
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyFile, setReplyFile] = useState<File | null>(null);
+  const [sendingReply, setSendingReply] = useState(false);
+
+  const { data: pet, isLoading: petLoading, isError: petError, refetch: refetchPet } = useQuery({
+    queryKey: ['pet', petId],
+    queryFn: () => fetchPetDetail(petId),
+    enabled: !!petId,
+  });
+
+  // These four tabs' data is only fetched once the doctor actually opens the
+  // tab — previously all five queries fired on mount regardless of which tab
+  // was visible.
+  const { data: diagnoses, isError: diagnosesError, refetch: refetchDiagnoses } = useQuery({
+    queryKey: ['diagnoses', petId],
+    queryFn: () => fetchPetDiagnoses(petId),
+    enabled: !!petId && activeTab === 'diagnoses',
+  });
+
+  const { data: treatmentPlans, isError: plansError, refetch: refetchPlans } = useQuery({
+    queryKey: ['treatmentPlans', petId],
+    queryFn: () => fetchPetTreatmentPlans(petId),
+    enabled: !!petId && activeTab === 'treatment',
+  });
+
+  const { data: invoices, isError: invoicesError, refetch: refetchInvoices } = useQuery({
+    queryKey: ['invoices', petId],
+    queryFn: () => fetchInvoices(petId),
+    enabled: !!petId && activeTab === 'billing',
+  });
+
+  const { data: queryThread, isError: queriesError, refetch: refetchQueries } = useQuery({
+    queryKey: ['petQueries', petId],
+    queryFn: () => fetchPetQueries(petId),
+    enabled: !!petId && activeTab === 'queries',
+  });
+
+  const handleUploadDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
-      setClientError("Choose a file to upload.");
+    if (!diagFile) return addFlash('Please select an image/radiograph file', 'error');
+    const formData = new FormData();
+    formData.append('report_type', diagType);
+    formData.append('notes', diagNotes);
+    formData.append('file', diagFile);
+
+    setUploadingDiagnosis(true);
+    try {
+      await createDiagnosis(petId, formData);
+      addFlash('Report uploaded', 'success');
+      setDiagNotes('');
+      setDiagFile(null);
+      refetchDiagnoses();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to upload report', 'error');
+    } finally {
+      setUploadingDiagnosis(false);
+    }
+  };
+
+  const handleDeleteDiagnosis = async (diagnosisId: string) => {
+    if (confirmDeleteId !== diagnosisId) {
+      // First click just arms the confirmation — nothing destructive happens yet.
+      setConfirmDeleteId(diagnosisId);
       return;
     }
-    const pre = validateUploadFile(file);
-    if (pre) {
-      setClientError(pre);
+    setDeletingDiagnosisId(diagnosisId);
+    try {
+      await deleteDiagnosis(diagnosisId);
+      addFlash('Report deleted', 'success');
+      setConfirmDeleteId(null);
+      refetchDiagnoses();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to delete report', 'error');
+    } finally {
+      setDeletingDiagnosisId(null);
+    }
+  };
+
+  const handleCreatePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!therapies.trim()) return addFlash('Please enter at least one therapy', 'error');
+    setCreatingPlan(true);
+    try {
+      await createTreatmentPlan(petId, {
+        therapies: therapies.split(',').map((s) => s.trim()).filter(Boolean),
+        frequency,
+        duration,
+        start_date: new Date().toISOString().split('T')[0],
+      });
+      addFlash('Treatment plan created', 'success');
+      setTherapies('');
+      refetchPlans();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to create plan', 'error');
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
+
+  const handleAddNote = async (planId: string) => {
+    const text = (noteTextByPlan[planId] || '').trim();
+    if (!text) {
+      addFlash('Please type a note before saving', 'error');
       return;
     }
-    setClientError(null);
-    setProgress(0);
-    upload.mutate(
-      { file, report_type: reportType, notes, onProgress: setProgress },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["diagnoses", petId] });
-          // Reset the form for the next upload without a full reload.
-          setReportType("XRAY");
-          setNotes("");
-          setFile(null);
-          setProgress(null);
-          setFormKey((k) => k + 1);
-        },
-        onError: () => setProgress(null),
-      },
+    setSavingNotePlanId(planId);
+    try {
+      await addProgressNote(planId, { notes: text });
+      addFlash('Progress note saved', 'success');
+      setNoteTextByPlan((prev) => ({ ...prev, [planId]: '' }));
+      refetchPlans();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to add progress note', 'error');
+    } finally {
+      setSavingNotePlanId(null);
+    }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyMessage.trim() && !replyFile) {
+      addFlash('Please type a message or attach a file before sending', 'error');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('message', replyMessage);
+    if (replyFile) formData.append('file', replyFile);
+    setSendingReply(true);
+    try {
+      await sendQueryMessage(petId, formData);
+      addFlash('Reply sent to owner', 'success');
+      setReplyMessage('');
+      setReplyFile(null);
+      refetchQueries();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to send message', 'error');
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  if (petLoading) return <p>Loading pet clinical records...</p>;
+
+  if (petError) {
+    return (
+      <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Could not load this patient's record.</span>
+        <button onClick={() => refetchPet()} className="btn btn-ghost btn-sm">
+          Retry
+        </button>
+      </div>
     );
   }
 
-  const rows = diagnoses ?? [];
-  const activePlans = (plans ?? []).filter((p) => p.status !== "COMPLETED");
-  const archivedPlans = (plans ?? []).filter((p) => p.status === "COMPLETED");
+  if (!pet) return <p>Patient not found.</p>;
 
-  if (petNotFound) {
-    return (
-      <>
-        <h1 className="page-title">Patient</h1>
-        <div className="panel">
-          <p style={{ margin: 0 }}>
-            Patient not found. <Link to="/patients">Back to patients</Link>.
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+        <div>
+          <Link to="/patients" className="btn btn-ghost btn-sm" style={{ marginBottom: '8px' }}>
+            &larr; Back to Patients
+          </Link>
+          <h1 className="page-title">{petEmoji(pet.species || pet.pet_type)} {pet.name}</h1>
+          <p className="page-sub">
+            {pet.pet_type || pet.species} &bull; Owner: {pet.owner_name} ({pet.owner_phone})
           </p>
         </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <h1 className="page-title">{pet?.name ?? "Patient"}</h1>
-      <p className="page-sub">
-        Clinical record — diagnostic reports and treatment plans for this patient.
-      </p>
-
-      {/* ----- Clinical profile (SRS §3.3) ----- */}
-      <div className="panel">
-        {petLoading ? (
-          <p style={{ margin: 0 }}>Loading patient…</p>
-        ) : pet ? (
-          <>
-            {hasVal(pet.photo) ? (
-              <img
-                src={pet.photo as string}
-                alt={`${pet.name} photo`}
-                style={{ maxWidth: "100%", borderRadius: "var(--radius)", marginBottom: 12 }}
-              />
-            ) : null}
-            <MetaRow label="Name" value={pet.name} />
-            <MetaRow label="Species" value={pet.species} />
-            <MetaRow label="Breed" value={pet.breed} />
-            <MetaRow label="Age" value={pet.age} />
-            <MetaRow label="Sex" value={pet.sex} />
-            {hasVal(pet.weight) ? (
-              <p className="meta-row"><strong>Weight:</strong> {pet.weight} kg</p>
-            ) : null}
-            <MetaRow label="Owner" value={pet.owner_name} />
-            <MetaRow label="Phone" value={pet.owner_phone} />
-            <MetaRow label="Email" value={pet.owner_email} />
-            <MetaRow label="Complaint" value={pet.complaint} />
-            {hasVal(pet.complaint_started) ? (
-              <p className="meta-row">
-                <strong>Complaint started:</strong> {dateMedium(pet.complaint_started as string)}
-              </p>
-            ) : null}
-            <MetaRow label="Referred by" value={pet.referred_by} />
-            <MetaRow label="Notes" value={pet.notes} />
-            {/* US-PET-03: medical history — pre-wrap preserves line breaks. */}
-            <p className="meta-row" style={{ whiteSpace: "pre-wrap" }}>
-              <strong>Medical history:</strong>{" "}
-              {hasVal(pet.medical_history) ? pet.medical_history : "No medical history recorded"}
-            </p>
-          </>
-        ) : (
-          <p style={{ margin: 0 }}>Could not load patient.</p>
-        )}
-      </div>
-
-      {/* ----- Billing (Sprint 4 nav entry — no golden sidebar item exists) ----- */}
-      <div className="panel">
-        <div className="section-head">
-          <h2>Billing &amp; invoices</h2>
-          <Link className="btn btn-sm btn-primary" to={`/billing/invoices/new?pet=${petId}`}>
-            &#10133; New invoice
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Link to={`/appointments/new?pet=${pet.id}`} className="btn btn-primary btn-sm">
+            + Schedule Visit
+          </Link>
+          <Link to={`/invoices/new?pet=${pet.id}`} className="btn btn-secondary btn-sm">
+            + Create Invoice
           </Link>
         </div>
-        <p className="meta-row" style={{ margin: 0 }}>
-          <Link to={`/billing?pet=${petId}`}>Invoices &amp; payments for this patient</Link>
-          {" · "}
-          <Link to="/billing/revenue">Revenue dashboard</Link>
-        </p>
       </div>
 
-      {/* ----- Owner↔Doctor queries (Sprint 7 B — SRS §3.9) ----- */}
-      <div className="panel">
-        <div className="section-head">
-          <h2>Owner queries</h2>
-          <Link className="btn btn-sm btn-primary" to={`/queries/${petId}`}>
-            Open query thread
-          </Link>
-        </div>
-        <p className="meta-row" style={{ margin: 0 }}>
-          <Link to={`/queries/${petId}`}>Messages between this owner and you</Link>{" "}
-          (append-only history).
-        </p>
+      {/* Navigation Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid var(--glass-border)', paddingBottom: '12px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`btn ${activeTab === 'overview' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => setActiveTab('diagnoses')}
+          className={`btn ${activeTab === 'diagnoses' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Scans & Reports{diagnosesError ? ' (!)' : diagnoses ? ` (${diagnoses.length})` : ''}
+        </button>
+        <button
+          onClick={() => setActiveTab('treatment')}
+          className={`btn ${activeTab === 'treatment' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Rehab Plans{plansError ? ' (!)' : treatmentPlans ? ` (${treatmentPlans.length})` : ''}
+        </button>
+        <button
+          onClick={() => setActiveTab('billing')}
+          className={`btn ${activeTab === 'billing' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Invoices{invoicesError ? ' (!)' : invoices ? ` (${invoices.length})` : ''}
+        </button>
+        <button
+          onClick={() => setActiveTab('queries')}
+          className={`btn ${activeTab === 'queries' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Messages
+        </button>
       </div>
 
-      {/* ----- Diagnostic reports ----- */}
-      <div className="panel">
-        <div className="section-head">
-          <h2>Diagnostic reports</h2>
-        </div>
-
-        {/* Upload form */}
-        <form className="form-grid" onSubmit={onUpload} key={`up-${formKey}`}>
-          {nonFieldErrors.length > 0 ? (
-            <div className="alert alert-danger full">{nonFieldErrors.join(" ")}</div>
-          ) : null}
-          <Field label="Report type" htmlFor="id_report_type" errors={fieldErr("report_type")}>
-            <select
-              id="id_report_type"
-              name="report_type"
-              className="input-glass"
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-            >
-              {REPORT_TYPES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="File" htmlFor="id_file" errors={fieldErr("file")}>
-            <input
-              id="id_file"
-              name="file"
-              type="file"
-              className="input-glass"
-              accept=".jpg,.jpeg,.png,.pdf,.dcm,.dicom"
-              onChange={onFileChange}
-            />
-          </Field>
-          <Field label="Notes" htmlFor="id_diag_notes" extra="full">
-            <RichText
-              id="id_diag_notes"
-              value={notes}
-              onChange={setNotes}
-              ariaLabel="Diagnosis notes"
-              placeholder="Findings / notes (optional)…"
-            />
-          </Field>
-          {clientError ? (
-            <div className="alert alert-danger full">{clientError}</div>
-          ) : null}
-          {progress !== null ? (
-            <div className="upload-progress full" aria-hidden="true">
-              <span style={{ width: `${progress}%` }} />
-            </div>
-          ) : null}
-          <div className="form-actions full">
-            <button type="submit" className="btn btn-primary" disabled={upload.isPending}>
-              {upload.isPending ? "Uploading…" : "Upload report"}
-            </button>
+      {/* Overview Tab */}
+      {activeTab === 'overview' && (
+        <div className="glass-card">
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '700' }}>Clinical Details</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div><strong>Breed:</strong> {pet.breed || 'N/A'}</div>
+            <div><strong>Age / Sex:</strong> {pet.age || 'N/A'} / {sexLabel(pet.sex)}</div>
+            <div><strong>Weight:</strong> {pet.weight ? `${pet.weight} kg` : 'N/A'}</div>
+            <div><strong>Referred By:</strong> {pet.referred_by || 'Self-referred'}</div>
           </div>
-        </form>
 
-        {/* List */}
-        <div className="table-wrap" style={{ marginTop: 16 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>File</th>
-                <th>Size</th>
-                <th>Uploaded</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {diagLoading ? (
-                <tr><td colSpan={5}>Loading reports…</td></tr>
-              ) : diagError ? (
-                <tr><td colSpan={5}>Could not load reports. Please try again.</td></tr>
-              ) : rows.length > 0 ? (
-                rows.map((d) => (
-                  <tr key={d.id}>
-                    <td><span className="chip">{d.report_type_display || reportTypeLabel(d.report_type)}</span></td>
-                    <td>{d.original_filename}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{humanSize(d.size)}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{dateTimeMedium(d.uploaded_at)}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      <Link className="btn btn-sm btn-ghost" to={`/patients/${petId}/diagnoses/${d.id}`}>
-                        View
-                      </Link>
-                    </td>
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '15px' }}>Chief Complaint</h4>
+            <p style={{ margin: 0, color: 'var(--brown-700)', lineHeight: '1.6' }}>
+              {pet.complaint || 'No chief complaint recorded yet.'}
+            </p>
+          </div>
+
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '15px' }}>Medical History</h4>
+            <p style={{ margin: 0, color: 'var(--brown-700)', lineHeight: '1.6' }}>
+              {pet.medical_history || 'No detailed medical history recorded yet.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Scans & Reports Tab */}
+      {activeTab === 'diagnoses' && (
+        <div>
+          <div className="glass-card" style={{ marginBottom: '24px' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Upload Scan or Report</h3>
+            <form onSubmit={handleUploadDiagnosis}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="field">
+                  <label>Report Type</label>
+                  <select value={diagType} onChange={(e) => setDiagType(e.target.value)} className="input-glass">
+                    <option value="XRAY">X-Ray Radiograph</option>
+                    <option value="MRI">MRI Scan</option>
+                    <option value="CT">CT Scan</option>
+                    <option value="ULTRASOUND">Ultrasound</option>
+                    <option value="OTHER">Other Report</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>File Upload (Image / DICOM / PDF)</label>
+                  <input
+                    type="file"
+                    className="input-glass"
+                    onChange={(e) => setDiagFile(e.target.files?.[0] || null)}
+                    disabled={uploadingDiagnosis}
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label>Clinical Notes</label>
+                <textarea
+                  className="input-glass"
+                  rows={3}
+                  value={diagNotes}
+                  onChange={(e) => setDiagNotes(e.target.value)}
+                  placeholder="Radiograph observations, joint space notes..."
+                  disabled={uploadingDiagnosis}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={uploadingDiagnosis}>
+                {uploadingDiagnosis ? 'Uploading…' : 'Upload Report'}
+              </button>
+            </form>
+          </div>
+
+          <div className="glass-card">
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Uploaded Scans & Reports</h3>
+            {diagnosesError ? (
+              <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Could not load scans & reports.</span>
+                <button onClick={() => refetchDiagnoses()} className="btn btn-ghost btn-sm">
+                  Retry
+                </button>
+              </div>
+            ) : !diagnoses || diagnoses.length === 0 ? (
+              <p style={{ color: 'var(--brown-500)' }}>No scans or reports uploaded yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {diagnoses.map((d) => (
+                  <div key={d.id} style={{ padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,0.8)', border: '1px solid var(--glass-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span className="badge badge-confirmed">{d.report_type_display || d.report_type}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--brown-500)' }}>{d.uploaded_at?.substring(0, 10) || '—'}</span>
+                    </div>
+                    <div>{d.notes || 'No notes'}</div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {d.file_url && (
+                        <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <Icon name="paperclip" size={13} /> View File ({d.original_filename})
+                        </a>
+                      )}
+                      {confirmDeleteId === d.id ? (
+                        <>
+                          <span style={{ fontSize: '13px', color: '#b71c1c', fontWeight: 600 }}>Delete this report permanently?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDiagnosis(d.id)}
+                            className="btn btn-ghost btn-sm"
+                            disabled={deletingDiagnosisId === d.id}
+                            style={{ color: '#b71c1c', borderColor: 'rgba(198, 40, 40, 0.25)' }}
+                          >
+                            {deletingDiagnosisId === d.id ? 'Deleting…' : 'Yes, Delete'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="btn btn-ghost btn-sm"
+                            disabled={deletingDiagnosisId === d.id}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDiagnosis(d.id)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: '#b71c1c' }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Treatment Tab */}
+      {activeTab === 'treatment' && (
+        <div>
+          <div className="glass-card" style={{ marginBottom: '24px' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Create New Physical Therapy Plan</h3>
+            <form onSubmit={handleCreatePlan}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="field">
+                  <label>Therapies (separate multiple with a comma)</label>
+                  <input
+                    className="input-glass"
+                    value={therapies}
+                    onChange={(e) => setTherapies(e.target.value)}
+                    placeholder="e.g. Laser, Stretching, Hydrotherapy"
+                    disabled={creatingPlan}
+                  />
+                </div>
+                <div className="field">
+                  <label>Frequency</label>
+                  <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="input-glass">
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="TWICE_WEEKLY">Twice Weekly</option>
+                    <option value="BIWEEKLY">Bi-weekly</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Duration</label>
+                  <select value={duration} onChange={(e) => setDuration(e.target.value)} className="input-glass">
+                    <option value="2WK">2 Weeks</option>
+                    <option value="4WK">4 Weeks</option>
+                    <option value="8WK">8 Weeks</option>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={creatingPlan}>
+                {creatingPlan ? 'Saving…' : 'Save Treatment Plan'}
+              </button>
+            </form>
+          </div>
+
+          {plansError && (
+            <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Could not load treatment plans.</span>
+              <button onClick={() => refetchPlans()} className="btn btn-ghost btn-sm">
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!plansError && (!treatmentPlans || treatmentPlans.length === 0) && (
+            <p style={{ color: 'var(--brown-500)' }}>No treatment plans created yet.</p>
+          )}
+
+          {treatmentPlans?.map((plan) => (
+            <div key={plan.id} className="glass-card" style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '16px' }}>Plan started {friendlyDate(plan.start_date)}</h4>
+                <span className={`badge badge-${(plan.status || 'unknown').toLowerCase()}`}>{humanizeStatus(plan.status) || 'Unknown'}</span>
+              </div>
+              <p><strong>Therapies:</strong> {plan.therapies?.join(', ') || '—'}</p>
+              <p><strong>Frequency & Duration:</strong> {humanizeStatus(plan.frequency) || '—'} &bull; {humanizeStatus(plan.duration) || '—'}</p>
+
+              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
+                <h5 style={{ margin: '0 0 12px 0' }}>Session Progress Notes</h5>
+                {plan.progress_notes?.map((n) => (
+                  <div key={n.id} style={{ padding: '10px', background: 'rgba(255,255,255,0.7)', borderRadius: '8px', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold' }}>Session {n.session_no}</div>
+                    <div>{n.notes}</div>
+                  </div>
+                ))}
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                  <input
+                    type="text"
+                    className="input-glass"
+                    placeholder="Add new session note..."
+                    value={noteTextByPlan[plan.id] || ''}
+                    onChange={(e) => setNoteTextByPlan((prev) => ({ ...prev, [plan.id]: e.target.value }))}
+                    disabled={savingNotePlanId === plan.id}
+                  />
+                  <button
+                    onClick={() => handleAddNote(plan.id)}
+                    className="btn btn-secondary"
+                    disabled={savingNotePlanId === plan.id}
+                  >
+                    {savingNotePlanId === plan.id ? 'Saving…' : 'Add Note'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Billing Tab */}
+      {activeTab === 'billing' && (
+        <div className="glass-card">
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Patient Invoices</h3>
+          {invoicesError ? (
+            <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Could not load invoices.</span>
+              <button onClick={() => refetchInvoices()} className="btn btn-ghost btn-sm">
+                Retry
+              </button>
+            </div>
+          ) : !invoices || invoices.length === 0 ? (
+            <p style={{ color: 'var(--brown-500)' }}>No invoices created yet.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice No</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                ))
-              ) : (
-                <tr><td colSpan={5}>No diagnostic reports yet. Upload one above.</td></tr>
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <tr key={inv.id}>
+                      <td>{inv.invoice_no}</td>
+                      <td>{inv.created_at?.substring(0, 10) || '—'}</td>
+                      <td>₹{inv.total ?? '—'}</td>
+                      <td><span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>{humanizeStatus(inv.payment_status)}</span></td>
+                      <td>
+                        <Link to={`/invoices/${inv.id}`} className="btn btn-secondary btn-sm">
+                          View Invoice
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* ----- Treatment plans ----- */}
-      <div className="panel">
-        <div className="section-head">
-          <h2>Treatment plans</h2>
-          <Link className="btn btn-sm btn-primary" to={`/patients/${petId}/plans/new`}>
-            &#10133; New plan
-          </Link>
-        </div>
-
-        {plansLoading ? (
-          <p style={{ margin: 0 }}>Loading treatment plans…</p>
-        ) : plansError ? (
-          <p style={{ margin: 0 }}>Could not load treatment plans. Please try again.</p>
-        ) : (plans ?? []).length === 0 ? (
-          <p style={{ margin: 0 }}>No treatment plans yet. Create the first one.</p>
-        ) : (
-          <>
-            <PlanTable petId={petId} title="Active" plans={activePlans} emptyText="No active plans." />
-            {archivedPlans.length > 0 ? (
-              <PlanTable petId={petId} title="Archived / Completed" plans={archivedPlans} emptyText="" />
-            ) : null}
-          </>
-        )}
-      </div>
-    </>
-  );
-}
-
-// True only for a meaningful, printable value. Guards against the literal
-// strings "null"/"None"/"undefined" ever reaching the DOM, and treats
-// null/undefined/blank as empty (weight & complaint_started are null-able).
-function hasVal(v: unknown): v is string {
-  if (v == null) return false;
-  const s = String(v).trim();
-  return s !== "" && s !== "null" && s !== "None" && s !== "undefined";
-}
-
-// One §3.3 profile field as a .meta-row; renders nothing when the value is empty.
-function MetaRow({ label, value }: { label: string; value?: string | null }) {
-  if (!hasVal(value)) return null;
-  return (
-    <p className="meta-row">
-      <strong>{label}:</strong> {value}
-    </p>
-  );
-}
-
-function PlanTable({
-  petId,
-  title,
-  plans,
-  emptyText,
-}: {
-  petId: number;
-  title: string;
-  plans: TreatmentPlan[];
-  emptyText: string;
-}) {
-  return (
-    <div style={{ marginBottom: title === "Active" ? 18 : 0 }}>
-      <h3 style={{ margin: "0 0 10px", fontSize: "1rem" }}>{title}</h3>
-      {plans.length === 0 ? (
-        emptyText ? <p className="meta-row">{emptyText}</p> : null
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Therapies</th>
-                <th>Start</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {plans.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.therapies.map(therapyLabel).join(", ")}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{dateMedium(p.start_date)}</td>
-                  <td>
-                    <span className={`badge ${planStatusBadge(p.status)}`}>
-                      {planStatusLabel(p.status)}
-                    </span>
-                  </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <Link className="btn btn-sm btn-ghost" to={`/patients/${petId}/plans/${p.id}`}>
-                      Open
-                    </Link>
-                  </td>
-                </tr>
+      {/* Queries Tab */}
+      {activeTab === 'queries' && (
+        <div className="glass-card">
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Messages with {pet?.owner_name || 'the owner'}</h3>
+          {queriesError && (
+            <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Could not load the query thread.</span>
+              <button onClick={() => refetchQueries()} className="btn btn-ghost btn-sm">
+                Retry
+              </button>
+            </div>
+          )}
+          {queriesError ? null : !queryThread || !queryThread.messages || queryThread.messages.length === 0 ? (
+            <p style={{ color: 'var(--brown-500)' }}>No messages from pet owner yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+              {queryThread.messages.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    alignSelf: m.sender_role === 'DOCTOR' ? 'flex-end' : 'flex-start',
+                    maxWidth: '80%',
+                    padding: '14px 18px',
+                    borderRadius: '16px',
+                    background: m.sender_role === 'DOCTOR' ? 'var(--brown-900)' : 'rgba(255,255,255,0.9)',
+                    color: m.sender_role === 'DOCTOR' ? '#ffffff' : 'var(--brown-900)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>
+                    {m.sender_name} &bull;{' '}
+                    {m.sent_at
+                      ? new Date(m.sent_at).toLocaleString([], {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—'}
+                  </div>
+                  {m.message && <div>{m.message}</div>}
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {m.attachments.map((att) => (
+                        <a
+                          key={att.id}
+                          href={att.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            color: m.sender_role === 'DOCTOR' ? '#fff' : 'var(--primary)',
+                            fontSize: '12px',
+                            textDecoration: 'underline',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Icon name="paperclip" size={12} /> {att.original_filename}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+
+          <form onSubmit={handleSendReply} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="input-glass"
+                placeholder="Write a reply..."
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+                style={{ flex: 1, minWidth: '200px' }}
+                disabled={sendingReply}
+              />
+              <input
+                type="file"
+                className="input-glass"
+                onChange={(e) => setReplyFile(e.target.files?.[0] || null)}
+                disabled={sendingReply}
+                style={{ maxWidth: '220px' }}
+                aria-label="Attach a file to your reply"
+              />
+              <button type="submit" className="btn btn-primary" disabled={sendingReply}>
+                {sendingReply ? 'Sending…' : 'Send Reply'}
+              </button>
+            </div>
+            {replyFile && (
+              <div style={{ fontSize: '12px', color: 'var(--brown-600)' }}>
+                Attached: {replyFile.name}{' '}
+                <button
+                  type="button"
+                  onClick={() => setReplyFile(null)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: '2px 8px' }}
+                  disabled={sendingReply}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </form>
         </div>
       )}
     </div>
   );
-}
+};

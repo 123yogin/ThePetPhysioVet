@@ -1,88 +1,265 @@
-import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import AuthShell from "../components/AuthShell";
-import Field from "../components/Field";
-import { useTitle } from "../lib/useTitle";
-import { useLogin } from "../api/auth";
-import { ApiError } from "../lib/http";
-import type { Me } from "../lib/types";
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { login, signup } from '../api/auth';
+import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
 
-// Mirrors login.html: field-per-input form (DoctorLoginForm order:
-// username "Email or username", password), full-width Sign in button,
-// non_field_errors in .alert.alert-danger, .auth-footer link to /signup.
-export default function LoginScreen() {
-  useTitle("Sign in — ThePetPhysioVet");
+export const LoginScreen: React.FC = () => {
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Registration form fields
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const login = useLogin();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const { addFlash } = useFlash();
 
-  // Invalid credentials -> 401 {non_field_errors:[...]} from DoctorLoginForm
-  // (auth-hardening changed this from 400 -> 401). http.ts excludes /auth/login
-  // from the refresh-on-401 interceptor, so this 401 surfaces here as a normal
-  // ApiError (no token refresh, no redirect/loop) and renders inline as before.
-  const errData = login.error instanceof ApiError ? (login.error.data as Record<string, string[]>) : null;
-  const nonFieldErrors: string[] = errData?.non_field_errors ?? [];
-
-  function onSubmit(e: FormEvent) {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    login.mutate(
-      { username, password },
-      {
-        onSuccess: (me: Me) => {
-          queryClient.setQueryData(["me"], me);
-          navigate(me.role === "OWNER" ? "/owner" : "/dashboard");
-        },
-      },
-    );
-  }
+    setLoginError(null);
+    setLoading(true);
+    try {
+      const user = await login(username, password);
+      addFlash(`Welcome back, ${user.first_name || user.username}!`, 'success');
+      if (user.role === 'OWNER') {
+        navigate('/owner/home');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (err: any) {
+      setLoginError(err.message || 'Login failed. Please check your username and password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegisterOwner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegisterError(null);
+    if (!firstName || !email) {
+      setRegisterError('Please enter your first name and email address.');
+      return;
+    }
+    if (!regPassword) {
+      setRegisterError('Please choose a password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const user = await signup({
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        username: regUsername || email.split('@')[0],
+        password: regPassword,
+        role: 'OWNER',
+      });
+      addFlash(`Welcome to Pet Physio, ${user.first_name}! Your Owner Profile is active.`, 'success');
+      navigate('/owner/home');
+    } catch (err: any) {
+      setRegisterError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <AuthShell>
-      <form method="post" noValidate onSubmit={onSubmit}>
-        {nonFieldErrors.length > 0 ? (
-          <div className="alert alert-danger">{nonFieldErrors.join(" ")}</div>
-        ) : null}
-        <Field label="Email or username" htmlFor="id_username">
-          <input
-            type="text"
-            name="username"
-            autoComplete="username"
-            className="input-glass"
-            maxLength={150}
-            required
-            id="id_username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        </Field>
-        <Field label="Password" htmlFor="id_password">
-          <input
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            className="input-glass"
-            required
-            id="id_password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </Field>
-        <button
-          type="submit"
-          className="btn btn-primary"
-          style={{ width: "100%", marginTop: 8 }}
-          disabled={login.isPending}
-        >
-          Sign in
-        </button>
-      </form>
-      <p className="auth-footer">
-        New clinic? <Link to="/signup">Create account</Link>
-        {" · "}Pet owner? <Link to="/activate">Activate account</Link>
-      </p>
-    </AuthShell>
+    <div className="auth-shell">
+      <div className="auth-card" style={{ maxWidth: '460px' }}>
+        <h1 className="auth-brand" style={{ fontSize: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <Icon name="paw" size={24} /> The Pet Physio Vet
+        </h1>
+
+        {/* Mode Selector Tabs */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.6)', padding: '4px', borderRadius: '12px' }}>
+          <button
+            type="button"
+            className={`btn ${!isRegisterMode ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ flex: 1, padding: '8px 12px', fontSize: '13px' }}
+            onClick={() => setIsRegisterMode(false)}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={`btn ${isRegisterMode ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ flex: 1, padding: '8px 12px', fontSize: '13px' }}
+            onClick={() => setIsRegisterMode(true)}
+          >
+            New Owner Registration
+          </button>
+        </div>
+
+        {!isRegisterMode ? (
+          <form onSubmit={handleLogin}>
+            {loginError && (
+              <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <div className="field">
+              <label htmlFor="username">Username or Email</label>
+              <input
+                id="username"
+                type="text"
+                className="input-glass"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your username"
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                className="input-glass"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '4px' }}>
+              <Link
+                to="/forgot-password"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textDecoration: 'underline',
+                  display: 'inline-block',
+                  padding: '12px 4px',
+                  minHeight: '44px',
+                  boxSizing: 'border-box',
+                  lineHeight: '20px',
+                }}
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '12px', padding: '12px' }}
+              disabled={loading}
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleRegisterOwner}>
+            {registerError && (
+              <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
+                <span>{registerError}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="field">
+                <label htmlFor="firstName">First Name *</label>
+                <input
+                  id="firstName"
+                  type="text"
+                  className="input-glass"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. Ananya"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="lastName">Last Name</label>
+                <input
+                  id="lastName"
+                  type="text"
+                  className="input-glass"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Rao"
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="email">Email Address *</label>
+              <input
+                id="email"
+                type="email"
+                className="input-glass"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ananya@example.com"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="phone">Phone Number</label>
+              <input
+                id="phone"
+                type="tel"
+                className="input-glass"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 98765 12345"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="regUsername">Username</label>
+              <input
+                id="regUsername"
+                type="text"
+                className="input-glass"
+                value={regUsername}
+                onChange={(e) => setRegUsername(e.target.value)}
+                placeholder="Leave blank to use your email"
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="regPassword">Password *</label>
+              <input
+                id="regPassword"
+                type="password"
+                className="input-glass"
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                placeholder="Create password"
+                autoComplete="new-password"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '12px', padding: '12px' }}
+              disabled={loading}
+            >
+              {loading ? 'Creating Profile...' : 'Register Owner Profile'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
   );
-}
+};

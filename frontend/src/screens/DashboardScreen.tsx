@@ -1,174 +1,209 @@
-import { Link } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { useTitle } from "../lib/useTitle";
-import { useDashboard, useComplete } from "../api/appointments";
-import { formatCurrency } from "../lib/money";
-import Badge from "../components/Badge";
-import NotificationFeed from "../components/NotificationFeed";
-import type { CSSProperties, FormEvent } from "react";
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { fetchDashboardStats, completeAppointment, confirmAppointment } from '../api/appointments';
+import { useFlash } from '../lib/flash';
+import { Icon } from '../components/Icon';
+import { humanizeStatus } from '../lib/labels';
 
-// Label styling copied verbatim from the .completed-bar label below (load-bearing
-// inline styles — no new vet.css classes are introduced).
-const tileLabelStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: "var(--brown-500)",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-};
+export const DashboardScreen: React.FC = () => {
+  const { addFlash } = useFlash();
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-// Value styling mirrors `.completed-bar .big` (which is scoped to the completed
-// bar). Reused inline here so the stat value renders identically inside a
-// .visit-card without adding a bespoke rule.
-const tileValueStyle: CSSProperties = {
-  fontSize: "1.75rem",
-  fontWeight: 800,
-  color: "var(--brown-900)",
-  marginTop: 6,
-};
+  const {
+    data: stats,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['dashboardStats'],
+    queryFn: fetchDashboardStats,
+  });
 
-// Mirrors dashboard.html. Cards for today's pending/rescheduled visits, then
-// the .completed-bar footer. Inline styles are copied verbatim (load-bearing).
-export default function DashboardScreen() {
-  useTitle("Dashboard — ThePetPhysioVet");
-  const queryClient = useQueryClient();
-  const { data, isLoading, isError } = useDashboard();
-  const complete = useComplete();
+  const handleComplete = async (apptId: string) => {
+    try {
+      await completeAppointment(apptId);
+      addFlash('Appointment marked as Completed', 'success');
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to complete appointment', 'error');
+    }
+  };
 
-  const appts = data?.today_appointments ?? [];
-
-  // US-DASH-02 — four stat tiles wired to REAL data from useDashboard(). Values
-  // are null until `data` arrives; while loading we show a non-breaking "…" so
-  // the tile layout never shifts. On error we render a graceful message instead
-  // of any number (never stale/fake figures).
-  const statTiles = [
-    { label: "Active treatments", value: data ? String(data.active_treatments) : null },
-    { label: "Pending payments", value: data ? formatCurrency(data.pending_payments) : null },
-    { label: "Today’s revenue", value: data ? formatCurrency(data.today_revenue) : null },
-    { label: "Monthly revenue", value: data ? formatCurrency(data.monthly_revenue) : null },
-  ];
-
-  function onComplete(e: FormEvent, id: number) {
-    e.preventDefault();
-    complete.mutate(id, {
-      onSuccess: () => {
-        // Completing a Pending visit drops it from today's list and bumps the
-        // completed count; the appointments list also changes.
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-        queryClient.invalidateQueries({ queryKey: ["appointments"] });
-      },
-    });
-  }
+  const handleConfirm = async (apptId: string) => {
+    setConfirmingId(apptId);
+    try {
+      await confirmAppointment(apptId);
+      addFlash('Appointment confirmed', 'success');
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to confirm appointment', 'error');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   return (
-    <>
-      <h1 className="page-title">Today&#8217;s visits</h1>
-      <p className="page-sub">
-        {data?.today_display} · Pending &amp; rescheduled slots for today only.
-      </p>
-
-      {/* US-DASH-02 — real-data stat tiles (SRS §3.2). Reuses .grid-cards +
-          .visit-card + .big, with the completed-bar's label styling. */}
-      <div className="grid-cards" style={{ marginBottom: 20 }}>
-        {isError ? (
-          <p className="panel">Could not load dashboard stats. Please try again.</p>
-        ) : (
-          statTiles.map((t) => (
-            <article className="visit-card" style={{ margin: 0 }} key={t.label}>
-              <div style={tileLabelStyle}>{t.label}</div>
-              <div className="big" style={tileValueStyle} aria-busy={isLoading || undefined}>
-                {isLoading || !data ? "…" : t.value}
-              </div>
-            </article>
-          ))
-        )}
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 className="page-title">Clinic Dashboard</h1>
+          <p className="page-sub">
+            {stats?.today_display || 'Today\'s physical therapy schedule & overview'}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Link to="/appointments/new" className="btn btn-primary">
+            + New Appointment
+          </Link>
+          <Link to="/patients/new" className="btn btn-secondary">
+            + New Patient
+          </Link>
+        </div>
       </div>
 
-      <div className="grid-cards">
+      {isError && (
+        <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Could not load dashboard stats. Please try again.</span>
+          <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
+            <Icon name="refresh" /> Retry
+          </button>
+        </div>
+      )}
+
+      {/* Overview Stat Tiles */}
+      <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <div className="glass-card">
+          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--brown-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Today's Scheduled Visits
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
+            {isLoading ? '...' : (stats?.today_appointments?.length ?? 0)}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--brown-700)', marginTop: '4px' }}>
+            Physio & rehab appointments scheduled
+          </div>
+        </div>
+
+        <div className="glass-card">
+          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--brown-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Completed Visits
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
+            {isLoading ? '...' : (stats?.completed_count ?? 0)}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--brown-700)', marginTop: '4px' }}>
+            Out of {stats?.today_appointments?.length ?? 0} scheduled today
+          </div>
+        </div>
+
+        <div className="glass-card">
+          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--brown-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Active Treatment Plans
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
+            {isLoading ? '...' : (stats?.active_treatments ?? 0)}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--brown-700)', marginTop: '4px' }}>
+            Ongoing rehab & physical therapy regimens
+          </div>
+        </div>
+
+        <div className="glass-card">
+          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--brown-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Pending Payments
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
+            {isLoading ? '...' : `${stats?.currency || '₹'}${stats?.pending_payments ?? 0}`}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--brown-700)', marginTop: '4px' }}>
+            Outstanding across unpaid & partially paid invoices
+          </div>
+        </div>
+      </div>
+
+      {/* Today's Appointments Section */}
+      <div className="glass-card" style={{ marginTop: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--brown-900)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="calendar" /> Today's Visits ({stats?.today_appointments?.length ?? 0})
+          </h2>
+          <Link to="/appointments" className="btn btn-ghost btn-sm">
+            View All Schedule &rarr;
+          </Link>
+        </div>
+
         {isLoading ? (
-          <p className="panel">Loading today&#8217;s visits…</p>
-        ) : isError ? (
-          <p className="panel">Could not load today&#8217;s visits. Please try again.</p>
-        ) : appts.length > 0 ? (
-          appts.map((a) => (
-            <article className="visit-card" style={{ margin: 0 }} key={a.id}>
-              <h4>
-                {a.pet_name} <Badge status={a.status} />
-              </h4>
-              <p className="meta-row">
-                <strong>Owner</strong> {a.owner_name}
-              </p>
-              <p className="meta-row">
-                <strong>Time</strong> {a.time}
-              </p>
-              <p className="meta-row">
-                <strong>Pet type</strong> {a.pet_type}
-              </p>
-              <p className="meta-row">
-                <strong>Visit</strong> {a.visit_type_display}
-              </p>
+          <p style={{ color: 'var(--brown-500)' }}>Loading today's schedule...</p>
+        ) : !stats?.today_appointments || stats.today_appointments.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--brown-500)' }}>
+            No appointments scheduled for today.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {stats.today_appointments.map((appt) => (
               <div
+                key={appt.id}
                 style={{
-                  marginTop: 12,
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  padding: '16px 20px',
+                  borderRadius: '12px',
+                  background: 'rgba(255, 255, 255, 0.7)',
+                  border: '1px solid var(--glass-border)',
                 }}
               >
-                <form className="inline-form" onSubmit={(e) => onComplete(e, a.id)}>
-                  <input type="hidden" name="next" value="dashboard" />
-                  <button
-                    type="submit"
-                    className="btn btn-sm btn-primary"
-                    disabled={complete.isPending && complete.variables === a.id}
-                  >
-                    Mark completed
-                  </button>
-                </form>
-                <Link className="btn btn-sm btn-ghost" to={`/appointments/${a.id}/share`}>
-                  Share
-                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--brown-900)', minWidth: '80px' }}>
+                    {appt.time?.substring(0, 5) || '--:--'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brown-900)' }}>
+                      {appt.pet_name} <span style={{ fontSize: '13px', fontWeight: 'normal', color: 'var(--brown-500)' }}>({appt.pet_type})</span>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--brown-700)' }}>
+                      Owner: {appt.owner_name} &bull; Type: {appt.visit_type_display || appt.visit_type}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
+                    {humanizeStatus(appt.status)}
+                  </span>
+
+                  {appt.status === 'Pending' && (
+                    <button
+                      disabled={confirmingId === appt.id}
+                      onClick={() => handleConfirm(appt.id)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ background: 'rgba(46, 125, 50, 0.1)', color: '#1b5e20', borderColor: 'rgba(46, 125, 50, 0.25)' }}
+                    >
+                      <Icon name="check" /> {confirmingId === appt.id ? 'Confirming…' : 'Confirm'}
+                    </button>
+                  )}
+
+                  {appt.status !== 'Completed' && (
+                    <button
+                      onClick={() => handleComplete(appt.id)}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <Icon name="check" /> Complete
+                    </button>
+                  )}
+
+                  <Link to={`/appointments/${appt.id}/reschedule`} className="btn btn-ghost btn-sm">
+                    Reschedule
+                  </Link>
+                </div>
               </div>
-            </article>
-          ))
-        ) : (
-          <p className="panel">
-            No visits scheduled for today (or all are already completed).
-          </p>
+            ))}
+          </div>
         )}
       </div>
-
-      <div className="completed-bar panel" style={{ marginTop: 8 }}>
-        <div>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "var(--brown-500)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-            }}
-          >
-            Completed visits
-          </div>
-          <div className="big">{data?.completed_count}</div>
-        </div>
-        <span style={{ fontSize: 13, color: "var(--brown-500)", maxWidth: 220 }}>
-          Total completed appointments on your account.
-        </span>
-      </div>
-
-      {/* Sprint 5 — doctor in-app notification feed (US-NOTIF-02). Self-contained
-          glass-card; its mark-read/mark-all mutations invalidate ["notifications"]
-          so the sidebar unread badge updates without a reload. */}
-      <NotificationFeed />
-
-      {/* Sprint 7 (B) — reachable entry point to the owner↔doctor query inbox
-          without touching Sidebar.tsx (US-QUERY). */}
-      <p style={{ marginTop: 16, fontSize: 14 }}>
-        <Link to="/queries">Owner &amp; doctor queries &#8594;</Link>
-      </p>
-    </>
+    </div>
   );
-}
+};

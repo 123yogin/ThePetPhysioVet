@@ -1,1 +1,0 @@
-"""DRF serializer subpackage."""

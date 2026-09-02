@@ -1,139 +1,216 @@
-import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { useTitle } from "../lib/useTitle";
-import Field from "../components/Field";
-import { useCreatePet } from "../api/pets";
-import { ApiError } from "../lib/http";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createPet } from '../api/pets';
+import { useFlash } from '../lib/flash';
 
-// Mirrors pet_form.html + PetForm order: name, pet_type, owner_name,
-// owner_phone, notes(.full). Actions: Cancel (ghost -> /patients), Save patient.
-export default function PetFormScreen() {
-  useTitle("Add patient — ThePetPhysioVet");
+export const PetFormScreen: React.FC = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const create = useCreatePet();
+  const { addFlash } = useFlash();
 
-  const errData = create.error instanceof ApiError ? (create.error.data as Record<string, string[]>) : null;
-  const nonFieldErrors: string[] = errData?.non_field_errors ?? [];
-  const fieldErr = (name: string): string[] | undefined => errData?.[name];
+  const [name, setName] = useState('');
+  const [species, setSpecies] = useState('Dog');
+  const [breed, setBreed] = useState('');
+  const [age, setAge] = useState('');
+  const [sex, setSex] = useState('M');
+  const [weight, setWeight] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [complaint, setComplaint] = useState('');
+  const [referredBy, setReferredBy] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const species = String(fd.get("species") ?? "");
-    // Empty file inputs still yield a zero-size File; only forward a real upload
-    // so a no-photo submit sends no 'photo' key (photo stays optional — AC-02).
-    const photoEntry = fd.get("photo");
-    const photo = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : null;
-    create.mutate(
-      {
-        name: String(fd.get("name") ?? ""),
-        species,
-        pet_type: species, // mirror species into legacy pet_type for back-compat
-        breed: String(fd.get("breed") ?? ""),
-        age: String(fd.get("age") ?? ""),
-        sex: String(fd.get("sex") ?? ""),
-        ...(fd.get("weight") ? { weight: String(fd.get("weight")) } : {}),
-        photo,
-        owner_name: String(fd.get("owner_name") ?? ""),
-        owner_phone: String(fd.get("owner_phone") ?? ""),
-        owner_email: String(fd.get("owner_email") ?? ""),
-        complaint: String(fd.get("complaint") ?? ""),
-        ...(fd.get("complaint_started")
-          ? { complaint_started: String(fd.get("complaint_started")) }
-          : {}),
-        referred_by: String(fd.get("referred_by") ?? ""),
-        medical_history: String(fd.get("medical_history") ?? ""),
-        notes: String(fd.get("notes") ?? ""),
-      },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["pets"] });
-          navigate("/patients");
-        },
-      },
-    );
-  }
+    if (!name || !ownerName || !ownerPhone) {
+      return addFlash('Please fill in Pet Name, Owner Name, and Owner Phone', 'error');
+    }
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('species', species);
+    formData.append('pet_type', species);
+    formData.append('breed', breed);
+    formData.append('age', age);
+    formData.append('sex', sex);
+    formData.append('weight', weight);
+    formData.append('owner_name', ownerName);
+    formData.append('owner_phone', ownerPhone);
+    formData.append('owner_email', ownerEmail);
+    formData.append('complaint', complaint);
+    formData.append('referred_by', referredBy);
+
+    try {
+      const newPet = await createPet(formData);
+      addFlash(`Patient record created for ${newPet.name}`, 'success');
+      navigate(`/patients/${newPet.id}`);
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to create patient', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <>
-      <h1 className="page-title">Add patient</h1>
-      <p className="page-sub">
-        Save the pet &amp; owner once. You can reuse it for every future appointment.
-      </p>
-      <div className="panel">
-        {nonFieldErrors.length > 0 ? (
-          <div className="alert alert-danger">{nonFieldErrors.join(" ")}</div>
-        ) : null}
-        <form method="post" className="form-grid" onSubmit={onSubmit}>
-          <Field label="Pet name" htmlFor="id_name" errors={fieldErr("name")}>
-            <input type="text" name="name" className="input-glass" maxLength={120} required id="id_name" />
-          </Field>
-          <Field label="Species" htmlFor="id_species" errors={fieldErr("species")}>
-            <select name="species" className="input-glass" id="id_species" defaultValue="" required>
-              <option value="">Select…</option>
-              <option>Dog</option>
-              <option>Cat</option>
-              <option>Bird</option>
-              <option>Other</option>
-            </select>
-          </Field>
-          <Field label="Breed" htmlFor="id_breed" errors={fieldErr("breed")}>
-            <input type="text" name="breed" className="input-glass" maxLength={120} id="id_breed" />
-          </Field>
-          <Field label="Age" htmlFor="id_age" errors={fieldErr("age")}>
-            <input type="text" name="age" className="input-glass" maxLength={40}
-              placeholder="e.g. 4 years / 6 months" id="id_age" />
-          </Field>
-          <Field label="Sex" htmlFor="id_sex" errors={fieldErr("sex")}>
-            <select name="sex" className="input-glass" id="id_sex" defaultValue="">
-              <option value="">—</option>
-              <option>Male</option>
-              <option>Female</option>
-              <option>Unknown</option>
-            </select>
-          </Field>
-          <Field label="Weight (kg)" htmlFor="id_weight" errors={fieldErr("weight")}>
-            <input type="number" step="0.01" min="0" name="weight" className="input-glass" id="id_weight" />
-          </Field>
-          <Field label="Photo" htmlFor="id_photo" extra="full" errors={fieldErr("photo")}>
-            <input type="file" name="photo" accept=".jpg,.jpeg,.png" className="input-glass" id="id_photo" />
-          </Field>
-          <Field label="Owner name" htmlFor="id_owner_name" errors={fieldErr("owner_name")}>
-            <input type="text" name="owner_name" className="input-glass" maxLength={120} required
-              id="id_owner_name" />
-          </Field>
-          <Field label="Owner phone" htmlFor="id_owner_phone" errors={fieldErr("owner_phone")}>
-            <input type="text" name="owner_phone" className="input-glass" maxLength={30} required
-              id="id_owner_phone" />
-          </Field>
-          <Field label="Owner email" htmlFor="id_owner_email" errors={fieldErr("owner_email")}>
-            <input type="email" name="owner_email" className="input-glass" id="id_owner_email" />
-          </Field>
-          <Field label="Complaint" htmlFor="id_complaint" extra="full" errors={fieldErr("complaint")}>
-            <textarea name="complaint" className="input-glass" rows={2}
-              placeholder="Presenting complaint (first visit)" id="id_complaint" />
-          </Field>
-          <Field label="Complaint started" htmlFor="id_complaint_started" errors={fieldErr("complaint_started")}>
-            <input type="date" name="complaint_started" className="input-glass" id="id_complaint_started" />
-          </Field>
-          <Field label="Referred by" htmlFor="id_referred_by" errors={fieldErr("referred_by")}>
-            <input type="text" name="referred_by" className="input-glass" maxLength={120} id="id_referred_by" />
-          </Field>
-          <Field label="Medical history" htmlFor="id_medical_history" extra="full" errors={fieldErr("medical_history")}>
-            <textarea name="medical_history" className="input-glass" rows={3} id="id_medical_history" />
-          </Field>
-          <Field label="Notes" htmlFor="id_notes" extra="full" errors={fieldErr("notes")}>
-            <textarea name="notes" className="input-glass" rows={2}
-              placeholder="General notes (optional)" id="id_notes" />
-          </Field>
-          <div className="form-actions full">
-            <Link className="btn btn-ghost" to="/patients">Cancel</Link>
-            <button type="submit" className="btn btn-primary" disabled={create.isPending}>Save patient</button>
+    <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+      <h1 className="page-title">Register New Patient</h1>
+      <p className="page-sub">Enter pet physical details and owner contact details</p>
+
+      <form onSubmit={handleSubmit} className="glass-card">
+        <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>Pet Information</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="field">
+            <label>Pet Name *</label>
+            <input
+              type="text"
+              className="input-glass"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Max"
+            />
           </div>
-        </form>
-      </div>
-    </>
+          <div className="field">
+            <label>Species / Pet Type</label>
+            <select className="input-glass" value={species} onChange={(e) => setSpecies(e.target.value)}>
+              <option value="Dog">Dog</option>
+              <option value="Cat">Cat</option>
+              <option value="Horse">Horse</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <h3 style={{ margin: '24px 0 16px 0', fontSize: '16px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
+          Owner Details
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="field">
+            <label>Owner Full Name *</label>
+            <input
+              type="text"
+              className="input-glass"
+              required
+              value={ownerName}
+              onChange={(e) => setOwnerName(e.target.value)}
+              placeholder="e.g. Sarah Johnson"
+            />
+          </div>
+          <div className="field">
+            <label>Owner Phone Number *</label>
+            <input
+              type="tel"
+              className="input-glass"
+              required
+              value={ownerPhone}
+              onChange={(e) => setOwnerPhone(e.target.value)}
+              placeholder="e.g. +91 98765 43210"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowMoreDetails((v) => !v)}
+          className="btn btn-ghost btn-sm"
+          aria-expanded={showMoreDetails}
+          style={{ marginTop: '20px' }}
+        >
+          {showMoreDetails ? '− Hide more details' : '+ More details (breed, age, sex, weight, email, complaint, referral)'}
+        </button>
+
+        {showMoreDetails && (
+          <div style={{ marginTop: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="field">
+                <label>Breed</label>
+                <input
+                  type="text"
+                  className="input-glass"
+                  value={breed}
+                  onChange={(e) => setBreed(e.target.value)}
+                  placeholder="e.g. Golden Retriever"
+                />
+              </div>
+              <div className="field">
+                <label>Age</label>
+                <input
+                  type="text"
+                  className="input-glass"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  placeholder="e.g. 3 years"
+                />
+              </div>
+              <div className="field">
+                <label>Sex</label>
+                <select className="input-glass" value={sex} onChange={(e) => setSex(e.target.value)}>
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                  <option value="MN">Male Neutered</option>
+                  <option value="FS">Female Spayed</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Weight (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="input-glass"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="e.g. 28.5"
+                />
+              </div>
+              <div className="field" style={{ gridColumn: 'span 2' }}>
+                <label>Owner Email</label>
+                <input
+                  type="email"
+                  className="input-glass"
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  placeholder="sarah@example.com"
+                />
+              </div>
+            </div>
+
+            <h3 style={{ margin: '24px 0 16px 0', fontSize: '16px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
+              Clinical Intake
+            </h3>
+            <div className="field">
+              <label>Chief Complaint / Presenting Problem</label>
+              <textarea
+                className="input-glass"
+                rows={3}
+                value={complaint}
+                onChange={(e) => setComplaint(e.target.value)}
+                placeholder="Limping on hind leg after CCL surgery, spinal stiffness..."
+              />
+            </div>
+            <div className="field">
+              <label>Referred By Vet / Clinic</label>
+              <input
+                type="text"
+                className="input-glass"
+                value={referredBy}
+                onChange={(e) => setReferredBy(e.target.value)}
+                placeholder="Dr. Mehta Vet Care Clinic"
+              />
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Saving Patient...' : 'Register Patient'}
+          </button>
+          <button type="button" onClick={() => navigate('/patients')} className="btn btn-ghost">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
   );
-}
+};

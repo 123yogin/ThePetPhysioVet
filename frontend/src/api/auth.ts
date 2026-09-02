@@ -1,70 +1,71 @@
-// Auth hooks. Endpoints: /auth/me, /auth/login, /auth/logout, /auth/signup.
-// GET /auth/me is wrapped in ensure_csrf_cookie server-side, so calling it on
-// app load plants the csrftoken cookie whether it returns 200 (authed) or 401
-// (anon) — the first login/signup POST then already carries X-CSRFToken.
-//
-// Sprint 6 (Auth Hardening): login/signup now also return a JWT {access, refresh}
-// pair alongside the Me fields. We persist them via the token store so http.ts can
-// attach the Bearer header and refresh on 401. Logout sends the refresh token so
-// the server can blacklist it, then clears the local store. Bearer is attached by
-// http.ts, so useMe needs no changes.
+import { http } from '../lib/http';
+import { setTokens, clearTokens, getRefreshToken } from '../lib/tokens';
+import { User } from '../lib/types';
+import { queryClient } from './queryClient';
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { api } from "../lib/http";
-import { setTokens, clearTokens, getRefresh } from "../lib/tokens";
-import type { Me } from "../lib/types";
+export async function fetchMe(): Promise<User> {
+  return http<User>('/auth/me');
+}
 
-// login / signup response = the Me fields plus the issued JWT pair.
-export type LoginResponse = Me & { access: string; refresh: string };
+export async function login(username: string, password?: string, role?: string): Promise<User> {
+  const data = await http<User & { access: string; refresh: string }>('/auth/login', {
+    method: 'POST',
+    data: { username, password, role },
+  });
+  if (data.access) {
+    setTokens(data.access, data.refresh);
+  }
+  // Seed ['me'] with the identity we were just handed. Without this the first
+  // render after login can read a PREVIOUS user's cached profile (staleTime is
+  // 30s), which decides both the RequireAuth role gate and which nav the
+  // sidebar draws -- so signing in as an owner within 30s of a doctor signing
+  // out would bounce them to /dashboard showing the doctor's name.
+  queryClient.setQueryData(['me'], data);
+  return data;
+}
 
-export function useMe() {
-  return useQuery<Me>({
-    queryKey: ["me"],
-    queryFn: () => api<Me>("/auth/me"),
+export async function signup(userData: Record<string, any>): Promise<User> {
+  const data = await http<User & { access: string; refresh: string }>('/auth/signup', {
+    method: 'POST',
+    data: userData,
+  });
+  if (data.access) {
+    setTokens(data.access, data.refresh);
+  }
+  queryClient.setQueryData(['me'], data);
+  return data;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await http('/auth/logout', { method: 'POST', data: { refresh: getRefreshToken() } });
+  } finally {
+    clearTokens();
+    // Drop every cached response, not just ['me']. The cache holds one user's
+    // pets, invoices and appointments; leaving it in place means the next
+    // person to sign in on this browser can be shown the previous user's data
+    // until each query goes stale.
+    queryClient.clear();
+  }
+}
+
+export async function updateProfile(data: Partial<User>): Promise<User> {
+  return http<User>('/auth/profile', {
+    method: 'PATCH',
+    data,
   });
 }
 
-export function useLogin() {
-  return useMutation({
-    mutationFn: (creds: { username: string; password: string }) =>
-      api<LoginResponse>("/auth/login", { method: "POST", body: creds }),
-    onSuccess: (data) => {
-      setTokens({ access: data.access, refresh: data.refresh });
-    },
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  return http<{ detail: string }>('/auth/password-reset/request', {
+    method: 'POST',
+    data: { email },
   });
 }
 
-export function useLogout() {
-  return useMutation({
-    mutationFn: () =>
-      api<void>("/auth/logout", { method: "POST", body: { refresh: getRefresh() } }),
-    onSuccess: () => {
-      clearTokens();
-    },
-    onError: () => {
-      // Even if the server call fails, drop local tokens so the client is logged out.
-      clearTokens();
-    },
-  });
-}
-
-export interface SignupPayload {
-  username: string;
-  email: string;
-  first_name: string;
-  last_name?: string;
-  clinic_name?: string;
-  clinic_address?: string;
-  password1: string;
-  password2: string;
-}
-
-export function useSignup() {
-  return useMutation({
-    mutationFn: (payload: SignupPayload) =>
-      api<LoginResponse>("/auth/signup", { method: "POST", body: payload }),
-    onSuccess: (data) => {
-      setTokens({ access: data.access, refresh: data.refresh });
-    },
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<{ detail: string }> {
+  return http<{ detail: string }>('/auth/password-reset/confirm', {
+    method: 'POST',
+    data: { token, new_password: newPassword },
   });
 }

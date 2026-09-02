@@ -1,25 +1,47 @@
-import type { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
-import { useMe } from "../api/auth";
+import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { fetchMe } from '../api/auth';
+import { getAccessToken } from '../lib/tokens';
 
-// Guards the app routes: calls the live useMe() (GET /auth/me) and redirects to
-// /login when unauthenticated. isLoading -> render null (no flash); a 401/error
-// or no data -> Navigate to /login; success -> render the guarded route.
-//
-// Sprint 6 (Auth Hardening) verification — no logic change is needed here:
-//  - Tokens absent/cleared (e.g. right after logout): GET /auth/me 401s; http.ts
-//    finds no refresh token in the store so it does NOT attempt a refresh/retry,
-//    useMe surfaces isError, and we redirect to /login. Because isLoading returns
-//    null (not the guarded UI), the redirect happens with no flash/flicker.
-//  - Silent refresh-retry (access expired but refresh still valid): http.ts
-//    transparently refreshes and retries /auth/me inside the SAME query, so useMe
-//    resolves to success with data. No isError, so no <Navigate>, no route change
-//    and no layout shift on the authenticated screen (US-AUTH-02 parity holds).
-export default function RequireAuth({ children }: { children: ReactNode }) {
-  const { data, isLoading, isError } = useMe();
+interface RequireAuthProps {
+  children: React.ReactNode;
+  allowedRoles?: ('DOCTOR' | 'OWNER')[];
+}
 
-  if (isLoading) return null;
-  if (isError || !data) return <Navigate to="/login" replace />;
+export const RequireAuth: React.FC<RequireAuthProps> = ({ children, allowedRoles }) => {
+  const token = getAccessToken();
+  const location = useLocation();
+
+  const { data: user, isLoading, isError } = useQuery({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+    enabled: !!token,
+    retry: false,
+  });
+
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', color: '#5d4037' }}>
+        <p style={{ fontWeight: 600 }}>Loading session...</p>
+      </div>
+    );
+  }
+
+  if (isError || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (user.role === 'OWNER') {
+      return <Navigate to="/owner/home" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return <>{children}</>;
-}
+};

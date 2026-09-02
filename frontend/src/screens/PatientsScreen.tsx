@@ -1,115 +1,96 @@
-import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useTitle } from "../lib/useTitle";
-import { usePets } from "../api/pets";
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { fetchPets } from '../api/pets';
+import { petEmoji } from '../lib/labels';
 
-// Mirrors patients.html: space-between filter-bar (left search form, right
-// "Add patient") + patients table with a per-row Book action.
-export default function PatientsScreen() {
-  useTitle("Patients — ThePetPhysioVet");
-  const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const filterQ = params.get("q") ?? "";
-  const [q, setQ] = useState(filterQ);
-
-  const { data, isLoading, isError } = usePets(filterQ);
-  const patients = data ?? [];
-
-  function onSearch(e: FormEvent) {
-    e.preventDefault();
-    setParams(q ? { q } : {});
-  }
+export const PatientsScreen: React.FC = () => {
+  const [search, setSearch] = useState('');
+  const { data: pets, isLoading, isError, refetch } = useQuery({
+    queryKey: ['pets', search],
+    queryFn: () => fetchPets(search),
+  });
 
   return (
-    <>
-      <h1 className="page-title">Patients</h1>
-      <p className="page-sub">
-        Your saved pets. Add one here, then book appointments for it without re-typing
-        details.
-      </p>
-      <div className="panel">
-        <div className="filter-bar" style={{ justifyContent: "space-between" }}>
-          <form method="get" className="filter-bar" style={{ margin: 0, padding: 0, border: 0 }}
-            onSubmit={onSearch}>
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="fq">Search</label>
-              <input className="input-glass" id="fq" type="text" name="q"
-                placeholder="Pet or owner name" value={q} onChange={(e) => setQ(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-sm btn-primary">Search</button>
-          </form>
-          <Link className="btn btn-sm btn-primary" to="/patients/add">
-            &#10133; Add patient
-          </Link>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 className="page-title">Patients Directory</h1>
+          <p className="page-sub">Clinical profiles, medical records, and rehab plans</p>
         </div>
+        <Link to="/patients/new" className="btn btn-primary">
+          + Add New Patient
+        </Link>
+      </div>
+
+      <div className="glass-card" style={{ marginBottom: '24px' }}>
+        <div className="filter-bar" style={{ margin: 0 }}>
+          <div style={{ flex: 1 }}>
+            <input
+              type="text"
+              className="input-glass"
+              placeholder="Search by pet name, breed, or owner phone/name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')} className="btn btn-ghost btn-sm">
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isError && (
+        <div className="alert alert-danger">
+          Could not load patients list.{' '}
+          <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {isLoading ? (
+        <p style={{ color: 'var(--brown-500)' }}>Loading patients...</p>
+      ) : !pets || pets.length === 0 ? (
+        <div className="glass-card" style={{ textAlign: 'center', padding: '40px' }}>
+          <p style={{ color: 'var(--brown-500)', margin: 0 }}>No patients found matching your search.</p>
+        </div>
+      ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Pet</th>
-                <th>Type</th>
-                <th>Owner</th>
+                <th>Patient Name</th>
+                <th>Species / Breed</th>
+                <th>Owner Name</th>
                 <th>Phone</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={5}>Loading patients…</td>
-                </tr>
-              ) : isError ? (
-                <tr>
-                  <td colSpan={5}>Could not load patients. Please try again.</td>
-                </tr>
-              ) : patients.length > 0 ? (
-                patients.map((p) => (
-                  // Sprint 3: the row opens the pet's clinical record hub
-                  // (/patients/:id). This is a pixel-safe enhancement — it adds
-                  // NO visible element, so the golden screenshot is byte-identical;
-                  // only behaviour (row click / keyboard) is added. Keyboard users
-                  // activate with Enter/Space; the inner "Book" link keeps its own
-                  // action via stopPropagation. See UI_PARITY note in the report.
-                  <tr
-                    key={p.id}
-                    role="link"
-                    tabIndex={0}
-                    style={{ cursor: "pointer" }}
-                    aria-label={`Open clinical record for ${p.name}`}
-                    onClick={() => navigate(`/patients/${p.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        navigate(`/patients/${p.id}`);
-                      }
-                    }}
-                  >
-                    <td>{p.name}</td>
-                    <td>{p.pet_type}</td>
-                    <td>{p.owner_name}</td>
-                    <td>{p.owner_phone}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      <Link
-                        className="btn btn-sm btn-primary"
-                        to="/appointments/create"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Book
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5}>
-                    No patients yet. <Link to="/patients/add">Add your first patient</Link>.
+              {pets.map((pet) => (
+                <tr key={pet.id}>
+                  <td style={{ fontWeight: 700 }}>
+                    <Link to={`/patients/${pet.id}`} className="table-link">
+                      {petEmoji(pet.species || pet.pet_type)} {pet.name}
+                    </Link>
+                  </td>
+                  <td>{pet.pet_type || pet.species} {pet.breed ? `(${pet.breed})` : ''}</td>
+                  <td>{pet.owner_name}</td>
+                  <td>{pet.owner_phone}</td>
+                  <td>
+                    <Link to={`/patients/${pet.id}`} className="btn btn-secondary btn-sm">
+                      View
+                    </Link>
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
-}
+};

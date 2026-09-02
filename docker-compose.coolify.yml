@@ -1,0 +1,89 @@
+# Coolify deployment stack for Pet Physio Vet.
+#
+# Use this file (NOT docker-compose.yml) as the compose file when deploying to
+# Coolify. `docker-compose.yml` stays as-is for local development, where an
+# inline Postgres is exactly what you want.
+#
+# Three deliberate differences from the local file:
+#
+# 1. NO postgres service. Coolify has a long-standing open bug (#7528) where a
+#    database declared inside a git-based compose file is never registered as a
+#    Coolify resource — so it silently gets NO automated backups. Postgres must
+#    instead be created as a Coolify *managed database resource*, which gets a
+#    Backups tab, and reached here via DATABASE_URL.
+#
+# 2. NO custom `networks:` block. Coolify supplies its own network; declaring
+#    one causes intermittent 504s through its proxy. Enable "Connect to
+#    Predefined Network" on the application so it can reach the managed DB.
+#
+# 3. frontend uses `expose:`, not `ports:`. A published port bypasses Coolify's
+#    Traefik proxy entirely, which means no TLS and no routing.
+#
+# Assign your domain (or bare IP) to the FRONTEND service, port 80. nginx
+# already proxies /api and /media to the backend internally, so the whole app
+# is same-origin and needs no Traefik path rules.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      # Must include localhost/127.0.0.1 for the container healthcheck below,
+      # plus the server IP or domain you actually browse to.
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # Points at the Coolify MANAGED Postgres resource — copy its Internal
+      # URL from the Coolify UI, e.g.
+      #   postgres://user:pass@postgres-abc123:5432/petphysio
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      # HTTPS is enforced by DEFAULT in production. Set ALLOW_INSECURE_HTTP=true
+      # only while running on a bare IP with no certificate; it turns off the
+      # SSL redirect, secure cookies and HSTS together (they cannot disagree)
+      # and logs a warning at every boot. Delete it once a cert exists.
+      ALLOW_INSECURE_HTTP: ${ALLOW_INSECURE_HTTP:-}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      # Required to boot. Password-reset mail; without a real SMTP provider a
+      # locked-out user can never recover their account.
+      EMAIL_BACKEND: ${EMAIL_BACKEND:?EMAIL_BACKEND is required}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:?DEFAULT_FROM_EMAIL is required}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL is required}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      # Optional. Unset -> the database-backed cache, which is shared across
+      # gunicorn workers. Never leave this on a per-process cache: the
+      # password-reset rate limiter depends on it.
+      REDIS_URL: ${REDIS_URL:-}
+    volumes:
+      - media_data:/app/media
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/admin/login/", "-o", "/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    # expose, NOT ports — see note 3 above.
+    expose:
+      - "80"
+    volumes:
+      - media_data:/media:ro
+
+volumes:
+  media_data:

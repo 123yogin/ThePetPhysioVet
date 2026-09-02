@@ -1,108 +1,82 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useTitle } from "../lib/useTitle";
-import Field from "../components/Field";
-import { useProfile, useUpdateProfile, type ProfilePatch } from "../api/profile";
-import { ApiError } from "../lib/http";
+import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchMe, updateProfile } from '../api/auth';
+import { useFlash } from '../lib/flash';
 
-// Account / profile page (view + edit). Role-aware: a DOCTOR edits clinic
-// name/address/phone; an OWNER edits a contact phone. Both edit name + email.
-export default function ProfileScreen() {
-  useTitle("Profile — ThePetPhysioVet");
-  const { data, isLoading, isError } = useProfile();
-  const update = useUpdateProfile();
+export const ProfileScreen: React.FC = () => {
+  const { addFlash } = useFlash();
 
-  const [form, setForm] = useState<ProfilePatch>({});
-  const [saved, setSaved] = useState(false);
+  const { data: user, isLoading, isError, refetch } = useQuery({
+    queryKey: ['me'],
+    queryFn: fetchMe,
+  });
 
-  // Seed the form once the profile loads.
+  const [firstName, setFirstName] = useState('');
+  const [clinicName, setClinicName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
-    if (data) {
-      setForm({
-        first_name: data.first_name,
-        last_name: data.last_name,
-        email: data.email,
-        clinic_name: data.clinic_name,
-        clinic_address: data.clinic_address,
-        clinic_phone: data.clinic_phone,
-        phone: data.phone,
-      });
+    if (user) {
+      setFirstName(user.first_name || '');
+      setClinicName(user.clinic_name || '');
     }
-  }, [data]);
+  }, [user]);
 
-  const errData = update.error instanceof ApiError ? (update.error.data as Record<string, string[]>) : null;
-  const fieldErr = (name: string) => errData?.[name];
-
-  function set<K extends keyof ProfilePatch>(key: K, value: string) {
-    setForm((f) => ({ ...f, [key]: value }));
-    setSaved(false);
-  }
-
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isDoctor = data?.role === "DOCTOR";
-    // Send only the fields relevant to this role.
-    const patch: ProfilePatch = {
-      first_name: form.first_name,
-      last_name: form.last_name,
-      email: form.email,
-      ...(isDoctor
-        ? { clinic_name: form.clinic_name, clinic_address: form.clinic_address, clinic_phone: form.clinic_phone }
-        : { phone: form.phone }),
-    };
-    update.mutate(patch, { onSuccess: () => setSaved(true) });
-  }
-
-  if (isLoading) return <div className="panel">Loading…</div>;
-  if (isError || !data) return <div className="panel">Could not load your profile.</div>;
-
-  const isDoctor = data.role === "DOCTOR";
+    setSubmitting(true);
+    try {
+      await updateProfile({ first_name: firstName, clinic_name: clinicName });
+      addFlash('Profile updated successfully', 'success');
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to update profile', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <>
-      <h1 className="page-title">Profile</h1>
-      <p className="page-sub">{isDoctor ? "Your clinic and account details." : "Your account and contact details."}</p>
-      <div className="panel">
-        <form className="form-grid" onSubmit={onSubmit}>
-          {saved ? <div className="alert alert-success full">Profile saved.</div> : null}
-          {update.isError && !errData?.email ? (
-            <div className="alert alert-danger full">Could not save. Please try again.</div>
-          ) : null}
+    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <h1 className="page-title">Clinic Profile & Settings</h1>
+      <p className="page-sub">Doctor details and veterinary clinic branding</p>
 
-          <Field label="First name" htmlFor="id_first_name">
-            <input id="id_first_name" className="input-glass" value={form.first_name ?? ""} onChange={(e) => set("first_name", e.target.value)} />
-          </Field>
-          <Field label="Last name" htmlFor="id_last_name">
-            <input id="id_last_name" className="input-glass" value={form.last_name ?? ""} onChange={(e) => set("last_name", e.target.value)} />
-          </Field>
-          <Field label="Email" htmlFor="id_email" errors={fieldErr("email")}>
-            <input id="id_email" type="email" className="input-glass" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} />
-          </Field>
+      {isError && (
+        <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Could not load your profile.</span>
+          <button type="button" onClick={() => refetch()} className="btn btn-ghost btn-sm">
+            Retry
+          </button>
+        </div>
+      )}
 
-          {isDoctor ? (
-            <>
-              <Field label="Clinic name" htmlFor="id_clinic_name">
-                <input id="id_clinic_name" className="input-glass" value={form.clinic_name ?? ""} onChange={(e) => set("clinic_name", e.target.value)} />
-              </Field>
-              <Field label="Clinic phone" htmlFor="id_clinic_phone">
-                <input id="id_clinic_phone" className="input-glass" value={form.clinic_phone ?? ""} onChange={(e) => set("clinic_phone", e.target.value)} />
-              </Field>
-              <Field label="Clinic address" htmlFor="id_clinic_address">
-                <textarea id="id_clinic_address" className="input-glass" rows={2} value={form.clinic_address ?? ""} onChange={(e) => set("clinic_address", e.target.value)} />
-              </Field>
-            </>
-          ) : (
-            <Field label="Phone" htmlFor="id_phone">
-              <input id="id_phone" className="input-glass" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
-            </Field>
-          )}
+      {isLoading && <p style={{ color: 'var(--brown-500)' }}>Loading profile...</p>}
 
-          <div className="form-actions full">
-            <button type="submit" className="btn btn-primary" disabled={update.isPending}>
-              {update.isPending ? "Saving…" : "Save changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+      <form onSubmit={handleSubmit} className="glass-card">
+        <div className="field">
+          <label>Doctor Name</label>
+          <input
+            type="text"
+            className="input-glass"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label>Clinic Name</label>
+          <input
+            type="text"
+            className="input-glass"
+            value={clinicName}
+            onChange={(e) => setClinicName(e.target.value)}
+          />
+        </div>
+
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? 'Updating...' : 'Save Profile Changes'}
+        </button>
+      </form>
+    </div>
   );
-}
+};

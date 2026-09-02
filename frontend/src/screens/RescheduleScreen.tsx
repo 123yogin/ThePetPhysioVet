@@ -1,149 +1,102 @@
-import type { FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { useTitle } from "../lib/useTitle";
-import Field from "../components/Field";
-import {
-  useAppointment,
-  useReschedule,
-  useRescheduleApprove,
-  useRescheduleReject,
-} from "../api/appointments";
-import { ApiError } from "../lib/http";
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAppointmentDetail, rescheduleAppointment } from '../api/appointments';
+import { useFlash } from '../lib/flash';
 
-// Mirrors reschedule.html: sub-header "<pet> — <owner>", form-grid with exactly
-// two .field (Date, Time), then form-actions.full "Save & share update".
-export default function RescheduleScreen() {
-  useTitle("Reschedule — ThePetPhysioVet");
+export const RescheduleScreen: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  // useParams gives `string | undefined`. Previously this was `Number(id)`,
+  // which quietly turned a missing param into NaN and requested /NaN; an empty
+  // string makes the bad case obvious instead of silently 404-ing.
+  const apptId = id ?? '';
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { id } = useParams();
-  const apptId = Number(id);
-  const { data: appointment, isLoading, isError, error } = useAppointment(apptId);
-  const reschedule = useReschedule(apptId);
-  const approve = useRescheduleApprove(apptId);
-  const reject = useRescheduleReject(apptId);
+  const { addFlash } = useFlash();
 
-  const notFound = error instanceof ApiError && error.status === 404;
-  // Owner asked for a new slot (SRS §3.6): the doctor approves (applies it) or
-  // rejects (keeps the current slot). Shown as a banner above the manual form.
-  const ownerRequested = appointment?.status === "Reschedule Requested" && !!appointment?.requested_date;
+  const { data: appt, isLoading, isError, refetch } = useQuery({
+    queryKey: ['appointment', apptId],
+    queryFn: () => fetchAppointmentDetail(apptId),
+    enabled: !!apptId,
+  });
 
-  const errData = reschedule.error instanceof ApiError ? (reschedule.error.data as Record<string, string[]>) : null;
-  const nonFieldErrors: string[] = errData?.non_field_errors ?? [];
-  const fieldErr = (name: string): string[] | undefined => errData?.[name];
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState('11:00');
+  const [submitting, setSubmitting] = useState(false);
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (appt) {
+      if (appt.date) setDate(appt.date);
+      if (appt.time) setTime(appt.time.substring(0, 5));
+    }
+  }, [appt]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    reschedule.mutate(
-      { date: String(fd.get("date") ?? ""), time: String(fd.get("time") ?? "") },
-      {
-        onSuccess: (result) => {
-          // Prime the share cache from the inline payload so ShareScreen renders
-          // without a refetch, then invalidate the affected reads.
-          queryClient.setQueryData(["share", apptId], result.share);
-          queryClient.invalidateQueries({ queryKey: ["appointment", apptId] });
-          queryClient.invalidateQueries({ queryKey: ["appointments"] });
-          queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-          navigate(`/appointments/${apptId}/share`);
-        },
-      },
+    setSubmitting(true);
+    try {
+      await rescheduleAppointment(apptId, { date, time });
+      addFlash('Appointment rescheduled successfully', 'success');
+      navigate(`/appointments/${apptId}/share`);
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to reschedule', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (isLoading) return <p>Loading appointment...</p>;
+
+  if (isError) {
+    return (
+      <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Could not load this appointment.</span>
+        <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
+          Retry
+        </button>
+      </div>
     );
   }
 
+  if (!appt) return <p>Appointment not found.</p>;
+
   return (
-    <>
-      <h1 className="page-title">Reschedule visit</h1>
-      <p className="page-sub">
-        {appointment?.pet_name} — {appointment?.owner_name}
-      </p>
-      <div className="panel">
-        {isLoading ? (
-          <p>Loading appointment…</p>
-        ) : notFound ? (
-          <p>Appointment not found.</p>
-        ) : isError ? (
-          <p>Could not load appointment. Please try again.</p>
-        ) : (
-          <>
-          {ownerRequested ? (
-            <div className="alert alert-info full" style={{ marginBottom: 16 }}>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>{appointment?.owner_name}</strong> requested a new time:{" "}
-                <strong>{appointment?.requested_date} {appointment?.requested_time}</strong>
-                {appointment?.reschedule_reason ? ` — ${appointment.reschedule_reason}` : ""}
-              </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={approve.isPending || reject.isPending}
-                  onClick={() =>
-                    approve.mutate(undefined, {
-                      onSuccess: () => {
-                        queryClient.invalidateQueries({ queryKey: ["appointments"] });
-                        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-                        navigate("/appointments");
-                      },
-                    })
-                  }
-                >
-                  Approve requested time
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={approve.isPending || reject.isPending}
-                  onClick={() =>
-                    reject.mutate(undefined, {
-                      onSuccess: () => {
-                        queryClient.invalidateQueries({ queryKey: ["appointments"] });
-                        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-                      },
-                    })
-                  }
-                >
-                  Reject
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <form method="post" className="form-grid" onSubmit={onSubmit}>
-            {nonFieldErrors.length > 0 ? (
-              <div className="alert alert-danger full">{nonFieldErrors.join(" ")}</div>
-            ) : null}
-            <Field label="Date" htmlFor="id_date" errors={fieldErr("date")}>
-              <input
-                type="date"
-                name="date"
-                className="input-glass"
-                required
-                id="id_date"
-                key={`d-${appointment?.date_iso ?? ""}`}
-                defaultValue={appointment?.date_iso ?? ""}
-              />
-            </Field>
-            <Field label="Time" htmlFor="id_time" errors={fieldErr("time")}>
-              <input
-                type="time"
-                name="time"
-                className="input-glass"
-                required
-                id="id_time"
-                key={`t-${appointment?.time_24h ?? ""}`}
-                defaultValue={appointment?.time_24h ?? ""}
-              />
-            </Field>
-            <div className="form-actions full">
-              <button type="submit" className="btn btn-primary" disabled={reschedule.isPending}>
-                Save &amp; share update
-              </button>
-            </div>
-          </form>
-          </>
-        )}
-      </div>
-    </>
+    <div style={{ maxWidth: '540px', margin: '0 auto' }}>
+      <h1 className="page-title">Reschedule Appointment</h1>
+      <p className="page-sub">Change session time for {appt.pet_name} (Owner: {appt.owner_name})</p>
+
+      <form onSubmit={handleSubmit} className="glass-card">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+          <div className="field">
+            <label>New Date</label>
+            <input
+              type="date"
+              className="input-glass"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>New Time</label>
+            <input
+              type="time"
+              className="input-glass"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? 'Saving...' : 'Update Appointment'}
+          </button>
+          <button type="button" onClick={() => navigate('/appointments')} className="btn btn-ghost">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
   );
-}
+};

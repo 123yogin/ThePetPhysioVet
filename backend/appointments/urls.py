@@ -1,27 +1,126 @@
-from django.conf import settings
 from django.urls import path
 
-from . import views
+from .views import (
+    # Auth
+    current_user_view, login_view, signup_view, logout_view, update_profile_view,
+    refresh_view, password_reset_request_view, password_reset_confirm_view,
+    # Dashboard
+    dashboard_stats_view,
+    # Pets
+    pets_view, pet_detail_view,
+    # Diagnostic reports
+    pet_diagnoses_view, diagnostic_report_detail_view,
+    # Treatment plans
+    pet_treatment_plans_view, treatment_plan_detail_view, treatment_plan_progress_notes_view,
+    # Appointments
+    appointments_view, appointment_detail_view, appointment_reschedule_view,
+    appointment_complete_view, appointment_reschedule_approve_view,
+    appointment_reschedule_reject_view, appointment_share_view,
+    appointment_confirm_view, appointment_options_view,
+    # Billing
+    invoices_view, invoice_detail_view, invoice_payments_view, revenue_view,
+    # Notifications
+    notifications_view, notifications_mark_all_read_view, notification_prefs_view,
+    # Queries
+    queries_inbox_view, pet_queries_view,
+    # Owner portal
+    owner_pets_view, owner_pet_detail_view, owner_pet_diagnoses_view, owner_pet_history_view,
+    owner_appointments_view, owner_appointment_accept_view, owner_appointment_reschedule_request_view,
+    owner_appointment_cancel_view, owner_invoices_view, owner_invoice_detail_view,
+    owner_pet_queries_view,
+)
 
+# NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
+# calls these endpoints without a trailing slash (e.g. `/pets/1/diagnoses`),
+# and APPEND_SLASH redirects would break POST bodies. Paths here match
+# docs/API_CONTRACT.md §3 verbatim.
 urlpatterns = [
-    path("", views.home, name="home"),
-    path("login/", views.login_view, name="login"),
-    path("signup/", views.signup_view, name="signup"),
-    path("logout/", views.logout_view, name="logout"),
-    path("dashboard/", views.dashboard, name="dashboard"),
-    path("patients/", views.patient_list, name="patient_list"),
-    path("patients/add/", views.patient_create, name="patient_create"),
-    path("appointments/create/", views.create_appointment, name="create_appointment"),
-    path("appointments/<int:pk>/share/", views.share_appointment, name="share_appointment"),
-    path("appointments/", views.appointment_list, name="appointment_list"),
-    path("appointments/<int:pk>/reschedule/", views.reschedule_appointment, name="reschedule_appointment"),
-    path("appointments/<int:pk>/complete/", views.mark_complete, name="mark_complete"),
-]
+    # --- Auth ---
+    path("auth/me", current_user_view, name="auth-me"),
+    path("auth/login", login_view, name="auth-login"),
+    path("auth/signup", signup_view, name="auth-signup"),
+    path("auth/logout", logout_view, name="auth-logout"),
+    path("auth/profile", update_profile_view, name="auth-profile"),
+    path("auth/refresh", refresh_view, name="auth-refresh"),
+    path("auth/password-reset/request", password_reset_request_view, name="auth-password-reset-request"),
+    path("auth/password-reset/confirm", password_reset_confirm_view, name="auth-password-reset-confirm"),
 
-# Parity-only shell route: registered ONLY when PARITY_MODE is set, so it never
-# exists in production. Renders app_base with an empty content block and no
-# active nav item, mirroring the React shell route for a 1:1 shell diff.
-if getattr(settings, "PARITY_MODE", False):
-    urlpatterns += [
-        path("__parity__/shell/", views.parity_shell, name="parity_shell"),
-    ]
+    # --- Dashboard ---
+    path("dashboard/stats", dashboard_stats_view, name="dashboard-stats"),
+
+    # --- Pets ---
+    path("pets", pets_view, name="pets"),
+    path("pets/<uuid:pk>", pet_detail_view, name="pet-detail"),
+    path("pets/<uuid:pk>/diagnoses", pet_diagnoses_view, name="pet-diagnoses"),
+    path("pets/<uuid:pk>/treatment-plans", pet_treatment_plans_view, name="pet-treatment-plans"),
+    path("pets/<uuid:pk>/queries", pet_queries_view, name="pet-queries"),
+
+    # --- Diagnostic reports ---
+    path("diagnoses/<uuid:pk>", diagnostic_report_detail_view, name="diagnosis-detail"),
+
+    # --- Treatment plans ---
+    path("treatment-plans/<uuid:pk>", treatment_plan_detail_view, name="treatment-plan-detail"),
+    path(
+        "treatment-plans/<uuid:pk>/progress-notes",
+        treatment_plan_progress_notes_view,
+        name="treatment-plan-progress-notes",
+    ),
+
+    # --- Appointments ---
+    path("appointments", appointments_view, name="appointments"),
+    path("appointments/<uuid:pk>", appointment_detail_view, name="appointment-detail"),
+    path("appointments/<uuid:pk>/reschedule", appointment_reschedule_view, name="appointment-reschedule"),
+    path("appointments/<uuid:pk>/complete", appointment_complete_view, name="appointment-complete"),
+    path(
+        "appointments/<uuid:pk>/reschedule-approve",
+        appointment_reschedule_approve_view,
+        name="appointment-reschedule-approve",
+    ),
+    path(
+        "appointments/<uuid:pk>/reschedule-reject",
+        appointment_reschedule_reject_view,
+        name="appointment-reschedule-reject",
+    ),
+    path("appointments/<uuid:pk>/share", appointment_share_view, name="appointment-share"),
+    path("appointments/<uuid:pk>/confirm", appointment_confirm_view, name="appointment-confirm"),
+    path("appointment-options", appointment_options_view, name="appointment-options"),
+
+    # --- Billing ---
+    path("invoices", invoices_view, name="invoices"),
+    path("invoices/<uuid:pk>", invoice_detail_view, name="invoice-detail"),
+    path("invoices/<uuid:pk>/payments", invoice_payments_view, name="invoice-payments"),
+    path("revenue", revenue_view, name="revenue"),
+
+    # --- Notifications ---
+    path("notifications", notifications_view, name="notifications"),
+    path("notifications/mark-all-read", notifications_mark_all_read_view, name="notifications-mark-all-read"),
+    path("notification-prefs", notification_prefs_view, name="notification-prefs"),
+
+    # --- Queries ---
+    path("queries/inbox", queries_inbox_view, name="queries-inbox"),
+
+    # --- Owner portal ---
+    path("owner/pets", owner_pets_view, name="owner-pets"),
+    path("owner/pets/<uuid:pk>", owner_pet_detail_view, name="owner-pet-detail"),
+    path("owner/pets/<uuid:pk>/diagnoses", owner_pet_diagnoses_view, name="owner-pet-diagnoses"),
+    path("owner/pets/<uuid:pk>/history", owner_pet_history_view, name="owner-pet-history"),
+    path("owner/pets/<uuid:pk>/queries", owner_pet_queries_view, name="owner-pet-queries"),
+    path("owner/appointments", owner_appointments_view, name="owner-appointments"),
+    path(
+        "owner/appointments/<uuid:pk>/accept",
+        owner_appointment_accept_view,
+        name="owner-appointment-accept",
+    ),
+    path(
+        "owner/appointments/<uuid:pk>/reschedule-request",
+        owner_appointment_reschedule_request_view,
+        name="owner-appointment-reschedule-request",
+    ),
+    path(
+        "owner/appointments/<uuid:pk>/cancel",
+        owner_appointment_cancel_view,
+        name="owner-appointment-cancel",
+    ),
+    path("owner/invoices", owner_invoices_view, name="owner-invoices"),
+    path("owner/invoices/<uuid:pk>", owner_invoice_detail_view, name="owner-invoice-detail"),
+]

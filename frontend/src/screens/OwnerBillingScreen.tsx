@@ -1,115 +1,163 @@
-import { useState } from "react";
-import { useTitle } from "../lib/useTitle";
-import { useOwnerInvoices, useOwnerInvoice, useOwnerPayInvoice, ownerReceiptUrl } from "../api/owner";
-import { formatCurrency, paymentStatusBadge, paymentStatusLabel } from "../lib/money";
-import type { Invoice } from "../lib/types";
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchOwnerInvoices, fetchOwnerInvoiceDetail } from '../api/owner';
+import { humanizeStatus, friendlyDate } from '../lib/labels';
+import { Icon } from '../components/Icon';
 
-const muted = { color: "var(--brown-500)" };
+export const OwnerBillingScreen: React.FC = () => {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-// One invoice row: header always visible; expanding lazily loads the detail
-// (line items + balance) and reveals Pay + Download-receipt actions.
-function InvoiceRow({ inv }: { inv: Invoice }) {
-  const [open, setOpen] = useState(false);
-  const detail = useOwnerInvoice(open ? inv.id : NaN);
-  const pay = useOwnerPayInvoice(inv.id);
-  const [receiptErr, setReceiptErr] = useState<string | null>(null);
-  const balance = detail.data?.balance_due ?? inv.total;
-  const receiptable = inv.payment_status === "PAID" || inv.payment_status === "PARTIALLY_PAID";
+  const { data: invoices, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['ownerInvoices'],
+    queryFn: fetchOwnerInvoices,
+  });
 
-  async function downloadReceipt() {
-    setReceiptErr(null);
-    try {
-      // "application/pdf, */*" — a bare application/pdf fails DRF content
-      // negotiation (JSON-only renderers) with 406; the */* fallback lets it
-      // through while the server still streams real PDF bytes.
-      const res = await fetch(ownerReceiptUrl(inv.id), { credentials: "include", headers: { Accept: "application/pdf, */*" } });
-      if (!res.ok) { setReceiptErr("A receipt is available once the invoice is paid."); return; }
-      const url = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = url; a.download = `receipt-invoice-${inv.invoice_no}.pdf`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    } catch { setReceiptErr("Could not generate the receipt. Please try again."); }
-  }
+  const {
+    data: detail,
+    isLoading: detailLoading,
+    isError: detailIsError,
+    error: detailError,
+  } = useQuery({
+    queryKey: ['ownerInvoiceDetail', expandedId],
+    queryFn: () => fetchOwnerInvoiceDetail(expandedId as string),
+    enabled: expandedId !== null,
+  });
+
+  const toggle = (id: string) => {
+    setExpandedId((current) => (current === id ? null : id));
+  };
 
   return (
-    <div style={{ borderTop: "1px solid rgba(62,39,35,.08)", paddingTop: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ padding: 0, textAlign: "left" }}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {open ? "▾" : "▸"} <strong>Invoice #{inv.invoice_no}</strong>{" "}
-          <span style={muted}>· {inv.pet_name} · {formatCurrency(inv.total)}</span>
-        </button>
-        <span className={paymentStatusBadge(inv.payment_status)}>{paymentStatusLabel(inv.payment_status)}</span>
-      </div>
+    <div>
+      <h1 className="page-title">My Invoices</h1>
+      <p className="page-sub">
+        Statements from your vet. Online payment isn't set up yet — please pay at the clinic.
+      </p>
 
-      {open ? (
-        <div style={{ marginTop: 10 }}>
-          {detail.isLoading ? (
-            <p style={{ ...muted, marginTop: 0 }}>Loading…</p>
-          ) : detail.data ? (
-            <>
-              <ul style={{ marginTop: 0 }}>
-                {detail.data.line_items.map((li, i) => (
-                  <li key={i}>{li.description} × {li.quantity} — {formatCurrency(li.amount)}</li>
-                ))}
-              </ul>
-              <p style={{ margin: "4px 0" }}>
-                Paid {formatCurrency(detail.data.amount_paid)} · <strong>Balance {formatCurrency(balance)}</strong>
-              </p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {Number(balance) > 0 ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={pay.isPending}
-                    onClick={() => pay.mutate(balance)}
-                  >
-                    {pay.isPending ? "Processing…" : `Pay ${formatCurrency(balance)}`}
-                  </button>
-                ) : null}
-                {receiptable ? (
-                  <button type="button" className="btn btn-ghost" onClick={downloadReceipt}>Download receipt</button>
-                ) : null}
-              </div>
-              {pay.isError ? <div className="alert alert-danger" role="alert" style={{ marginTop: 8 }}>Payment failed. Please try again.</div> : null}
-              {receiptErr ? <div className="alert alert-danger" role="alert" style={{ marginTop: 8 }}>{receiptErr}</div> : null}
-            </>
-          ) : (
-            <p style={{ ...muted, marginTop: 0 }}>Could not load this invoice.</p>
-          )}
+      {isError && (
+        <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Could not load your invoices{error instanceof Error && error.message ? `: ${error.message}` : '.'}</span>
+          <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
+            Retry
+          </button>
         </div>
-      ) : null}
+      )}
+
+      {isLoading ? (
+        <p>Loading invoices...</p>
+      ) : isError ? null : !invoices || invoices.length === 0 ? (
+        <div className="glass-card" style={{ textAlign: 'center', padding: '40px' }}>
+          <p style={{ color: 'var(--brown-500)' }}>No invoices issued yet.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {invoices.map((inv) => {
+            const isOpen = expandedId === inv.id;
+            return (
+              <div key={inv.id} className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+                <button
+                  onClick={() => toggle(inv.id)}
+                  aria-expanded={isOpen}
+                  aria-controls={`invoice-detail-${inv.id}`}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    font: 'inherit',
+                    color: 'inherit',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '20px',
+                    minHeight: '44px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--brown-900)' }}>
+                        {inv.invoice_no}
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--brown-600)', marginTop: '4px' }}>
+                        {inv.pet_name || 'Your pet'} &bull; {friendlyDate(inv.created_at)}
+                      </div>
+                    </div>
+                    <span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>
+                      {humanizeStatus(inv.payment_status)}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--brown-600)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Balance Due
+                      </div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--brown-900)' }}>
+                        ₹{inv.balance_due ?? inv.total ?? '—'}
+                      </div>
+                    </div>
+                    <span style={{ color: 'var(--brown-600)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
+                      {isOpen ? 'Hide details' : 'View details'}
+                      <Icon name={isOpen ? 'close' : 'arrowRight'} size={14} />
+                    </span>
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div id={`invoice-detail-${inv.id}`} style={{ borderTop: '1px solid var(--glass-border)', padding: '20px' }}>
+                    {detailLoading ? (
+                      <p style={{ color: 'var(--brown-500)', margin: 0 }}>Loading invoice details...</p>
+                    ) : detailIsError ? (
+                      <p style={{ color: '#b71c1c', margin: 0 }}>
+                        Couldn't load this invoice{detailError instanceof Error && detailError.message ? `: ${detailError.message}` : '.'}
+                      </p>
+                    ) : detail ? (
+                      <>
+                        {detail.line_items && detail.line_items.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                            {detail.line_items.map((item, idx) => (
+                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--brown-800)' }}>
+                                <span>{item.description} &times; {item.quantity}</span>
+                                <span style={{ fontWeight: 700 }}>₹{item.amount}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ color: 'var(--brown-600)', fontSize: '13px' }}>No line items on this invoice.</p>
+                        )}
+
+                        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--brown-700)' }}>
+                            <span>Subtotal</span>
+                            <span>₹{detail.subtotal}</span>
+                          </div>
+                          {!!detail.tax && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--brown-700)' }}>
+                              <span>Tax</span>
+                              <span>₹{detail.tax}</span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--brown-900)', fontWeight: 700 }}>
+                            <span>Total</span>
+                            <span>₹{detail.total}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--brown-700)' }}>
+                            <span>Paid so far</span>
+                            <span>₹{detail.amount_paid}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--brown-900)', fontWeight: 800, fontSize: '15px', marginTop: '4px' }}>
+                            <span>Balance Due</span>
+                            <span>₹{detail.balance_due}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-}
-
-// Owner billing (SRS §3.8 owner side): view invoices, pay, download receipts.
-export default function OwnerBillingScreen() {
-  useTitle("Billing — ThePetPhysioVet");
-  const { data, isLoading, isError } = useOwnerInvoices();
-
-  return (
-    <>
-      <h1 className="page-title">Billing</h1>
-      <p className="page-sub">Your invoices, payments and receipts.</p>
-      <div className="panel">
-        {isLoading ? (
-          <p style={{ marginTop: 0 }}>Loading…</p>
-        ) : isError ? (
-          <p style={{ marginTop: 0 }}>Could not load your invoices.</p>
-        ) : data && data.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {data.map((inv) => <InvoiceRow key={inv.id} inv={inv} />)}
-          </div>
-        ) : (
-          <p style={{ ...muted, marginTop: 0 }}>No invoices yet.</p>
-        )}
-      </div>
-    </>
-  );
-}
+};
