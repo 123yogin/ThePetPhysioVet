@@ -45,6 +45,27 @@ function friendlyClock(iso?: string | null): string {
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * "3 hours ago" / "2 days ago", falling back to the date past a week.
+ *
+ * An inbox is read by recency: a bare date makes the reader do the
+ * subtraction to work out whether an enquiry is urgent. The full timestamp
+ * is still in the expanded body for anyone who needs the exact moment.
+ */
+function timeAgo(iso?: string | null): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return `Submitted ${friendlyDate(iso)}`;
+}
+
 export const EnquiriesScreen: React.FC = () => {
   const { addFlash } = useFlash();
   const queryClient = useQueryClient();
@@ -57,6 +78,30 @@ export const EnquiriesScreen: React.FC = () => {
   const [convertVisitType, setConvertVisitType] = useState('');
 
   const [confirmDismissId, setConfirmDismissId] = useState<string | null>(null);
+
+  // A Set, not a single id: expansion is read-only, so there is no reason to
+  // force an accordion — a doctor comparing two enquiries can open both.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    // Decided outside the updater on purpose. Calling other setState
+    // functions from inside one is an anti-pattern React is free to run
+    // twice (it does under StrictMode), which would make closing the card
+    // clear a form the user had since reopened.
+    const collapsing = expandedIds.has(id);
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (collapsing) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    if (collapsing) {
+      // Otherwise the form survives as invisible state and reappears on the
+      // next expand, half-filled from the previous attempt.
+      setOpenConvertId((cur) => (cur === id ? null : cur));
+      setConfirmDismissId((cur) => (cur === id ? null : cur));
+    }
+  };
 
   const [justConverted, setJustConverted] = useState<{
     petName: string;
@@ -94,6 +139,7 @@ export const EnquiriesScreen: React.FC = () => {
 
   const switchTab = (tab: StatusTab) => {
     setStatusFilter(tab);
+    setExpandedIds(new Set());
     setOpenConvertId(null);
     setConfirmDismissId(null);
   };
@@ -101,9 +147,21 @@ export const EnquiriesScreen: React.FC = () => {
   const openConvertForm = (enq: Enquiry) => {
     setConfirmDismissId(null);
     setOpenConvertId(enq.id);
+    // The form renders in the body, so booking straight from a collapsed
+    // row has to reveal it — and the owner's reason is worth seeing while
+    // you pick the slot.
+    setExpandedIds((prev) => new Set(prev).add(enq.id));
     setConvertDate(enq.preferred_date || new Date().toISOString().slice(0, 10));
     setConvertTime('10:00');
     setConvertVisitType(visitTypes[0]?.value || '');
+  };
+
+  const openDismissConfirm = (enq: Enquiry) => {
+    setOpenConvertId(null);
+    setConfirmDismissId(enq.id);
+    // Symmetric to openConvertForm: the confirmation lives in the body, and
+    // the summary chevron must still collapse the card afterwards.
+    setExpandedIds((prev) => new Set(prev).add(enq.id));
   };
 
   const convertMutation = useMutation({
@@ -216,47 +274,119 @@ export const EnquiriesScreen: React.FC = () => {
           <p style={{ color: 'var(--brown-500)', margin: 0 }}>{EMPTY_COPY[statusFilter]}</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        // Grid, not `flex-direction: column`. A column flex container sizes
+        // its items by measuring them at an intrinsic width first, and the
+        // wrap decision the row makes during that pass is the one that sticks
+        // — so a card whose actions do NOT wrap at the real width was still
+        // reserving the 56px second line, leaving dead space under short
+        // enquiries. Measured at nine viewport widths: flex column left up to
+        // 57px of phantom height per card, grid leaves 1px (the border).
+        // `minmax(0, 1fr)` rather than a bare `1fr`: a grid item's automatic
+        // minimum size is its MIN-CONTENT width, so without this the row's
+        // 207px of buttons plus the summary's minimum floor the track at
+        // ~534px and every card overhangs a 390px phone.
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '16px' }}>
           {sorted.map((enq) => {
             const fullName = [enq.first_name, enq.last_name].filter(Boolean).join(' ') || 'Unknown';
             const isNew = enq.status === 'NEW';
             const isConverted = enq.status === 'CONVERTED';
             const appointmentId = enq.appointment?.id || enq.converted_appointment_id || '';
+            const convertOpen = openConvertId === enq.id;
+            const dismissOpen = confirmDismissId === enq.id;
+            // The convert form and the dismiss confirmation live in the body,
+            // so acting on a collapsed card has to open it — otherwise the
+            // button appears to do nothing.
+            const bodyOpen = expandedIds.has(enq.id) || convertOpen || dismissOpen;
+            const bodyId = `enquiry-body-${enq.id}`;
 
             return (
               <div
                 key={enq.id}
                 className="glass-card"
-                style={{ padding: '20px', borderLeft: `5px solid ${BORDER_COLOR[enq.status] || 'var(--brown-500)'}` }}
+                style={{ padding: '16px 20px', borderLeft: `5px solid ${BORDER_COLOR[enq.status] || 'var(--brown-500)'}` }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brown-900)' }}>{fullName}</span>
-                      <span className={`badge ${BADGE_CLASS[enq.status] || 'badge-neutral'}`}>{humanizeStatus(enq.status)}</span>
-                    </div>
+                  <button
+                    type="button"
+                    className="enquiry-summary"
+                    aria-expanded={bodyOpen}
+                    aria-controls={bodyOpen ? bodyId : undefined}
+                    onClick={() => toggleExpanded(enq.id)}
+                  >
+                    <Icon name="chevronDown" size={16} className="enquiry-chevron" />
+                    {/* min-width: 0 lets the reason preview ellipsise instead of
+                        forcing the flex row wider than the card. */}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '17px', fontWeight: '800', color: 'var(--brown-900)' }}>{fullName}</span>
+                        <span className={`badge ${BADGE_CLASS[enq.status] || 'badge-neutral'}`}>{humanizeStatus(enq.status)}</span>
+                      </span>
 
-                    <div style={{ fontSize: '14px', color: 'var(--brown-800)', fontWeight: '600' }}>
-                      <Icon name="paw" size={14} /> {enq.pet_name}
-                      {enq.species_breed ? ` — ${enq.species_breed}` : ''}
-                    </div>
+                      <span style={{ display: 'block', fontSize: '14px', color: 'var(--brown-800)', fontWeight: '600', marginTop: '4px' }}>
+                        <Icon name="paw" size={14} /> {enq.pet_name}
+                        {enq.species_breed ? ` — ${enq.species_breed}` : ''}
+                      </span>
 
+                      {/* Only while collapsed — the body shows it in full, and
+                          two copies of the same sentence reads as a bug. */}
+                      {!bodyOpen && enq.reason && (
+                        <span
+                          className="enquiry-reason-preview"
+                          style={{ fontSize: '13px', color: 'var(--brown-700)', marginTop: '4px' }}
+                        >
+                          &ldquo;{enq.reason}&rdquo;
+                        </span>
+                      )}
+
+                      <span style={{ display: 'block', fontSize: '12px', color: 'var(--brown-500)', marginTop: '6px' }}>
+                        <Icon name="clock" size={12} /> {timeAgo(enq.created_at)}
+                      </span>
+                    </span>
+                  </button>
+
+                  {isNew && !convertOpen && !dismissOpen && (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => openConvertForm(enq)}
+                        className="btn btn-primary btn-sm"
+                        disabled={anyMutationPending}
+                      >
+                        <Icon name="check" /> Convert
+                      </button>
+                      <button
+                        onClick={() => openDismissConfirm(enq)}
+                        className="btn btn-ghost btn-sm"
+                        disabled={anyMutationPending}
+                      >
+                        <Icon name="close" /> Dismiss
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {bodyOpen && (
+                  <div
+                    id={bodyId}
+                    style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(62, 39, 35, 0.18)' }}
+                  >
                     {enq.reason && (
-                      <div style={{ fontSize: '13px', color: 'var(--brown-700)', marginTop: '6px', maxWidth: '520px' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--brown-700)', maxWidth: '620px', lineHeight: '1.55' }}>
                         &ldquo;{enq.reason}&rdquo;
                       </div>
                     )}
 
-                    <div style={{ fontSize: '12px', color: 'var(--brown-500)', marginTop: '8px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    {/* Tappable, because the next thing a doctor does with an
+                        enquiry is ring the owner back. */}
+                    <div style={{ fontSize: '12px', color: 'var(--brown-500)', marginTop: '10px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
                       {enq.phone && (
-                        <span>
+                        <a href={`tel:${enq.phone}`} style={{ color: 'var(--brown-700)', fontWeight: 600 }}>
                           <Icon name="phone" size={12} /> {enq.phone}
-                        </span>
+                        </a>
                       )}
                       {enq.email && (
-                        <span>
+                        <a href={`mailto:${enq.email}`} style={{ color: 'var(--brown-700)', fontWeight: 600 }}>
                           <Icon name="mail" size={12} /> {enq.email}
-                        </span>
+                        </a>
                       )}
                       {enq.preferred_specialist && (
                         <span>
@@ -265,7 +395,7 @@ export const EnquiriesScreen: React.FC = () => {
                       )}
                     </div>
 
-                    <div style={{ fontSize: '12px', color: 'var(--brown-500)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--brown-500)', marginTop: '6px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
                       <span>
                         <Icon name="clock" size={12} /> Submitted {friendlyDate(enq.created_at)}
                         {friendlyClock(enq.created_at) ? ` at ${friendlyClock(enq.created_at)}` : ''}
@@ -303,7 +433,7 @@ export const EnquiriesScreen: React.FC = () => {
                       </div>
                     )}
 
-                    {confirmDismissId === enq.id && (
+                    {dismissOpen && (
                       <div
                         style={{
                           marginTop: '12px',
@@ -315,7 +445,7 @@ export const EnquiriesScreen: React.FC = () => {
                           color: '#b71c1c',
                         }}
                       >
-                        <div style={{ marginBottom: '8px' }}>Dismiss this enquiry? It won't be converted into an appointment.</div>
+                        <div style={{ marginBottom: '8px' }}>Dismiss this enquiry? It won&apos;t be converted into an appointment.</div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
                             onClick={() => dismissMutation.mutate(enq.id)}
@@ -336,7 +466,7 @@ export const EnquiriesScreen: React.FC = () => {
                       </div>
                     )}
 
-                    {openConvertId === enq.id && (
+                    {convertOpen && (
                       <form
                         onSubmit={(e) => handleConvertSubmit(e, enq)}
                         style={{
@@ -417,29 +547,7 @@ export const EnquiriesScreen: React.FC = () => {
                       </form>
                     )}
                   </div>
-
-                  {isNew && openConvertId !== enq.id && confirmDismissId !== enq.id && (
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => openConvertForm(enq)}
-                        className="btn btn-primary btn-sm"
-                        disabled={anyMutationPending}
-                      >
-                        <Icon name="check" /> Convert
-                      </button>
-                      <button
-                        onClick={() => {
-                          setOpenConvertId(null);
-                          setConfirmDismissId(enq.id);
-                        }}
-                        className="btn btn-ghost btn-sm"
-                        disabled={anyMutationPending}
-                      >
-                        <Icon name="close" /> Dismiss
-                      </button>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             );
           })}

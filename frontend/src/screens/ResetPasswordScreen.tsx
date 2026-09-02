@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmPasswordReset } from '../api/auth';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
+import { PasswordField } from '../components/PasswordField';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -83,35 +84,27 @@ export const ResetPasswordScreen: React.FC = () => {
             </div>
           )}
 
-          <div className="field">
-            <label htmlFor="newPassword">New Password</label>
-            <input
-              id="newPassword"
-              type="password"
-              className="input-glass"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              autoComplete="new-password"
-              minLength={MIN_PASSWORD_LENGTH}
-              required
-            />
-          </div>
+          <PasswordField
+            id="newPassword"
+            label="New Password"
+            value={newPassword}
+            onChange={setNewPassword}
+            placeholder="At least 6 characters"
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            required
+          />
 
-          <div className="field">
-            <label htmlFor="confirmPassword">Confirm New Password</label>
-            <input
-              id="confirmPassword"
-              type="password"
-              className="input-glass"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter your new password"
-              autoComplete="new-password"
-              minLength={MIN_PASSWORD_LENGTH}
-              required
-            />
-          </div>
+          <PasswordField
+            id="confirmPassword"
+            label="Confirm New Password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            placeholder="Re-enter your new password"
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            required
+          />
 
           <button
             type="submit"
