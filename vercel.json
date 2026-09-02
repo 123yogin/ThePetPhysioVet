@@ -16,8 +16,6 @@
     { "source": "/admin/:path*", "destination": "/api/index" },
 
     { "source": "/app/(.*)", "destination": "/app/index.html" },
-    { "source": "/app",      "destination": "/app/index.html" },
-
-    { "source": "/((?!api/|admin/|app/).*)", "destination": "/index.html" }
+    { "source": "/app",      "destination": "/app/index.html" }
   ]
 }
