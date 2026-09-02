@@ -200,7 +200,7 @@ class AppointmentContractTests(ApiTestCase):
             "reason_notes": "limping"}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         assert_keys(self, r.data, self.REQUIRED, self.OPTIONAL, "Appointment create")
-        self.assertEqual(r.data["pet_id"], self.pet_a.id)
+        self.assertEqual(r.data["pet_id"], str(self.pet_a.id))
 
     def test_share_shape(self):
         self.auth(self.doctor)
@@ -229,7 +229,7 @@ class AppointmentContractTests(ApiTestCase):
         listed = self.client.get(f"{API}/appointments")
         self.assertEqual(listed.status_code, 200, listed.content)
         self.assertEqual(
-            {a["id"]: a["species"] for a in listed.data}[self.appt_a.id],
+            {a["id"]: a["species"] for a in listed.data}[str(self.appt_a.id)],
             self.pet_a.species,
         )
         created = self.client.post(f"{API}/appointments", {

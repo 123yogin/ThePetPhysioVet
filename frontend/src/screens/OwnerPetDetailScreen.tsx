@@ -38,7 +38,10 @@ const sectionHeading: React.CSSProperties = { fontSize: '18px', fontWeight: 700,
 
 export const OwnerPetDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const petId = Number(id);
+  // useParams gives `string | undefined`. Previously this was `Number(id)`,
+  // which quietly turned a missing param into NaN and requested /NaN; an empty
+  // string makes the bad case obvious instead of silently 404-ing.
+  const petId = id ?? '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { addFlash } = useFlash();

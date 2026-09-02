@@ -10,6 +10,8 @@ import { AppShell } from './components/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { LoginScreen } from './screens/LoginScreen';
+import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { ResetPasswordScreen } from './screens/ResetPasswordScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { PetDetailScreen } from './screens/PetDetailScreen';
@@ -39,6 +41,8 @@ export const AppRoutes: React.FC = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginScreen />} />
+            <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+            <Route path="/reset-password" element={<ResetPasswordScreen />} />
             <Route path="/" element={<RoleLanding />} />
 
             {/* Doctor Routes */}

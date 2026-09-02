@@ -55,3 +55,17 @@ export async function updateProfile(data: Partial<User>): Promise<User> {
     data,
   });
 }
+
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  return http<{ detail: string }>('/auth/password-reset/request', {
+    method: 'POST',
+    data: { email },
+  });
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<{ detail: string }> {
+  return http<{ detail: string }>('/auth/password-reset/confirm', {
+    method: 'POST',
+    data: { token, new_password: newPassword },
+  });
+}

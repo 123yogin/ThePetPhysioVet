@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.db import models
@@ -6,6 +7,7 @@ from django.core.validators import MinValueValidator
 
 
 class UserProfile(AbstractUser):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     ROLE_CHOICES = (
         ("DOCTOR", "Doctor"),
         ("OWNER", "Pet Owner"),
@@ -38,6 +40,7 @@ class UserProfile(AbstractUser):
 
 
 class Pet(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Ownership FKs (nullable — backfilled by data migration, unmatched rows stay
     # doctor-visible only per API_CONTRACT.md).
     owner = models.ForeignKey(
@@ -72,6 +75,7 @@ class Pet(models.Model):
 
 
 class Appointment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # B1/B2 fix (2026-08-21): the three original codes below did not cover
     # the services the clinic actually offers (hydrotherapy, laser therapy),
     # so all three frontend booking forms — each hardcoding its own
@@ -120,6 +124,7 @@ class Appointment(models.Model):
 
 
 class DiagnosticReport(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     """File-upload diagnostic report (X-ray / MRI / lab report etc).
 
     Matches the frontend `Diagnosis` type in `frontend/src/lib/types.ts` — this is
@@ -152,6 +157,7 @@ class DiagnosticReport(models.Model):
 
 
 class TreatmentPlan(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     STATUS_CHOICES = (
         ("ACTIVE", "Active"),
         ("COMPLETED", "Completed"),
@@ -179,6 +185,7 @@ class TreatmentPlan(models.Model):
 
 
 class ProgressNote(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     plan = models.ForeignKey(TreatmentPlan, on_delete=models.CASCADE, related_name="progress_notes")
     session_no = models.PositiveIntegerField(default=1)
     notes = models.TextField()
@@ -192,6 +199,7 @@ class ProgressNote(models.Model):
 
 
 class Invoice(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     PAYMENT_STATUS_CHOICES = (
         ("PAID", "Paid"),
         ("PENDING", "Pending"),
@@ -260,6 +268,7 @@ class Invoice(models.Model):
 
 
 class LineItem(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="line_items")
     description = models.CharField(max_length=255)
     # Known-issue #4 (API_CONTRACT.md §3 Billing, "money guards"): a negative
@@ -279,6 +288,7 @@ class LineItem(models.Model):
 
 
 class Payment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     STATUS_CHOICES = (
         ("SUCCESS", "Success"),
         ("PENDING", "Pending"),
@@ -301,6 +311,7 @@ class Payment(models.Model):
 
 
 class Package(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     invoice = models.OneToOneField(Invoice, on_delete=models.CASCADE, related_name="package")
     total_sessions = models.PositiveIntegerField(default=0)
     used_sessions = models.PositiveIntegerField(default=0)
@@ -314,6 +325,7 @@ class Package(models.Model):
 
 
 class Notification(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="notifications")
     type = models.CharField(max_length=50)
     message = models.TextField()
@@ -329,6 +341,7 @@ class Notification(models.Model):
 
 
 class NotificationPref(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner_phone = models.CharField(max_length=50, unique=True)
     sms_opt_out = models.BooleanField(default=False)
 
@@ -337,6 +350,7 @@ class NotificationPref(models.Model):
 
 
 class QueryThread(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     pet = models.OneToOneField(Pet, on_delete=models.CASCADE, related_name="query_thread")
 
     def __str__(self):
@@ -344,6 +358,7 @@ class QueryThread(models.Model):
 
 
 class QueryMessage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     thread = models.ForeignKey(QueryThread, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(
         UserProfile, on_delete=models.SET_NULL, null=True, blank=True,
@@ -362,6 +377,7 @@ class QueryMessage(models.Model):
 
 
 class QueryAttachment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     message = models.ForeignKey(QueryMessage, on_delete=models.CASCADE, related_name="attachments")
     file = models.FileField(upload_to="query_attachments/")
     original_filename = models.CharField(max_length=255, blank=True, default="")
@@ -370,3 +386,37 @@ class QueryAttachment(models.Model):
 
     def __str__(self):
         return self.original_filename or f"Attachment #{self.pk}"
+
+
+class PasswordResetToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    """Single-use, time-limited token backing `POST
+    /auth/password-reset/{request,confirm}` (API_CONTRACT.md §3 Auth).
+
+    SECURITY: only a SHA-256 hash of the raw token is ever stored here (see
+    `views._issue_password_reset` / `views.password_reset_confirm_view`) — a
+    leaked `db.sqlite3` (or its Postgres equivalent) must not yield a working
+    reset link. SHA-256 rather than bcrypt/PBKDF2 is deliberate: the raw
+    value is `secrets.token_urlsafe(32)` — 256 bits of CSPRNG entropy, not a
+    low-entropy human-chosen password — so a slow, salted password hash
+    defends against nothing here and only adds needless CPU cost per
+    request. Lookups are `token_hash=<sha256 of presented token>` (an
+    indexed equality query, never an iterate-and-compare over all rows),
+    which is also what keeps the comparison free of raw-token-dependent
+    timing: the app never compares the raw token to anything, only opaque
+    hashes neither side can usefully time-attack.
+    """
+    user = models.ForeignKey(
+        UserProfile, on_delete=models.CASCADE, related_name="password_reset_tokens",
+    )
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        state = "used" if self.used_at else "unused"
+        return f"PasswordResetToken(user={self.user_id}, {state})"

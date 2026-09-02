@@ -47,6 +47,11 @@ class ApiTestCase(APITestCase):
 
     def setUp(self):
         super().setUp()
+        # Password-reset rate limiting (views.py `_rate_limited`) uses
+        # Django's process-level cache, which otherwise persists counters
+        # across test methods and pollutes unrelated tests.
+        from django.core.cache import cache
+        cache.clear()
         self.doctor = UserProfile.objects.create_user(
             username="drwho", password="D0ctorPass!23", role="DOCTOR",
             first_name="Dana", last_name="Who", phone="9990000001",

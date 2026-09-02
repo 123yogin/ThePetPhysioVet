@@ -68,10 +68,15 @@ class SpaRouteSmokeTests(ApiTestCase):
         for f in FRONTEND_SRC.rglob("*.ts*"):
             for m in self.PATH_RE.finditer(f.read_text()):
                 raw = m.group(1)
-                # normalise template holes: `/pets/${id}` -> `/pets/1`, but a
-                # hole not preceded by `/` is an optional query string
-                # (`/pets${query}`) and collapses to nothing.
-                concrete = re.sub(r"(?<=/)\$\{[^}]+\}", "1", raw)
+                # normalise template holes: `/pets/${id}` -> a syntactically
+                # valid placeholder UUID (every path pk is a UUID since the
+                # 2026-09-02 UUID primary key migration — see
+                # docs/API_CONTRACT.md), but a hole not preceded by `/` is an
+                # optional query string (`/pets${query}`) and collapses to
+                # nothing.
+                concrete = re.sub(
+                    r"(?<=/)\$\{[^}]+\}", "00000000-0000-0000-0000-000000000000", raw
+                )
                 concrete = re.sub(r"\$\{[^}]+\}", "", concrete)
                 if concrete.startswith("/"):
                     paths.add((concrete, f"{f.relative_to(REPO)}"))

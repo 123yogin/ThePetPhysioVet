@@ -3,7 +3,20 @@ import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './token
 // Endpoints that must never trigger a refresh attempt on 401 — attempting to
 // refresh for any of these would either be nonsensical (login/signup are
 // unauthenticated) or loop forever (refresh itself).
-const NO_REFRESH_PATHS = ['/auth/login', '/auth/signup', '/auth/refresh'];
+const NO_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/refresh',
+  // Password reset is the flow a locked-out user reaches for, and they often
+  // still have a stale access token in localStorage from an old session. DRF
+  // applies JWTAuthentication globally, so an expired bearer token 401s these
+  // routes *before* their AllowAny permission is consulted. Without this
+  // exemption the interceptor would then try to refresh with an equally dead
+  // refresh token, fail, clear storage and bounce the user to /login —
+  // silently killing the very reset they were in the middle of.
+  '/auth/password-reset/request',
+  '/auth/password-reset/confirm',
+];
 
 function isAuthExemptPath(endpoint: string): boolean {
   const path = endpoint.split('?')[0];

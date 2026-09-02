@@ -7,7 +7,10 @@ import { humanizeStatus } from '../lib/labels';
 
 export const InvoiceDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const invoiceId = Number(id);
+  // useParams gives `string | undefined`. Previously this was `Number(id)`,
+  // which quietly turned a missing param into NaN and requested /NaN; an empty
+  // string makes the bad case obvious instead of silently 404-ing.
+  const invoiceId = id ?? '';
   const { addFlash } = useFlash();
 
   const [paymentAmount, setPaymentAmount] = useState('');

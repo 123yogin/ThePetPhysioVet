@@ -5,7 +5,7 @@ import { humanizeStatus, friendlyDate } from '../lib/labels';
 import { Icon } from '../components/Icon';
 
 export const OwnerBillingScreen: React.FC = () => {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: invoices, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ownerInvoices'],
@@ -19,11 +19,11 @@ export const OwnerBillingScreen: React.FC = () => {
     error: detailError,
   } = useQuery({
     queryKey: ['ownerInvoiceDetail', expandedId],
-    queryFn: () => fetchOwnerInvoiceDetail(expandedId as number),
+    queryFn: () => fetchOwnerInvoiceDetail(expandedId as string),
     enabled: expandedId !== null,
   });
 
-  const toggle = (id: number) => {
+  const toggle = (id: string) => {
     setExpandedId((current) => (current === id ? null : id));
   };
 

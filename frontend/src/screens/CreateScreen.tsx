@@ -53,7 +53,7 @@ export const CreateScreen: React.FC = () => {
     setLoading(true);
     try {
       const appt = await createAppointment({
-        pet: Number(petId),
+        pet: petId,
         visit_type: visitType,
         date,
         time,

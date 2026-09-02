@@ -6,7 +6,7 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function fetchAppointments(params?: {
-  pet?: number;
+  pet?: string;
   owner?: string;
   date?: string;
 }): Promise<Appointment[]> {
@@ -20,7 +20,7 @@ export async function fetchAppointments(params?: {
 }
 
 export async function createAppointment(data: {
-  pet: number;
+  pet: string;
   visit_type: string;
   date: string;
   time: string;
@@ -32,12 +32,12 @@ export async function createAppointment(data: {
   });
 }
 
-export async function fetchAppointmentDetail(id: number): Promise<Appointment> {
+export async function fetchAppointmentDetail(id: string): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}`);
 }
 
 export async function rescheduleAppointment(
-  id: number,
+  id: string,
   data: { date: string; time: string }
 ): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}/reschedule`, {
@@ -46,25 +46,25 @@ export async function rescheduleAppointment(
   });
 }
 
-export async function completeAppointment(id: number): Promise<Appointment> {
+export async function completeAppointment(id: string): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}/complete`, {
     method: 'POST',
   });
 }
 
-export async function approveReschedule(id: number): Promise<Appointment> {
+export async function approveReschedule(id: string): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}/reschedule-approve`, {
     method: 'POST',
   });
 }
 
-export async function rejectReschedule(id: number): Promise<Appointment> {
+export async function rejectReschedule(id: string): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}/reschedule-reject`, {
     method: 'POST',
   });
 }
 
-export async function fetchShareAppointment(id: number): Promise<any> {
+export async function fetchShareAppointment(id: string): Promise<any> {
   return http(`/appointments/${id}/share`);
 }
 
@@ -83,6 +83,6 @@ export async function fetchAppointmentOptions(): Promise<{
 }
 
 /** Pending -> Confirmed. Owner-requested bookings had no way out of Pending. */
-export async function confirmAppointment(id: number): Promise<Appointment> {
+export async function confirmAppointment(id: string): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}/confirm`, { method: 'POST' });
 }

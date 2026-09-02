@@ -973,7 +973,10 @@ class AppointmentPetScopingTests(ApiTestCase):
             "visit_type": "Followup",
         }, format="json")
         self.assertEqual(res.status_code, 400)
-        self.assertIn("pet", res.data)
+        # Errors are RFC-7807 now (petphysio/exceptions.py): the per-field map
+        # lives under `errors`, with a flattened human sentence in `detail`.
+        self.assertIn("pet", res.data["errors"])
+        self.assertIn("pet", res.data["detail"])
         self.assertFalse(
             Appointment.objects.filter(pet=self.pet_a, date="2026-12-01").exists()
         )

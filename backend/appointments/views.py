@@ -12,27 +12,34 @@ owner-portal routes (`/owner/*`). See §4 for the authZ rules enforced here:
 - No anonymous fallback user anywhere.
 """
 
+import hashlib
 import re
+import secrets
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
+from django.conf import settings
+from django.core.cache import cache
+from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
+    PasswordResetToken,
 )
 from .permissions import IsDoctor, IsOwner, IsObjectOwner
 from .serializers import (
@@ -41,7 +48,7 @@ from .serializers import (
     InvoiceSerializer, LineItemSerializer, PaymentSerializer, PackageSerializer,
     NotificationSerializer, NotificationPrefSerializer,
     QueryThreadSerializer, QueryMessageSerializer, QueryAttachmentSerializer,
-    OwnerPetHistorySerializer,
+    OwnerPetHistorySerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
 )
 
 from django.contrib.auth import authenticate
@@ -65,6 +72,18 @@ def problem(status_code, title, detail=None):
     """
     body = {"type": "about:blank", "title": title, "status": status_code, "detail": detail or title}
     return Response(body, status=status_code)
+
+
+def _first_error_detail(errors):
+    """Flatten a DRF serializer `.errors` dict into one human-readable
+    string for a `problem()` `detail` — see `problem()`'s docstring:
+    without this, a serializer-validation 400 has no `detail` key at all
+    and the SPA falls through to the literal words "Bad Request".
+    """
+    for field, msgs in errors.items():
+        first = msgs[0] if isinstance(msgs, (list, tuple)) and msgs else msgs
+        return f"{field}: {first}"
+    return "Invalid input."
 
 
 def _issue_tokens(user):
@@ -206,6 +225,178 @@ def refresh_view(request):
     except TokenError:
         return problem(401, "Invalid or expired refresh token.")
     return Response({"access": access, "refresh": new_refresh})
+
+
+# --- Password reset ---------------------------------------------------------
+#
+# API_CONTRACT.md §3 Auth / §4.1 (amended): AllowAny on exactly five routes
+# now — /auth/login, /auth/signup, /auth/refresh, and these two — all for the
+# same underlying reason as /auth/refresh: the caller is, by construction,
+# not holding a valid access token yet. Neither view ever mints a session
+# token itself; `confirm` only ever changes a password and ends existing
+# sessions.
+
+# Fixed-window rate limits (CLAUDE.md: "Redis is not deployed" — Django's
+# default LocMemCache is enough for a single-process deployment; swap the
+# CACHES backend for a shared one before running >1 web process). Two
+# independent windows — per-email and per-IP — so neither a targeted attack
+# on one address nor a spray across many addresses from one source can
+# email-bomb this endpoint into the ground.
+PASSWORD_RESET_WINDOW_SECONDS = 15 * 60
+PASSWORD_RESET_EMAIL_LIMIT = 5
+PASSWORD_RESET_IP_LIMIT = 20
+
+
+def _rate_limited(key, limit, window_seconds):
+    """Fixed-window counter. Returns True once `limit` requests have
+    already landed for `key` within the current window (and leaves the
+    counter alone past that point, i.e. never resets early from being
+    hammered).
+    """
+    try:
+        count = cache.incr(key)
+    except ValueError:
+        # First request in a fresh window — cache.incr() raises ValueError
+        # when the key doesn't exist yet (rather than starting at 0).
+        cache.set(key, 1, timeout=window_seconds)
+        return False
+    return count > limit
+
+
+def _client_ip(request):
+    return request.META.get("REMOTE_ADDR") or "unknown"
+
+
+def _issue_password_reset(user):
+    """Create (and email) a fresh reset token for `user`, invalidating any
+    earlier unused ones first — "requesting a second token invalidates the
+    first" (task spec). Marking old rows `used_at` rather than deleting them
+    keeps a full audit trail of every token ever issued.
+    """
+    now = timezone.now()
+    PasswordResetToken.objects.filter(user=user, used_at__isnull=True).update(used_at=now)
+
+    raw_token = secrets.token_urlsafe(32)
+    # SHA-256, not bcrypt/PBKDF2 — see PasswordResetToken's docstring: the
+    # raw value is 256 bits of CSPRNG entropy, not a human-chosen password,
+    # so a slow hash defends against nothing and only costs CPU.
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    PasswordResetToken.objects.create(
+        user=user, token_hash=token_hash, expires_at=now + timedelta(minutes=30),
+    )
+
+    reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password?token={raw_token}"
+    send_mail(
+        subject="Reset your Pet Physio Vet password",
+        message=(
+            "We received a request to reset the password for your Pet Physio "
+            "Vet account.\n\n"
+            f"Reset your password (link valid for 30 minutes): {reset_url}\n\n"
+            "If you did not request this, no action is needed — your password "
+            "has not been changed."
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+
+@api_view(["POST"])
+# authentication_classes([]) is load-bearing, not tidiness. DRF applies
+# JWTAuthentication globally, and SimpleJWT RAISES on an expired or malformed
+# bearer token -- producing a 401 before AllowAny is ever consulted. A
+# locked-out user is exactly the person most likely to still have a stale
+# token in localStorage, so without this the password-reset route 401s the
+# only people who need it. Verified: junk bearer -> 401, no header -> 400.
+@authentication_classes([])
+@permission_classes([AllowAny])
+def password_reset_request_view(request):
+    """POST /auth/password-reset/request — {email} -> 200 always.
+
+    Deliberately returns the identical 200 body regardless of whether
+    `email` belongs to an account: a different status/shape/body for a
+    known vs unknown address is a user-enumeration oracle, and this app
+    holds clinical records (API_CONTRACT.md §3).
+    """
+    serializer = PasswordResetRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return problem(400, "Invalid input", _first_error_detail(serializer.errors))
+    email = serializer.validated_data["email"].strip().lower()
+
+    generic_response = Response(
+        {"detail": "If an account exists for that email, a password reset link has been sent."},
+        status=status.HTTP_200_OK,
+    )
+
+    # Rate-limit BEFORE the DB lookup and on the raw email string / IP only
+    # — never conditioned on whether the address actually matches a user,
+    # so a 429 here leaks nothing about existence either.
+    ip = _client_ip(request)
+    if _rate_limited(f"pwreset:ip:{ip}", PASSWORD_RESET_IP_LIMIT, PASSWORD_RESET_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many password reset requests. Try again later.")
+    if _rate_limited(f"pwreset:email:{email}", PASSWORD_RESET_EMAIL_LIMIT, PASSWORD_RESET_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many password reset requests. Try again later.")
+
+    user = UserProfile.objects.filter(email__iexact=email, is_active=True).first()
+    if user is not None:
+        _issue_password_reset(user)
+
+    return generic_response
+
+
+@api_view(["POST"])
+# authentication_classes([]) is load-bearing, not tidiness. DRF applies
+# JWTAuthentication globally, and SimpleJWT RAISES on an expired or malformed
+# bearer token -- producing a 401 before AllowAny is ever consulted. A
+# locked-out user is exactly the person most likely to still have a stale
+# token in localStorage, so without this the password-reset route 401s the
+# only people who need it. Verified: junk bearer -> 401, no header -> 400.
+@authentication_classes([])
+@permission_classes([AllowAny])
+def password_reset_confirm_view(request):
+    """POST /auth/password-reset/confirm — {token, new_password} -> 200.
+
+    400 (RFC-7807, real `detail`) on invalid input, an invalid/garbage
+    token, an expired token, or an already-used token — same generic detail
+    for all three token failure modes so the response itself never signals
+    which one occurred.
+    """
+    serializer = PasswordResetConfirmSerializer(data=request.data)
+    if not serializer.is_valid():
+        return problem(400, "Invalid input", _first_error_detail(serializer.errors))
+
+    raw_token = serializer.validated_data["token"]
+    new_password = serializer.validated_data["new_password"]
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+    invalid_detail = "This password reset link is invalid or has expired."
+    try:
+        # Looked up by hash, not iterated — see PasswordResetToken's
+        # docstring for why this is also the "constant time" comparison
+        # the task calls for: the app never compares the raw token to
+        # anything itself, only an indexed hash-equality lookup.
+        reset_token = PasswordResetToken.objects.select_related("user").get(token_hash=token_hash)
+    except PasswordResetToken.DoesNotExist:
+        return problem(400, "Invalid token", invalid_detail)
+
+    now = timezone.now()
+    if reset_token.used_at is not None or reset_token.expires_at <= now:
+        return problem(400, "Invalid token", invalid_detail)
+
+    user = reset_token.user
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+
+    reset_token.used_at = now
+    reset_token.save(update_fields=["used_at"])
+
+    # A password reset must end sessions an attacker may hold — blacklist
+    # every outstanding refresh token for this user (same blacklist path
+    # /auth/logout already uses).
+    for outstanding in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=outstanding)
+
+    return Response({"detail": "Password has been reset successfully."}, status=status.HTTP_200_OK)
 
 
 @api_view(["PATCH", "PUT"])

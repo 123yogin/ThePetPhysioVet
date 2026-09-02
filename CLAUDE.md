@@ -127,6 +127,38 @@ animal, so every dog rendered as a generic paw while "Persian Cat" worked by coi
 
 **Palette unchanged: 47 distinct colour values before and after, identical sets.**
 
+## Identity & recovery — 2026-09-02
+
+**All 16 models are now on UUID primary keys** (migrations `0012`–`0014`). Sequential ids
+leaked business volume in URLs and had already produced one shipped bug — a treatment plan
+titled to the user as "Rehab Regimen #7", a primary key rendered as a label. The swap was
+data-preserving: row counts and every relationship were diffed before and after, including
+`token_blacklist_outstandingtoken` (612 rows), which had to be remapped with raw SQL because
+it FKs to `UserProfile` from another app's migration state. **A UUID must be written as
+`uuid.hex` there, not `str(uuid)`** — the hyphenated form silently fails SQLite's FK check.
+
+The frontend had to change with it: `Number(id)` on a UUID is `NaN`, so seven detail screens
+would have requested `/pets/NaN`. 61 numeric id declarations became strings; `useParams`
+returns `string | undefined`, previously masked by that same `Number()`.
+
+**Password reset now exists** (`POST /auth/password-reset/request` and `/confirm`). It was
+absent entirely — a user who forgot their password was locked out permanently. Tokens are
+`secrets.token_urlsafe(32)`, stored only as a SHA-256 hash, single-use, 30-minute expiry,
+rate-limited per email and per IP; a reset blacklists the user's outstanding refresh tokens.
+**The request endpoint returns an identical 200 for known and unknown addresses** — verified
+byte-identical through the UI — because a different response is a user-enumeration oracle on
+a product holding clinical records.
+
+Both reset views set `authentication_classes([])`. This is load-bearing: DRF applies
+JWTAuthentication globally and SimpleJWT *raises* on an expired bearer token, producing a 401
+before `AllowAny` is consulted — so the route 401'd exactly the locked-out users who needed
+it, and the SPA's refresh interceptor then bounced them to `/login`.
+
+**Errors are now RFC-7807 everywhere** (`petphysio/exceptions.py`), closing the old debt item.
+DRF validation errors previously had no `detail`, so the SPA fell through to `statusText` and
+clinicians saw the literal words "Bad Request"; 404s leaked Django's "No Pet matches the given
+query." 404 wording is deliberately identical for "missing" and "not yours".
+
 ## Remediation sprint — still open
 
 **Still open — do not assume these are done:**
@@ -138,10 +170,9 @@ animal, so every dog rendered as a generic paw while "Persian Cat" worked by coi
    when the owner's existing pets unambiguously share a doctor, so the very first pet —
    and any appointment booked for it — is unrouted. Needs a product decision (clinic
    pool vs manual claim), not a one-line fix.
-3. **RFC-7807 error shape is partial** — hand-rolled errors only; DRF validation
-   errors still use the stock `{field: [...]}` shape. This is user-visible: the SPA
-   falls through to `response.statusText`, so a validation failure flashes the literal
-   words "Bad Request".
+3. **Owner-booked appointments for a pet with no doctor** still get `doctor=None`.
+   Narrowed a lot (both pet-creation paths assign one, and NULL-doctor rows are a
+   claimable pool) but a brand-new owner's very first pet can still be unassigned.
 4. **`Notification` and `Package` are dead weight.** Models, serializers and (for
    Notification) two live endpoints exist; **zero rows have ever been created by the
    app** — only by `seed_data`. Nothing writes a Notification anywhere, and the invoice

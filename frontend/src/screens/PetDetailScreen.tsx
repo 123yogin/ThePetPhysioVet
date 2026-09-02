@@ -30,7 +30,10 @@ function sexLabel(sex?: string | null): string {
 
 export const PetDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const petId = Number(id);
+  // useParams gives `string | undefined`. Previously this was `Number(id)`,
+  // which quietly turned a missing param into NaN and requested /NaN; an empty
+  // string makes the bad case obvious instead of silently 404-ing.
+  const petId = id ?? '';
   const { addFlash } = useFlash();
   const [searchParams] = useSearchParams();
 
@@ -52,16 +55,16 @@ export const PetDetailScreen: React.FC = () => {
   const [diagFile, setDiagFile] = useState<File | null>(null);
   const [diagType, setDiagType] = useState('XRAY');
   const [uploadingDiagnosis, setUploadingDiagnosis] = useState(false);
-  const [deletingDiagnosisId, setDeletingDiagnosisId] = useState<number | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deletingDiagnosisId, setDeletingDiagnosisId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [therapies, setTherapies] = useState('');
   const [frequency, setFrequency] = useState('WEEKLY');
   const [duration, setDuration] = useState('4WK');
   const [creatingPlan, setCreatingPlan] = useState(false);
 
-  const [noteTextByPlan, setNoteTextByPlan] = useState<Record<number, string>>({});
-  const [savingNotePlanId, setSavingNotePlanId] = useState<number | null>(null);
+  const [noteTextByPlan, setNoteTextByPlan] = useState<Record<string, string>>({});
+  const [savingNotePlanId, setSavingNotePlanId] = useState<string | null>(null);
 
   const [replyMessage, setReplyMessage] = useState('');
   const [replyFile, setReplyFile] = useState<File | null>(null);
@@ -122,7 +125,7 @@ export const PetDetailScreen: React.FC = () => {
     }
   };
 
-  const handleDeleteDiagnosis = async (diagnosisId: number) => {
+  const handleDeleteDiagnosis = async (diagnosisId: string) => {
     if (confirmDeleteId !== diagnosisId) {
       // First click just arms the confirmation — nothing destructive happens yet.
       setConfirmDeleteId(diagnosisId);
@@ -162,7 +165,7 @@ export const PetDetailScreen: React.FC = () => {
     }
   };
 
-  const handleAddNote = async (planId: number) => {
+  const handleAddNote = async (planId: string) => {
     const text = (noteTextByPlan[planId] || '').trim();
     if (!text) {
       addFlash('Please type a note before saving', 'error');

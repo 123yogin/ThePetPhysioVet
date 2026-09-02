@@ -63,7 +63,7 @@ export const InvoiceFormScreen: React.FC = () => {
     setLoading(true);
     try {
       const inv = await createInvoice({
-        pet_id: Number(petId),
+        pet_id: petId,
         line_items: items,
         tax: Number(tax),
         payment_mode: paymentMode,

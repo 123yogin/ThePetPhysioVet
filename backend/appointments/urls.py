@@ -3,7 +3,7 @@ from django.urls import path
 from .views import (
     # Auth
     current_user_view, login_view, signup_view, logout_view, update_profile_view,
-    refresh_view,
+    refresh_view, password_reset_request_view, password_reset_confirm_view,
     # Dashboard
     dashboard_stats_view,
     # Pets
@@ -42,51 +42,53 @@ urlpatterns = [
     path("auth/logout", logout_view, name="auth-logout"),
     path("auth/profile", update_profile_view, name="auth-profile"),
     path("auth/refresh", refresh_view, name="auth-refresh"),
+    path("auth/password-reset/request", password_reset_request_view, name="auth-password-reset-request"),
+    path("auth/password-reset/confirm", password_reset_confirm_view, name="auth-password-reset-confirm"),
 
     # --- Dashboard ---
     path("dashboard/stats", dashboard_stats_view, name="dashboard-stats"),
 
     # --- Pets ---
     path("pets", pets_view, name="pets"),
-    path("pets/<int:pk>", pet_detail_view, name="pet-detail"),
-    path("pets/<int:pk>/diagnoses", pet_diagnoses_view, name="pet-diagnoses"),
-    path("pets/<int:pk>/treatment-plans", pet_treatment_plans_view, name="pet-treatment-plans"),
-    path("pets/<int:pk>/queries", pet_queries_view, name="pet-queries"),
+    path("pets/<uuid:pk>", pet_detail_view, name="pet-detail"),
+    path("pets/<uuid:pk>/diagnoses", pet_diagnoses_view, name="pet-diagnoses"),
+    path("pets/<uuid:pk>/treatment-plans", pet_treatment_plans_view, name="pet-treatment-plans"),
+    path("pets/<uuid:pk>/queries", pet_queries_view, name="pet-queries"),
 
     # --- Diagnostic reports ---
-    path("diagnoses/<int:pk>", diagnostic_report_detail_view, name="diagnosis-detail"),
+    path("diagnoses/<uuid:pk>", diagnostic_report_detail_view, name="diagnosis-detail"),
 
     # --- Treatment plans ---
-    path("treatment-plans/<int:pk>", treatment_plan_detail_view, name="treatment-plan-detail"),
+    path("treatment-plans/<uuid:pk>", treatment_plan_detail_view, name="treatment-plan-detail"),
     path(
-        "treatment-plans/<int:pk>/progress-notes",
+        "treatment-plans/<uuid:pk>/progress-notes",
         treatment_plan_progress_notes_view,
         name="treatment-plan-progress-notes",
     ),
 
     # --- Appointments ---
     path("appointments", appointments_view, name="appointments"),
-    path("appointments/<int:pk>", appointment_detail_view, name="appointment-detail"),
-    path("appointments/<int:pk>/reschedule", appointment_reschedule_view, name="appointment-reschedule"),
-    path("appointments/<int:pk>/complete", appointment_complete_view, name="appointment-complete"),
+    path("appointments/<uuid:pk>", appointment_detail_view, name="appointment-detail"),
+    path("appointments/<uuid:pk>/reschedule", appointment_reschedule_view, name="appointment-reschedule"),
+    path("appointments/<uuid:pk>/complete", appointment_complete_view, name="appointment-complete"),
     path(
-        "appointments/<int:pk>/reschedule-approve",
+        "appointments/<uuid:pk>/reschedule-approve",
         appointment_reschedule_approve_view,
         name="appointment-reschedule-approve",
     ),
     path(
-        "appointments/<int:pk>/reschedule-reject",
+        "appointments/<uuid:pk>/reschedule-reject",
         appointment_reschedule_reject_view,
         name="appointment-reschedule-reject",
     ),
-    path("appointments/<int:pk>/share", appointment_share_view, name="appointment-share"),
-    path("appointments/<int:pk>/confirm", appointment_confirm_view, name="appointment-confirm"),
+    path("appointments/<uuid:pk>/share", appointment_share_view, name="appointment-share"),
+    path("appointments/<uuid:pk>/confirm", appointment_confirm_view, name="appointment-confirm"),
     path("appointment-options", appointment_options_view, name="appointment-options"),
 
     # --- Billing ---
     path("invoices", invoices_view, name="invoices"),
-    path("invoices/<int:pk>", invoice_detail_view, name="invoice-detail"),
-    path("invoices/<int:pk>/payments", invoice_payments_view, name="invoice-payments"),
+    path("invoices/<uuid:pk>", invoice_detail_view, name="invoice-detail"),
+    path("invoices/<uuid:pk>/payments", invoice_payments_view, name="invoice-payments"),
     path("revenue", revenue_view, name="revenue"),
 
     # --- Notifications ---
@@ -99,26 +101,26 @@ urlpatterns = [
 
     # --- Owner portal ---
     path("owner/pets", owner_pets_view, name="owner-pets"),
-    path("owner/pets/<int:pk>", owner_pet_detail_view, name="owner-pet-detail"),
-    path("owner/pets/<int:pk>/diagnoses", owner_pet_diagnoses_view, name="owner-pet-diagnoses"),
-    path("owner/pets/<int:pk>/history", owner_pet_history_view, name="owner-pet-history"),
-    path("owner/pets/<int:pk>/queries", owner_pet_queries_view, name="owner-pet-queries"),
+    path("owner/pets/<uuid:pk>", owner_pet_detail_view, name="owner-pet-detail"),
+    path("owner/pets/<uuid:pk>/diagnoses", owner_pet_diagnoses_view, name="owner-pet-diagnoses"),
+    path("owner/pets/<uuid:pk>/history", owner_pet_history_view, name="owner-pet-history"),
+    path("owner/pets/<uuid:pk>/queries", owner_pet_queries_view, name="owner-pet-queries"),
     path("owner/appointments", owner_appointments_view, name="owner-appointments"),
     path(
-        "owner/appointments/<int:pk>/accept",
+        "owner/appointments/<uuid:pk>/accept",
         owner_appointment_accept_view,
         name="owner-appointment-accept",
     ),
     path(
-        "owner/appointments/<int:pk>/reschedule-request",
+        "owner/appointments/<uuid:pk>/reschedule-request",
         owner_appointment_reschedule_request_view,
         name="owner-appointment-reschedule-request",
     ),
     path(
-        "owner/appointments/<int:pk>/cancel",
+        "owner/appointments/<uuid:pk>/cancel",
         owner_appointment_cancel_view,
         name="owner-appointment-cancel",
     ),
     path("owner/invoices", owner_invoices_view, name="owner-invoices"),
-    path("owner/invoices/<int:pk>", owner_invoice_detail_view, name="owner-invoice-detail"),
+    path("owner/invoices/<uuid:pk>", owner_invoice_detail_view, name="owner-invoice-detail"),
 ]

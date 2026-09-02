@@ -13,7 +13,7 @@ export async function createOwnerPet(formData: FormData): Promise<Pet> {
 }
 
 export async function createOwnerAppointment(data: {
-  pet_id: number;
+  pet_id: string;
   date: string;
   time: string;
   visit_type: string;
@@ -26,19 +26,19 @@ export async function createOwnerAppointment(data: {
 }
 
 export async function fetchOwnerPetDetail(
-  id: number
+  id: string
 ): Promise<Pet & { diagnoses: Diagnosis[]; treatment_plans: TreatmentPlan[] }> {
   return http(`/owner/pets/${id}`);
 }
 
-export async function addOwnerPetDiagnosis(petId: number, formData: FormData): Promise<Diagnosis> {
+export async function addOwnerPetDiagnosis(petId: string, formData: FormData): Promise<Diagnosis> {
   return http<Diagnosis>(`/owner/pets/${petId}/diagnoses`, {
     method: 'POST',
     data: formData,
   });
 }
 
-export async function updateOwnerPetHistory(petId: number, data: {
+export async function updateOwnerPetHistory(petId: string, data: {
   medical_history?: string;
   complaint?: string;
   notes?: string;
@@ -55,11 +55,11 @@ export async function fetchOwnerAppointments(): Promise<Appointment[]> {
   return http<Appointment[]>('/owner/appointments');
 }
 
-export async function acceptOwnerAppointment(id: number): Promise<Appointment> {
+export async function acceptOwnerAppointment(id: string): Promise<Appointment> {
   return http<Appointment>(`/owner/appointments/${id}/accept`, { method: 'POST' });
 }
 
-export async function requestOwnerReschedule(id: number, data: { date: string; time: string; reason: string }): Promise<Appointment> {
+export async function requestOwnerReschedule(id: string, data: { date: string; time: string; reason: string }): Promise<Appointment> {
   return http<Appointment>(`/owner/appointments/${id}/reschedule-request`, {
     method: 'POST',
     data,
@@ -70,11 +70,11 @@ export async function fetchOwnerInvoices(): Promise<Invoice[]> {
   return http<Invoice[]>('/owner/invoices');
 }
 
-export async function fetchOwnerQueries(petId: number): Promise<QueryThread> {
+export async function fetchOwnerQueries(petId: string): Promise<QueryThread> {
   return http<QueryThread>(`/owner/pets/${petId}/queries`);
 }
 
-export async function sendOwnerQueryMessage(petId: number, formData: FormData): Promise<QueryMessage> {
+export async function sendOwnerQueryMessage(petId: string, formData: FormData): Promise<QueryMessage> {
   return http<QueryMessage>(`/owner/pets/${petId}/queries`, {
     method: 'POST',
     data: formData,
@@ -82,11 +82,11 @@ export async function sendOwnerQueryMessage(petId: number, formData: FormData): 
 }
 
 /** Owners could previously only ask to move a visit, never to call it off. */
-export async function cancelOwnerAppointment(id: number): Promise<Appointment> {
+export async function cancelOwnerAppointment(id: string): Promise<Appointment> {
   return http<Appointment>(`/owner/appointments/${id}/cancel`, { method: 'POST' });
 }
 
 /** Line items and balance for one of the requesting owner's own invoices. */
-export async function fetchOwnerInvoiceDetail(id: number): Promise<Invoice> {
+export async function fetchOwnerInvoiceDetail(id: string): Promise<Invoice> {
   return http<Invoice>(`/owner/invoices/${id}`);
 }

@@ -53,7 +53,11 @@ class RoleSeparationTests(ApiTestCase):
             ("post", f"/appointments/{self.appt_a.id}/reschedule-approve", {}),
             ("post", f"/invoices/{self.invoice_a.id}/payments", {"amount_paid": 1}),
             ("post", "/invoices", {"pet_id": 1, "line_items": []}),
-            ("delete", "/diagnoses/1", {}),
+            # A syntactically-valid (but nonexistent) UUID — not "/diagnoses/1"
+            # — so the URL actually resolves to the view and we exercise the
+            # role check (403), rather than a URL-resolver 404 on a pk that
+            # can never match the `<uuid:pk>` converter.
+            ("delete", "/diagnoses/00000000-0000-0000-0000-000000000000", {}),
         ]
         for method, path, body in cases:
             with self.subTest(path=path):
@@ -69,15 +73,15 @@ class CrossOwnerIsolationTests(ApiTestCase):
         r = self.client.get(f"{API}/owner/pets")
         self.assertEqual(r.status_code, 200, r.content)
         ids = {p["id"] for p in r.data}
-        self.assertEqual(ids, {self.pet_a.id})
-        self.assertNotIn(self.pet_b.id, ids)
+        self.assertEqual(ids, {str(self.pet_a.id)})
+        self.assertNotIn(str(self.pet_b.id), ids)
 
     def test_owner_appointment_list_returns_only_own_rows(self):
         self.auth(self.owner_a)
         r = self.client.get(f"{API}/owner/appointments")
         self.assertEqual(r.status_code, 200, r.content)
         ids = {a["id"] for a in r.data}
-        self.assertEqual(ids, {self.appt_a.id})
+        self.assertEqual(ids, {str(self.appt_a.id)})
 
     def test_owner_invoice_list_returns_only_own_rows(self):
         self.auth(self.owner_a)
@@ -302,13 +306,19 @@ class PermissionConfigTests(ApiTestCase):
     # ADJUDICATED after QA round 1: was `["login_view", "signup_view"]`.
     # API_CONTRACT.md §3 (AMENDED 2026-08-20) adds POST /auth/refresh, which
     # is AllowAny by nature — the caller's access token has expired, that is
-    # the entire point of the endpoint. Widened to exactly three, and no
-    # wider. NOTE: contract §4.1 still reads "exactly two routes" and was not
-    # updated alongside §3 — reported as a doc-consistency defect.
-    ALLOWANY_ALLOWLIST = ["login_view", "refresh_view", "signup_view"]
+    # the entire point of the endpoint. Widened to exactly three.
+    # AMENDED again for password reset (§3/§4.1): both
+    # /auth/password-reset/request and /auth/password-reset/confirm are
+    # AllowAny for the same underlying reason — a locked-out caller cannot
+    # be expected to hold a valid access token either. Widened to exactly
+    # five, and no wider.
+    ALLOWANY_ALLOWLIST = [
+        "login_view", "password_reset_confirm_view", "password_reset_request_view",
+        "refresh_view", "signup_view",
+    ]
 
-    def test_allowany_only_on_login_signup_and_refresh(self):
-        """API_CONTRACT.md §4.1 as amended: AllowAny on exactly three routes."""
+    def test_allowany_only_on_login_signup_refresh_and_password_reset(self):
+        """API_CONTRACT.md §4.1 as amended: AllowAny on exactly five routes."""
         from appointments import views
         allowany = []
         for name in dir(views):

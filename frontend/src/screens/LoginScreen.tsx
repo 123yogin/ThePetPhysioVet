@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { login, signup } from '../api/auth';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
@@ -134,6 +134,24 @@ export const LoginScreen: React.FC = () => {
                 autoComplete="current-password"
                 required
               />
+            </div>
+
+            <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '4px' }}>
+              <Link
+                to="/forgot-password"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textDecoration: 'underline',
+                  display: 'inline-block',
+                  padding: '12px 4px',
+                  minHeight: '44px',
+                  boxSizing: 'border-box',
+                  lineHeight: '20px',
+                }}
+              >
+                Forgot password?
+              </Link>
             </div>
 
             <button

@@ -3,6 +3,40 @@
 **Status:** approved by Tech Lead, 2026-08-20. Supersedes ad-hoc endpoint invention.
 **Traceability:** SRS §3.1–§3.9; PRODUCT_PLAN phases 2–7. CLAUDE.md rules 1, 2, 4, 6.
 
+## ⚠️ BREAKING CHANGE — 2026-09-02: every `id` is now a UUID string
+
+All 16 models moved from sequential integer (`BigAutoField`) primary keys to
+`UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`. This is a
+breaking change to **every path parameter and every `id`/`*_id` field in every
+response shape below** — nothing in this document was renamed, but every
+value that used to be an integer (`1`, `42`, ...) is now a UUID string
+(`"8496f558-b2c6-4896-997f-e5d37efea0cf"`).
+
+Concretely:
+- Every `:id`/`:pk` path segment (`/pets/:id`, `/appointments/:id`,
+  `/diagnoses/:id`, `/treatment-plans/:id`, `/invoices/:id`,
+  `/owner/pets/:id`, `/owner/appointments/:id`, `/owner/invoices/:id`, etc.)
+  now requires a syntactically valid UUID. A non-UUID path segment (e.g. the
+  old-style `/pets/1`) no longer resolves to the view at all — Django's URL
+  resolver 404s before permission/ownership checks ever run, which still
+  satisfies the "404, not 403, on a bad id" posture in §4.3, just one layer
+  earlier than before.
+- Every `id`, `pet_id`, `invoice_id` field in every response body is now a
+  UUID string, not a number. Clients must not parse, sort, or do arithmetic
+  on these values — they are opaque identifiers only (this was already
+  implicitly true; it's now also enforced by the type).
+- Reason: sequential ids leaked business volume (pet #4, appointment #armed
+  count) to anyone reading a URL, and were ambiguous across the planned
+  service split (CLAUDE.md target architecture) — a `pet_id: 7` is
+  meaningless without knowing which service's sequence it came from. See
+  `backend/appointments/migrations/0012_add_uuid_fields.py` through
+  `0014_finalize_uuid_pks.py` for the migration itself, and `0014`'s
+  docstring for the SQLite-specific mechanics (why it has to be one
+  migration, not one per model).
+- Not changed: field *names* (`id`, `pet_id`, `invoice_id`, ...), route
+  *paths* (aside from the id format), response *shapes*, or any business
+  logic.
+
 **AMENDED 2026-08-21 (post-launch audit fixes).** Summary of changes — see the
 relevant sections below for full detail:
 - `Appointment.VISIT_TYPES` extended with `Hydrotherapy` and `LaserTherapy`
@@ -153,6 +187,26 @@ parallel alias, do not drop a field because it seems redundant. Notable traps:
 | POST | `/auth/refresh` | `{refresh}` | `{access, refresh}` — **rotates** |
 | POST | `/auth/logout` | `{refresh}` | 204, refresh blacklisted |
 | PATCH | `/auth/profile` | partial `User` | `User` |
+| POST | `/auth/password-reset/request` | `{email}` | 200, **always the same body** whether or not `email` matches an account (see amendment below) — `AllowAny` |
+| POST | `/auth/password-reset/confirm` | `{token, new_password}` | 200 on success; 400 (RFC-7807, real `detail`) on an invalid/expired/already-used token or a password that fails validation — `AllowAny` |
+
+**AMENDED 2026-09-02 — password reset added.** `POST /auth/password-reset/request`
+returns an **identical 200 body regardless of whether `email` belongs to an account** —
+a different response for a known vs unknown address is a user-enumeration oracle
+against a database of clinical records, and is not permitted even as a different
+error shape or a timing difference. On a match it creates a single-use,
+30-minute-expiry `PasswordResetToken` (only a SHA-256 hash of the token is ever
+stored — see `appointments/models.py`) and emails a link to
+`{FRONTEND_BASE_URL}/reset-password?token=...` (`django.core.mail`; console backend
+in `DEBUG`, real `EMAIL_BACKEND`/`DEFAULT_FROM_EMAIL` required via env otherwise,
+same fail-fast posture as `SECRET_KEY`). Requesting a new token invalidates any
+older unused one for that user. The endpoint is rate-limited per email and per IP
+(Django cache; 429 on both paths, so a 429 leaks nothing about existence either).
+`POST /auth/password-reset/confirm` enforces the same password floor as
+`SignupSerializer` (min length 6) plus this project's configured
+`AUTH_PASSWORD_VALIDATORS`, and on success **blacklists every outstanding refresh
+token for that user** (same blacklist path `/auth/logout` uses) — a password reset
+must end sessions an attacker may hold.
 
 **AMENDED 2026-08-20 after QA round 1.** Two blocking defects were traced to this
 document, not to the implementation:
@@ -374,12 +428,17 @@ capability here.
 
 ## 4. AuthZ rules (rule 4 — non-negotiable)
 
-1. Default DRF permission is `IsAuthenticated`. `AllowAny` is permitted on exactly three
-   routes: `/auth/login`, `/auth/signup`, and `/auth/refresh`.
+1. Default DRF permission is `IsAuthenticated`. `AllowAny` is permitted on exactly five
+   routes: `/auth/login`, `/auth/signup`, `/auth/refresh`,
+   `/auth/password-reset/request`, and `/auth/password-reset/confirm` (widened
+   2026-09-02 — the two password-reset routes legitimately join the list; see §3 Auth).
    **`/auth/refresh` is necessarily `AllowAny`** — the access token has expired, which is
    the entire point — but `AllowAny` at the permission layer must never mean
    unauthenticated token issuance: the view fully verifies the refresh token's signature,
-   expiry, `token_type` claim, and blacklist status before minting anything.
+   expiry, `token_type` claim, and blacklist status before minting anything. The two
+   password-reset routes are `AllowAny` for the identical reason: a locked-out caller
+   cannot be expected to hold a valid access token either, and neither view mints a
+   session token — `confirm` only changes a password and revokes existing sessions.
 2. Doctor routes require `role == "DOCTOR"`. Owner routes require `role == "OWNER"`.
 3. Every `/owner/*` handler filters by `request.user` in `get_queryset()`. An owner
    requesting another owner's pet gets **404**, not 403 — do not leak existence.
@@ -441,6 +500,15 @@ from the environment. `DEBUG` defaults to `False`. When `DEBUG` is false and `SE
 is unset, the app **raises `ImproperlyConfigured` at startup** — fail fast, never fall back
 to a baked-in default. `CORS_ALLOW_ALL_ORIGINS` is removed; dev origins come from env.
 Password hashing: bcrypt with cost ≥ 12 as the first entry in `PASSWORD_HASHERS`.
+
+**Added 2026-09-02 (password reset).** `EMAIL_BACKEND`, `DEFAULT_FROM_EMAIL`, and
+`FRONTEND_BASE_URL` follow the identical fail-fast posture: in `DEBUG` they default to
+Django's console email backend, `noreply@petphysiovet.local`, and
+`http://localhost:5173` respectively; when `DEBUG` is false, all three are **required**
+and their absence raises `ImproperlyConfigured` at startup — a silently no-op mailer or
+a wrong SPA base URL would look like "reset email sent" while never reaching the user.
+No SMTP provider is configured or invented; `EMAIL_BACKEND`/credentials for a real
+provider are supplied via env/OCI Vault at deploy time.
 
 **Production headers (added after QA round 1).** Behind `if not DEBUG:` set
 `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`,

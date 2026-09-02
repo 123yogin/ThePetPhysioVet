@@ -1,5 +1,5 @@
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   first_name: string;
@@ -9,7 +9,7 @@ export interface User {
 }
 
 export interface Pet {
-  id: number;
+  id: string;
   name: string;
   species: string;
   pet_type?: string;
@@ -31,8 +31,8 @@ export interface Pet {
 }
 
 export interface Appointment {
-  id: number;
-  pet_id: number;
+  id: string;
+  pet_id: string;
   pet_name: string;
   /** Read-only, from the linked Pet. `species` ("Dog") drives the icon —
    *  `pet_type` is breed text and rarely names the animal. */
@@ -59,8 +59,8 @@ export interface Appointment {
 }
 
 export interface Diagnosis {
-  id: number;
-  pet_id: number;
+  id: string;
+  pet_id: string;
   report_type: 'XRAY' | 'MRI' | 'CT' | 'ULTRASOUND' | 'BLOOD' | 'OTHER' | string;
   report_type_display?: string;
   original_filename: string;
@@ -73,15 +73,15 @@ export interface Diagnosis {
 }
 
 export interface ProgressNote {
-  id: number;
+  id: string;
   session_no: number;
   notes: string;
   created_at: string;
 }
 
 export interface TreatmentPlan {
-  id: number;
-  pet_id: number;
+  id: string;
+  pet_id: string;
   therapies: string[];
   frequency: string;
   frequency_custom?: string;
@@ -104,8 +104,8 @@ export interface LineItem {
 }
 
 export interface Payment {
-  id: number;
-  invoice_id: number;
+  id: string;
+  invoice_id: string;
   amount_paid: number;
   gateway_ref?: string | null;
   status: string;
@@ -113,17 +113,17 @@ export interface Payment {
 }
 
 export interface Package {
-  id: number;
-  invoice_id: number;
+  id: string;
+  invoice_id: string;
   total_sessions: number;
   used_sessions: number;
   remaining_sessions: number;
 }
 
 export interface Invoice {
-  id: number;
+  id: string;
   invoice_no: string;
-  pet_id: number;
+  pet_id: string;
   pet_name: string;
   subtotal: number;
   tax: number;
@@ -139,7 +139,7 @@ export interface Invoice {
 }
 
 export interface NotificationItem {
-  id: number;
+  id: string;
   type: string;
   type_display?: string;
   message: string;
@@ -149,7 +149,7 @@ export interface NotificationItem {
 }
 
 export interface QueryAttachment {
-  id: number;
+  id: string;
   url: string;
   original_filename: string;
   mime: string;
@@ -157,7 +157,7 @@ export interface QueryAttachment {
 }
 
 export interface QueryMessage {
-  id: number;
+  id: string;
   sender_role: 'DOCTOR' | 'OWNER';
   sender_name: string;
   message: string;
@@ -167,7 +167,7 @@ export interface QueryMessage {
 
 export interface QueryThread {
   pet: {
-    id: number;
+    id: string;
     name: string;
     /** "Dog"/"Cat" — decides the icon. `pet_type` is the breed, not the species. */
     species?: string;
@@ -188,7 +188,7 @@ export interface DashboardStats {
   today: string;
   today_display: string;
   today_appointments: {
-    id: number;
+    id: string;
     pet_name: string;
     owner_name: string;
     time: string;

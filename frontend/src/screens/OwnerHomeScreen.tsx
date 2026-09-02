@@ -26,7 +26,7 @@ export const OwnerHomeScreen: React.FC = () => {
   const [complaint, setComplaint] = useState('');
 
   // New Appointment State
-  const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const [apptDate, setApptDate] = useState(new Date().toISOString().slice(0, 10));
   const [apptTime, setApptTime] = useState('10:00');
   const [visitType, setVisitType] = useState('');
@@ -60,7 +60,7 @@ export const OwnerHomeScreen: React.FC = () => {
 
   // Next upcoming appointment per pet, so "when is my pet next seen" is
   // answered on the home screen instead of three taps away.
-  const nextApptByPet = new Map<number, Appointment>();
+  const nextApptByPet = new Map<string, Appointment>();
   if (appointments) {
     const todayStr = new Date().toISOString().slice(0, 10);
     for (const a of appointments) {
@@ -289,7 +289,7 @@ export const OwnerHomeScreen: React.FC = () => {
                 <select
                   className="input-glass"
                   value={selectedPetId || ''}
-                  onChange={(e) => setSelectedPetId(Number(e.target.value))}
+                  onChange={(e) => setSelectedPetId(e.target.value)}
                 >
                   {pets?.map((p) => (
                     <option key={p.id} value={p.id}>

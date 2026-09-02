@@ -18,7 +18,7 @@ export const AppointmentsScreen: React.FC = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth()); // 0-indexed (0 = Jan)
 
-  const [processingId, setProcessingId] = useState<number | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const { addFlash } = useFlash();
 
@@ -40,9 +40,9 @@ export const AppointmentsScreen: React.FC = () => {
   // an icon.
   const emojiFor = (a: { species?: string; pet_type?: string }) => petEmoji(a.species || a.pet_type);
 
-  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-  const handleConfirm = async (id: number, petName: string) => {
+  const handleConfirm = async (id: string, petName: string) => {
     setConfirmingId(id);
     try {
       await confirmAppointment(id);
@@ -55,7 +55,7 @@ export const AppointmentsScreen: React.FC = () => {
     }
   };
 
-  const handleComplete = async (id: number) => {
+  const handleComplete = async (id: string) => {
     try {
       await completeAppointment(id);
       addFlash('Appointment completed successfully', 'success');
@@ -65,7 +65,7 @@ export const AppointmentsScreen: React.FC = () => {
     }
   };
 
-  const handleApproveReschedule = async (id: number, petName: string) => {
+  const handleApproveReschedule = async (id: string, petName: string) => {
     setProcessingId(id);
     try {
       await approveReschedule(id);
@@ -78,7 +78,7 @@ export const AppointmentsScreen: React.FC = () => {
     }
   };
 
-  const handleRejectReschedule = async (id: number, petName: string) => {
+  const handleRejectReschedule = async (id: string, petName: string) => {
     setProcessingId(id);
     try {
       await rejectReschedule(id);

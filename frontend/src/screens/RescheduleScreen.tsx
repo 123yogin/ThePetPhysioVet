@@ -6,7 +6,10 @@ import { useFlash } from '../lib/flash';
 
 export const RescheduleScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const apptId = Number(id);
+  // useParams gives `string | undefined`. Previously this was `Number(id)`,
+  // which quietly turned a missing param into NaN and requested /NaN; an empty
+  // string makes the bad case obvious instead of silently 404-ing.
+  const apptId = id ?? '';
   const navigate = useNavigate();
   const { addFlash } = useFlash();
 

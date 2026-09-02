@@ -18,15 +18,15 @@ export const OwnerAppointmentsScreen: React.FC = () => {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const [confirmCancelId, setConfirmCancelId] = useState<number | null>(null);
-  const [cancelingId, setCancelingId] = useState<number | null>(null);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
 
   const { data: appointments, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ownerAppointments'],
     queryFn: fetchOwnerAppointments,
   });
 
-  const handleAcceptDoctorReschedule = async (id: number) => {
+  const handleAcceptDoctorReschedule = async (id: string) => {
     try {
       await acceptOwnerAppointment(id);
       addFlash('Appointment time confirmed with your vet', 'success');
@@ -36,7 +36,7 @@ export const OwnerAppointmentsScreen: React.FC = () => {
     }
   };
 
-  const handleCancel = async (id: number) => {
+  const handleCancel = async (id: string) => {
     setCancelingId(id);
     try {
       await cancelOwnerAppointment(id);

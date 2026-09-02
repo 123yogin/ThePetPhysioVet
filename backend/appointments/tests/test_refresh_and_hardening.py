@@ -130,7 +130,7 @@ class RefreshEndpointTests(ApiTestCase):
         import jwt
         from django.utils import timezone
         forged = jwt.encode(
-            {"user_id": self.doctor.id, "token_type": "refresh", "jti": "x",
+            {"user_id": str(self.doctor.id), "token_type": "refresh", "jti": "x",
              "exp": int(timezone.now().timestamp()) + 86400},
             "not-the-signing-key", algorithm="HS256")
         r = self.anon().post(f"{API}/auth/refresh", {"refresh": forged},

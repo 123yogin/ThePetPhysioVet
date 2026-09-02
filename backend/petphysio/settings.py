@@ -157,7 +157,60 @@ STORAGES = {
     },
 }
 
+# Every model in `appointments` now declares an explicit UUID primary key
+# (`id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`)
+# per the target-architecture LLD (opaque, non-enumerable ids; safe cross-
+# service references once the service split happens). DEFAULT_AUTO_FIELD is
+# left as BigAutoField — Django has no built-in "UUID auto field" class for
+# this setting, and it is inert here anyway: it only supplies a PK for a
+# model that doesn't declare one, and every model in this project now does.
+# It still governs any future model that omits an explicit `id` (and any
+# third-party app that relies on the default, e.g. django.contrib.admin's
+# own models keep their own BigAutoField ids — this project owns and
+# UUID-keys only its own `appointments` schema, never another app's).
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Password reset email/link config (API_CONTRACT.md §3 Auth) ------------
+# No SMTP provider exists yet and none is invented here. Locally
+# (DEBUG=true) the reset email is printed to the runserver console via
+# Django's console backend. In any non-DEBUG environment a real
+# EMAIL_BACKEND/DEFAULT_FROM_EMAIL must be supplied via env — same
+# fail-fast posture as SECRET_KEY above (CLAUDE.md rule 1): a silently
+# no-op or misconfigured mailer would look like "reset email sent" while
+# never reaching the user.
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "")
+if not EMAIL_BACKEND:
+    if DEBUG:
+        EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    else:
+        raise ImproperlyConfigured(
+            "EMAIL_BACKEND environment variable is required when DEBUG is not "
+            "set (i.e. in any non-local environment)."
+        )
+
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "")
+if not DEFAULT_FROM_EMAIL:
+    if DEBUG:
+        DEFAULT_FROM_EMAIL = "noreply@petphysiovet.local"
+    else:
+        raise ImproperlyConfigured(
+            "DEFAULT_FROM_EMAIL environment variable is required when DEBUG is "
+            "not set (i.e. in any non-local environment)."
+        )
+
+# Base URL of the React SPA — password reset links point at
+# `{FRONTEND_BASE_URL}/reset-password?token=...`. Required in any
+# non-DEBUG environment for the same reason as EMAIL_BACKEND above: a wrong
+# or missing value would silently email working-looking links that 404.
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "")
+if not FRONTEND_BASE_URL:
+    if DEBUG:
+        FRONTEND_BASE_URL = "http://localhost:5173"
+    else:
+        raise ImproperlyConfigured(
+            "FRONTEND_BASE_URL environment variable is required when DEBUG is "
+            "not set (i.e. in any non-local environment)."
+        )
 
 # --- CORS --------------------------------------------------------------
 # CORS_ALLOW_ALL_ORIGINS is intentionally removed. Dev origins (e.g. the Vite
@@ -177,6 +230,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Every error leaves this API as RFC-7807 problem+json with a human
+    # `detail` — see petphysio/exceptions.py. Without it, DRF validation
+    # failures carry no `detail` at all and the SPA renders the literal words
+    # "Bad Request", and 404s leak Django's "No Pet matches the given query."
+    "EXCEPTION_HANDLER": "petphysio.exceptions.rfc7807_exception_handler",
 }
 
 # SimpleJWT Settings — short-lived access token + rotating refresh tokens with

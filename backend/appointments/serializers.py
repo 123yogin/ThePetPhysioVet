@@ -1,3 +1,5 @@
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
@@ -148,6 +150,37 @@ class SignupSerializer(serializers.ModelSerializer):
         return user
 
 
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Used by POST /auth/password-reset/request. Format-only validation —
+    a malformed `email` is a 400 (that's about shape, not about whether a
+    particular address is registered), but the *view* never distinguishes a
+    known address from an unknown one in its response (API_CONTRACT.md §3).
+    """
+
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Used by POST /auth/password-reset/confirm.
+
+    `new_password` enforces the same floor as `SignupSerializer.password`
+    (min length 6) and additionally runs this project's configured
+    `AUTH_PASSWORD_VALIDATORS` (settings.py) — signup never wired those in,
+    but they exist project-wide and a reset is the right place to actually
+    apply them.
+    """
+
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=6)
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
+
+
 class PetSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     doctor_name = serializers.SerializerMethodField()
@@ -234,7 +267,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 Q(doctor=user) | Q(doctor__isnull=True)
             )
 
-    pet_id = serializers.IntegerField(source="pet.id", read_only=True)
+    pet_id = serializers.UUIDField(source="pet.id", read_only=True)
     # Read-only, derived from the linked Pet — same pattern as `pet_id` above
     # and `doctor_name` on PetSerializer. Added so the frontend can pick the
     # right animal icon on the patient list / calendar / inbox without an
@@ -277,7 +310,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
 
 class DiagnosticReportSerializer(serializers.ModelSerializer):
-    pet_id = serializers.IntegerField(source="pet.id", read_only=True)
+    pet_id = serializers.UUIDField(source="pet.id", read_only=True)
     report_type_display = serializers.CharField(source="get_report_type_display", read_only=True)
     file_url = serializers.SerializerMethodField()
     is_dicom = serializers.SerializerMethodField()
@@ -321,7 +354,7 @@ class ProgressNoteSerializer(serializers.ModelSerializer):
 
 
 class TreatmentPlanSerializer(serializers.ModelSerializer):
-    pet_id = serializers.IntegerField(source="pet.id", read_only=True)
+    pet_id = serializers.UUIDField(source="pet.id", read_only=True)
     progress_notes = ProgressNoteSerializer(many=True, read_only=True)
     therapies = serializers.ListField(child=serializers.CharField(), default=list)
 
@@ -359,7 +392,7 @@ class LineItemSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
-    invoice_id = serializers.IntegerField(source="invoice.id", read_only=True)
+    invoice_id = serializers.UUIDField(source="invoice.id", read_only=True)
 
     class Meta:
         model = Payment
@@ -372,7 +405,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class PackageSerializer(serializers.ModelSerializer):
-    invoice_id = serializers.IntegerField(source="invoice.id", read_only=True)
+    invoice_id = serializers.UUIDField(source="invoice.id", read_only=True)
     remaining_sessions = serializers.IntegerField(read_only=True)
 
     class Meta:

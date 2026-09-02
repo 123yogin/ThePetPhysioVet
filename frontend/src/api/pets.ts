@@ -6,7 +6,7 @@ export async function fetchPets(search?: string): Promise<Pet[]> {
   return http<Pet[]>(`/pets${query}`);
 }
 
-export async function fetchPetDetail(id: number): Promise<Pet> {
+export async function fetchPetDetail(id: string): Promise<Pet> {
   return http<Pet>(`/pets/${id}`);
 }
 

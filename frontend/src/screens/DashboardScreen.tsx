@@ -8,7 +8,7 @@ import { humanizeStatus } from '../lib/labels';
 
 export const DashboardScreen: React.FC = () => {
   const { addFlash } = useFlash();
-  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const {
     data: stats,
@@ -20,7 +20,7 @@ export const DashboardScreen: React.FC = () => {
     queryFn: fetchDashboardStats,
   });
 
-  const handleComplete = async (apptId: number) => {
+  const handleComplete = async (apptId: string) => {
     try {
       await completeAppointment(apptId);
       addFlash('Appointment marked as Completed', 'success');
@@ -30,7 +30,7 @@ export const DashboardScreen: React.FC = () => {
     }
   };
 
-  const handleConfirm = async (apptId: number) => {
+  const handleConfirm = async (apptId: string) => {
     setConfirmingId(apptId);
     try {
       await confirmAppointment(apptId);
