@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "framework": null,
+  "installCommand": "echo skip-root-install",
+
+  "buildCommand": "bash scripts/build-all.sh",
+  "outputDirectory": "dist",
+
+  "functions": {
+    "api/index.py": { "maxDuration": 30, "memory": 1024 }
+  },
+
+  "rewrites": [
+    { "source": "/api/(.*)",   "destination": "/api/index" },
+    { "source": "/admin/:path*", "destination": "/api/index" },
+
+    { "source": "/app/(.*)", "destination": "/app/index.html" },
+    { "source": "/app",      "destination": "/app/index.html" },
+
+    { "source": "/((?!api/|admin/|app/).*)", "destination": "/index.html" }
+  ]
+}

@@ -8,6 +8,7 @@ from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
+    Enquiry,
 )
 
 # Upload validation constants (API_CONTRACT.md §3 "Diagnostic reports").
@@ -534,3 +535,84 @@ class QueryThreadSerializer(serializers.ModelSerializer):
 
     def get_message_count(self, obj):
         return obj.messages.count()
+
+
+# ---------------------------------------------------------------------------
+# Enquiries (public marketing-site booking form -> doctor-triaged inbox)
+# ---------------------------------------------------------------------------
+
+class EnquiryCreateSerializer(serializers.ModelSerializer):
+    """Backs the PUBLIC `POST /api/v1/enquiries` (AllowAny, unauthenticated).
+
+    Field *names* deliberately match what the marketing site's booking form
+    already collects (`firstName`, `petName`, ...) rather than this app's
+    usual snake_case body convention, so the external form needs the
+    smallest possible change to start submitting real data. `source=`
+    remaps each onto the snake_case `Enquiry` model field. `status` is not a
+    field on this serializer at all, so it cannot be client-set no matter
+    what a caller sends in the body (mass-assignment guard, same pattern as
+    `role` on `SignupSerializer`).
+
+    Every free-text field is capped (`max_length`, mirrored from the model
+    columns) — this is the only unauthenticated write in the app, so an
+    uncapped text field would let a spammer grow the database without limit.
+    """
+
+    firstName = serializers.CharField(source="first_name", max_length=100, trim_whitespace=True)
+    lastName = serializers.CharField(source="last_name", max_length=100, trim_whitespace=True)
+    petName = serializers.CharField(source="pet_name", max_length=100, trim_whitespace=True)
+    speciesBreed = serializers.CharField(source="species_breed", max_length=200, trim_whitespace=True)
+    email = serializers.EmailField(max_length=254)
+    phone = serializers.CharField(max_length=50, trim_whitespace=True)
+    reason = serializers.CharField(max_length=2000, trim_whitespace=True)
+    preferredDate = serializers.DateField(
+        source="preferred_date", required=False, allow_null=True,
+    )
+    preferredSpecialist = serializers.CharField(
+        source="preferred_specialist", max_length=150, required=False,
+        allow_blank=True, trim_whitespace=True,
+    )
+
+    class Meta:
+        model = Enquiry
+        fields = [
+            "firstName", "lastName", "petName", "speciesBreed", "email",
+            "phone", "reason", "preferredDate", "preferredSpecialist",
+        ]
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def create(self, validated_data):
+        # Belt-and-braces: `status` is not declared above so DRF would never
+        # populate it from input anyway, but a hand-rolled Enquiry(**data)
+        # call downstream must not accidentally honour a stray key either.
+        validated_data.pop("status", None)
+        return Enquiry.objects.create(status="NEW", **validated_data)
+
+
+class EnquirySerializer(serializers.ModelSerializer):
+    """Doctor-facing read shape for `GET /enquiries` and the convert/dismiss
+    responses — snake_case, matching this app's internal API convention
+    (as opposed to `EnquiryCreateSerializer`, which mirrors the external
+    marketing form's camelCase field names on the way in). Entirely
+    read-only: doctors triage enquiries through the dedicated
+    convert/dismiss actions, never by editing the row directly.
+    """
+
+    converted_appointment_id = serializers.UUIDField(read_only=True, allow_null=True)
+    appointment = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Enquiry
+        fields = [
+            "id", "first_name", "last_name", "pet_name", "species_breed",
+            "email", "phone", "reason", "preferred_date", "preferred_specialist",
+            "status", "created_at", "converted_appointment_id", "appointment",
+        ]
+        read_only_fields = fields
+
+    def get_appointment(self, obj):
+        if obj.converted_appointment_id is None:
+            return None
+        return AppointmentSerializer(obj.converted_appointment).data

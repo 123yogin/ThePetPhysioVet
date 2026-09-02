@@ -184,6 +184,35 @@ export interface QueryThread {
   message_count?: number;
 }
 
+/**
+ * A booking enquiry submitted through the public marketing site.
+ *
+ * Deliberately not written straight into patient records — a doctor
+ * triages it first via `/enquiries/:id/convert`, which is what creates the
+ * owner account, the pet, and the Pending appointment.
+ */
+export interface Enquiry {
+  id: string;
+  first_name: string;
+  last_name: string;
+  pet_name: string;
+  species_breed?: string;
+  email?: string;
+  phone?: string;
+  reason?: string;
+  preferred_date?: string | null;
+  preferred_specialist?: string;
+  status: 'NEW' | 'CONVERTED' | 'DISMISSED' | string;
+  created_at: string;
+  converted_appointment_id?: string | null;
+  appointment?: Appointment | null;
+}
+
+export interface EnquiriesResponse {
+  results: Enquiry[];
+  new_count: number;
+}
+
 export interface DashboardStats {
   today: string;
   today_display: string;

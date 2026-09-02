@@ -25,6 +25,7 @@ import { InvoiceDetailScreen } from './screens/InvoiceDetailScreen';
 import { InvoiceFormScreen } from './screens/InvoiceFormScreen';
 import { RevenueScreen } from './screens/RevenueScreen';
 import { QueryInboxScreen } from './screens/QueryInboxScreen';
+import { EnquiriesScreen } from './screens/EnquiriesScreen';
 import { NotificationsSettingsScreen } from './screens/NotificationsSettingsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 
@@ -38,7 +39,12 @@ export const AppRoutes: React.FC = () => {
     <QueryClientProvider client={queryClient}>
       <FlashProvider>
         <ErrorBoundary>
-        <BrowserRouter>
+        {/* In production the marketing site owns `/`, so the clinic app is
+            served under `/app`. Vite injects BASE_URL from its `base` option;
+            locally that is `/`, so development is unaffected. Without this,
+            every route would resolve one level too high and deep links would
+            404. */}
+        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Routes>
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
@@ -65,6 +71,7 @@ export const AppRoutes: React.FC = () => {
               <Route path="/invoices/new" element={<InvoiceFormScreen />} />
               <Route path="/invoices/:id" element={<InvoiceDetailScreen />} />
               <Route path="/revenue" element={<RevenueScreen />} />
+              <Route path="/enquiries" element={<EnquiriesScreen />} />
               <Route path="/queries" element={<QueryInboxScreen />} />
               <Route path="/notifications-settings" element={<NotificationsSettingsScreen />} />
               <Route path="/profile" element={<ProfileScreen />} />

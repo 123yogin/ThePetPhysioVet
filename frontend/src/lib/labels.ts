@@ -68,3 +68,33 @@ export function friendlyTime(t?: string | null): string {
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
   return `${h12}:${m}${suffix}`;
 }
+
+/** ISO currency code -> the symbol a person expects to read. */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  INR: '₹',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+};
+
+/**
+ * Money, formatted for display.
+ *
+ * The dashboard rendered `${stats.currency}${amount}` directly and produced
+ * "INR0" — the API sends the ISO *code*, not a symbol, and nothing grouped the
+ * digits. Every other screen hardcodes "₹", which is the same bug waiting to
+ * happen the moment this clinic bills in anything else.
+ *
+ * Falls back to the raw code (with a space) for a currency not in the map, so
+ * an unknown one reads "AUD 1,200.00" rather than silently losing its unit.
+ */
+export function formatMoney(amount?: number | string | null, currency = 'INR'): string {
+  const n = typeof amount === 'string' ? Number(amount) : amount ?? 0;
+  const value = Number.isFinite(n as number) ? (n as number) : 0;
+  const symbol = CURRENCY_SYMBOLS[currency];
+  const digits = value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return symbol ? `${symbol}${digits}` : `${currency} ${digits}`;
+}

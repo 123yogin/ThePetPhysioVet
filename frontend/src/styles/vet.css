@@ -218,6 +218,12 @@ button, input, select, textarea {
     display: flex;
   }
 
+  /* The drawer FAB (50px tall at bottom: 24px) owns bottom-right here, so
+     lift the toasts clear of it rather than stacking on top. */
+  .flash-stack {
+    bottom: 90px;
+  }
+
   /* Lock the page behind an open drawer. The backdrop is a bare fixed overlay
      with no scroll container of its own, so without this, dragging on it
      scrolls the content underneath the menu. Scoped to the breakpoint: at
@@ -647,8 +653,14 @@ tr:hover td {
 
 /* Flash Messages Stack */
 .flash-stack {
+  /* Anchored to the BOTTOM, not the top.
+     Top-right is where every screen in this app puts its primary actions
+     ("+ New Appointment", "+ New Patient", "+ Create Invoice"), and
+     `.flash-item` sets `pointer-events: auto` — so a toast landing there did
+     not merely overlap those buttons, it swallowed the clicks. Bottom-right is
+     empty on every screen. */
   position: fixed;
-  top: 20px;
+  bottom: 20px;
   right: 20px;
   z-index: 9999;
   display: flex;
@@ -675,7 +687,9 @@ tr:hover td {
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    /* Positive, because the stack is anchored to the bottom now — a toast
+       should rise into place, not drop down from above it. */
+    transform: translateY(10px);
   }
   to {
     opacity: 1;

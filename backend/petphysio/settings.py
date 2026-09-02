@@ -142,6 +142,27 @@ STATIC_URL = "static/"
 # location WhiteNoise serves from. Not used in local dev (runserver serves
 # static files itself when DEBUG=True and nothing has run collectstatic).
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# --- Single-container deployment (SPA served by Django) -------------------
+#
+# The normal topology is two containers: nginx serves the built React bundle
+# and proxies /api to gunicorn (see frontend/nginx.conf). Some hosts —
+# Hugging Face Spaces, Fly machines, anything that runs exactly one process —
+# cannot do that, so Django optionally serves the SPA and media itself.
+#
+# Off by default: turning it on unconditionally would mean the nginx
+# deployment has two things serving the same files, and Django serving media
+# in production is precisely what petphysio/urls.py documents as belonging in
+# the proxy layer. This is an explicit deployment choice, not a fallback.
+SERVE_SPA = _env_bool("SERVE_SPA", default=False)
+
+# Where the built bundle lands in the image. `index.html` is served by the
+# catch-all in urls.py; everything beside it is collected into STATIC_ROOT and
+# served by WhiteNoise with hashed filenames and long cache headers.
+SPA_DIST_DIR = Path(os.environ.get("SPA_DIST_DIR", BASE_DIR / "spa"))
+
+if SERVE_SPA and SPA_DIST_DIR.is_dir():
+    STATICFILES_DIRS = [SPA_DIST_DIR]
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -155,7 +176,17 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        # Manifest storage hashes filenames and REQUIRES a manifest produced by
+        # `collectstatic`; any {% static %} lookup with no manifest entry raises,
+        # which takes the Django admin down with it. Platforms that cannot run
+        # collectstatic during the build — serverless runtimes, where the build
+        # step only compiles the frontend — set STATIC_MANIFEST=false and get
+        # the same compression without the hashed-filename manifest.
+        "BACKEND": (
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if _env_bool("STATIC_MANIFEST", default=True)
+            else "whitenoise.storage.CompressedStaticFilesStorage"
+        ),
     },
 }
 

@@ -424,21 +424,116 @@ would corrupt the clinical/billing record), or one whose `date` is in the past.
 `GET /invoices/:id` (line items, `amount_paid`, `balance_due`, etc.); no payment
 capability here.
 
+### Enquiries (new, 2026-09-02 — marketing-site booking form -> doctor inbox)
+
+The separate marketing site's booking form previously fabricated a reference number
+client-side and sent the form nowhere. It now posts here. Deliberately **not** wired
+directly into `Pet`/`Appointment` — a doctor triages every submission via `convert`
+before it becomes a real patient/clinical record. `Enquiry` is a new model:
+`first_name`, `last_name`, `pet_name`, `species_breed`, `email`, `phone`, `reason`,
+`preferred_date` (nullable), `preferred_specialist` (blank-default), `status`
+(`NEW`/`CONVERTED`/`DISMISSED`), `created_at`, `converted_appointment` (nullable FK,
+set on conversion), `actioned_by`/`actioned_at` (audit trail for convert/dismiss).
+UUID primary key, one plain `CreateModel` migration (`0002_enquiry`) — this project's
+migration chain was flattened to a single `0001_initial` on 2026-09-02 (see the
+breaking-change note at the top of this document) specifically so nothing here repeats
+the `cannot drop column id ... because other objects depend on it` PostgreSQL failure
+that motivated the flattening; verified live against real PostgreSQL 18, not just
+SQLite.
+
+| Method | Path | Auth | Body | Returns |
+|---|---|---|---|---|
+| POST | `/enquiries` | **PUBLIC** (`AllowAny` + `authentication_classes([])`) | `{firstName, lastName, petName, speciesBreed, email, phone, reason, preferredDate?, preferredSpecialist?}` | `201 {id, reference, detail}` |
+| GET | `/enquiries?status=` | Doctor (`IsDoctor`) | — | `{results: Enquiry[], new_count}` |
+| POST | `/enquiries/:id/convert` | Doctor | `{date, time, visit_type}` | `Enquiry` (with nested `appointment`) |
+| POST | `/enquiries/:id/dismiss` | Doctor | — | `Enquiry` |
+
+**`POST /enquiries` is the only unauthenticated write in this app**, and the sole
+route (besides `/auth/login`, `/auth/signup`, `/auth/refresh`, and the two
+password-reset routes) with `AllowAny`. Request-body field names deliberately match
+the marketing site's existing form (`firstName`, not `first_name`) rather than this
+API's normal snake_case convention, so the external form needs the smallest possible
+change to start submitting real data; the response and every other route in this
+section use this app's normal snake_case shape. `authentication_classes([])` is
+load-bearing, not tidiness, for the same reason as the password-reset routes: DRF
+applies JWTAuthentication globally and SimpleJWT *raises* on a stale/garbage bearer
+token, producing a 401 before `AllowAny` is ever consulted — a random site visitor may
+well have unrelated junk in localStorage. `status` is never a request field, so it
+cannot be client-set no matter what a caller sends (mass-assignment guard, same
+pattern as `role` on `SignupSerializer`). Every free-text field is length-capped
+(mirrors the model columns: names/pet name 100, species/breed 200, reason 2000,
+specialist 150) — the only unauthenticated write in the app must not let a spammer
+grow the database without bound. Rate-limited on two independent fixed windows (an
+hour each): 3 requests per email, 10 per IP, reusing the `_rate_limited` helper
+already backing password-reset — the cache is the shared `CACHES` backend (settings.py),
+so the limit holds across worker processes, not just per-process. A tripped limit is
+`429`. Response on success: `id` (the enquiry's UUID), `reference` (`"ENQ-" +` the
+first 8 hex chars of `id`, uppercased — a value the visitor can quote back), `detail`
+(a human sentence, same key `http.ts` already reads generically off every response).
+
+**`GET /enquiries`** is doctor-only, newest first, filterable by `?status=`.
+`new_count` is always the *unfiltered* count of `NEW` enquiries (not affected by the
+`status` filter) so the UI can badge unactioned enquiries without a second request.
+Not scoped per-doctor — every doctor in the clinic sees the same shared inbox (there
+is no doctor FK on `Enquiry` to scope by; it is assigned a doctor only once converted).
+`GET /enquiries` and `POST /enquiries` share one path/method-dispatch view
+(`enquiries_view`) — the one place in this codebase where two methods on the same
+route need genuinely different authentication postures rather than a uniform
+`permission_classes`; see the view's docstring for exactly how GET authenticates and
+authorizes itself by hand instead of relying on the (POST-only) `AllowAny` decorator.
+
+**`POST /enquiries/:id/convert`** (doctor-only): finds-or-creates the owner
+`UserProfile` by `email` (role `OWNER`; matching only `OWNER`-role accounts, same as
+the existing doctor-created-pet owner-linking rule) — a newly created owner gets
+`set_unusable_password()`, never an invented password; they set their own via the
+existing `/auth/password-reset/request` flow. Finds-or-creates the `Pet` for that
+owner from `pet_name`/`species_breed` (case-insensitive name match against the
+owner's existing pets — never duplicates one), assigned to the converting doctor.
+`species` is a best-effort guess off `species_breed` (`"cat"`/`"dog"` substring match,
+default `"Dog"`); `species_breed` itself is stored verbatim in `breed`. Creates the
+`Appointment` as `Pending`, owned by the converting doctor, using the supplied
+`date`/`time`/`visit_type` — `visit_type` is validated against
+`Appointment.VISIT_TYPES` (never a fourth hardcoded vocabulary; see the B1/B2 history
+above). Marks the enquiry `CONVERTED` and links `converted_appointment`. Wrapped in a
+transaction with `select_for_update()` on the enquiry row — a half-converted enquiry
+(owner created, appointment not) is worse than a failed request, and two concurrent
+converts of the same enquiry must not each create their own owner/pet/appointment.
+**Idempotent**: converting an already-`CONVERTED` enquiry returns the existing
+owner/pet/appointment (via the existing `Enquiry` row) rather than creating a second
+set — the request body is not even re-validated on that path. Converting a
+`DISMISSED` enquiry, or omitting `date`/`time`/`visit_type`, is `400`. An unknown
+enquiry id is `404` (no per-doctor scoping to hide behind here — enquiries aren't
+owned by a doctor until conversion).
+
+**`POST /enquiries/:id/dismiss`** (doctor-only): marks `DISMISSED`, keeps the row
+(audit trail, no delete). Idempotent for a repeat dismiss. An already-`CONVERTED`
+enquiry cannot be dismissed (`400`) — a real appointment exists for it by then.
+
 ---
 
 ## 4. AuthZ rules (rule 4 — non-negotiable)
 
-1. Default DRF permission is `IsAuthenticated`. `AllowAny` is permitted on exactly five
+1. Default DRF permission is `IsAuthenticated`. `AllowAny` is permitted on exactly six
    routes: `/auth/login`, `/auth/signup`, `/auth/refresh`,
-   `/auth/password-reset/request`, and `/auth/password-reset/confirm` (widened
-   2026-09-02 — the two password-reset routes legitimately join the list; see §3 Auth).
-   **`/auth/refresh` is necessarily `AllowAny`** — the access token has expired, which is
-   the entire point — but `AllowAny` at the permission layer must never mean
-   unauthenticated token issuance: the view fully verifies the refresh token's signature,
-   expiry, `token_type` claim, and blacklist status before minting anything. The two
-   password-reset routes are `AllowAny` for the identical reason: a locked-out caller
-   cannot be expected to hold a valid access token either, and neither view mints a
-   session token — `confirm` only changes a password and revokes existing sessions.
+   `/auth/password-reset/request`, `/auth/password-reset/confirm` (widened
+   2026-09-02 — the two password-reset routes legitimately join the list; see §3 Auth),
+   and the `POST` half of `/enquiries` (widened again the same day — see §3
+   Enquiries). **`/auth/refresh` is necessarily `AllowAny`** — the access token has
+   expired, which is the entire point — but `AllowAny` at the permission layer must
+   never mean unauthenticated token issuance: the view fully verifies the refresh
+   token's signature, expiry, `token_type` claim, and blacklist status before minting
+   anything. The two password-reset routes are `AllowAny` for the identical reason: a
+   locked-out caller cannot be expected to hold a valid access token either, and
+   neither view mints a session token — `confirm` only changes a password and revokes
+   existing sessions. `POST /enquiries` is `AllowAny` because it is a genuinely public
+   endpoint (a marketing-site form, not a logged-in user of any kind) — but `GET
+   /enquiries` on the *same path* is doctor-only, so `enquiries_view` is the one view
+   in this codebase where `AllowAny`/`authentication_classes([])` at the decorator
+   level does not mean the whole view is open: the GET branch authenticates and
+   authorizes itself by hand before doing anything (see the view's docstring). It does
+   not mint owner/doctor accounts or clinical records on its own either — `POST
+   /enquiries` only ever creates an `Enquiry` row; the account/pet/appointment
+   creation with real authZ consequences happens at `convert`, which is doctor-only.
 2. Doctor routes require `role == "DOCTOR"`. Owner routes require `role == "OWNER"`.
 3. Every `/owner/*` handler filters by `request.user` in `get_queryset()`. An owner
    requesting another owner's pet gets **404**, not 403 — do not leak existence.

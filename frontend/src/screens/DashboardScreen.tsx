@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { fetchDashboardStats, completeAppointment, confirmAppointment } from '../api/appointments';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
-import { humanizeStatus } from '../lib/labels';
+import { humanizeStatus, formatMoney } from '../lib/labels';
 
 export const DashboardScreen: React.FC = () => {
   const { addFlash } = useFlash();
@@ -114,7 +114,7 @@ export const DashboardScreen: React.FC = () => {
             Pending Payments
           </div>
           <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
-            {isLoading ? '...' : `${stats?.currency || '₹'}${stats?.pending_payments ?? 0}`}
+            {isLoading ? '...' : formatMoney(stats?.pending_payments, stats?.currency)}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--brown-700)', marginTop: '4px' }}>
             Outstanding across unpaid & partially paid invoices

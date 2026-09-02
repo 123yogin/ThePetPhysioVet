@@ -4,7 +4,7 @@ from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    PasswordResetToken,
+    PasswordResetToken, Enquiry,
 )
 
 @admin.register(UserProfile)
@@ -28,3 +28,4 @@ admin.site.register(QueryThread)
 admin.site.register(QueryMessage)
 admin.site.register(QueryAttachment)
 admin.site.register(PasswordResetToken)
+admin.site.register(Enquiry)

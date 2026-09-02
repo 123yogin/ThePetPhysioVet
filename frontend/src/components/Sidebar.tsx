@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { logout, fetchMe } from '../api/auth';
+import { fetchEnquiries, enquiriesQueryKey } from '../api/enquiries';
 import { useFlash } from '../lib/flash';
 import { Icon, IconName } from './Icon';
 
@@ -18,6 +19,7 @@ const NAV_BY_ROLE: Record<'DOCTOR' | 'OWNER', NavItem[]> = {
     { to: '/patients', label: 'Patients', icon: 'paw' },
     { to: '/invoices', label: 'Invoices & Billing', icon: 'invoice' },
     { to: '/revenue', label: 'Revenue', icon: 'chart' },
+    { to: '/enquiries', label: 'Enquiries', icon: 'mail' },
     { to: '/queries', label: 'Messages', icon: 'chat' },
     // Named for what it actually is. The screen looks up one owner by phone and
     // toggles an SMS opt-out flag; there is no notification inbox behind it, and
@@ -51,6 +53,17 @@ export const Sidebar: React.FC = () => {
   // rather than showing an in-page recovery.
   const navItems = (user && NAV_BY_ROLE[user.role]) || [];
 
+  // Same query key + fetcher the Enquiries screen uses for its default (NEW)
+  // tab, so the two share one cache entry instead of issuing separate
+  // requests. Owners never see this nav item and have no `/enquiries`
+  // permission, so the query only runs for a signed-in doctor.
+  const { data: enquiriesData } = useQuery({
+    queryKey: enquiriesQueryKey('NEW'),
+    queryFn: () => fetchEnquiries('NEW'),
+    enabled: user?.role === 'DOCTOR',
+  });
+  const newEnquiryCount = enquiriesData?.new_count ?? 0;
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -76,6 +89,14 @@ export const Sidebar: React.FC = () => {
         {navItems.map((item) => (
           <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Icon name={item.icon} /> {item.label}
+            {item.to === '/enquiries' && newEnquiryCount > 0 && (
+              <span
+                className="badge badge-pending"
+                style={{ marginLeft: 'auto', fontSize: '10px', padding: '1px 7px' }}
+              >
+                {newEnquiryCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

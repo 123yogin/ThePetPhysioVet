@@ -36,7 +36,11 @@ def _media_serve(request, path, document_root=None, show_indexes=False):
     return response
 
 
-if settings.DEBUG:
+# Media is served by Django in local dev, and in the single-container
+# deployment where there is no nginx to do it (settings.SERVE_SPA). Both go
+# through `_media_serve` so the Content-Disposition guard above applies either
+# way. With nginx in front, neither is true and Django stays out of it.
+if settings.DEBUG or settings.SERVE_SPA:
     media_prefix = settings.MEDIA_URL.lstrip("/")
     urlpatterns += [
         re_path(
@@ -44,4 +48,33 @@ if settings.DEBUG:
             _media_serve,
             {"document_root": settings.MEDIA_ROOT},
         ),
+    ]
+
+
+if settings.SERVE_SPA:
+    from django.http import Http404, HttpResponse
+    from django.views.decorators.cache import never_cache
+
+    _INDEX = settings.SPA_DIST_DIR / "index.html"
+
+    @never_cache
+    def _spa_index(request, path=""):
+        """Serve the SPA shell for any non-API path (client-side routing).
+
+        React Router owns /dashboard, /owner/pets/<uuid>, /reset-password and
+        the rest. A hard refresh or a pasted deep link arrives here as a real
+        HTTP request, and without this it would 404. Never cached: the shell
+        references hashed asset filenames that change every deploy, so a
+        cached copy would point at bundles that no longer exist.
+        """
+        if not _INDEX.is_file():
+            raise Http404(
+                "SPA bundle missing. Was the frontend built into SPA_DIST_DIR?"
+            )
+        return HttpResponse(_INDEX.read_bytes(), content_type="text/html")
+
+    urlpatterns += [
+        # Everything not already matched. api/, admin/, static/ and media/ are
+        # registered above and win; this only catches real front-end routes.
+        re_path(r"^(?!api/|admin/|static/|media/).*$", _spa_index),
     ]

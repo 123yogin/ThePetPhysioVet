@@ -312,13 +312,22 @@ class PermissionConfigTests(ApiTestCase):
     # AllowAny for the same underlying reason — a locked-out caller cannot
     # be expected to hold a valid access token either. Widened to exactly
     # five, and no wider.
+    # AMENDED again 2026-09-02 for the enquiry inbox: `enquiries_view`
+    # backs both the PUBLIC `POST /enquiries` (the marketing site's booking
+    # form — must be AllowAny for the identical reason as every other entry
+    # here: the caller cannot be expected to hold a valid access token) and
+    # the DOCTOR-only `GET /enquiries`. It is a deliberate, single exception
+    # to "one permission list per view" — see its docstring in views.py: the
+    # AllowAny/authentication_classes([]) pair only ever governs the POST
+    # half, because the GET half authenticates and enforces IsDoctor itself,
+    # by hand, before doing anything. Widened to exactly six, and no wider.
     ALLOWANY_ALLOWLIST = [
-        "login_view", "password_reset_confirm_view", "password_reset_request_view",
-        "refresh_view", "signup_view",
+        "enquiries_view", "login_view", "password_reset_confirm_view",
+        "password_reset_request_view", "refresh_view", "signup_view",
     ]
 
-    def test_allowany_only_on_login_signup_refresh_and_password_reset(self):
-        """API_CONTRACT.md §4.1 as amended: AllowAny on exactly five routes."""
+    def test_allowany_only_on_login_signup_refresh_password_reset_and_enquiries(self):
+        """API_CONTRACT.md §4.1 as amended: AllowAny on exactly six routes."""
         from appointments import views
         allowany = []
         for name in dir(views):

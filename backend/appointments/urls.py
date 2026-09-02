@@ -28,6 +28,8 @@ from .views import (
     owner_appointments_view, owner_appointment_accept_view, owner_appointment_reschedule_request_view,
     owner_appointment_cancel_view, owner_invoices_view, owner_invoice_detail_view,
     owner_pet_queries_view,
+    # Enquiries
+    enquiries_view, enquiry_convert_view, enquiry_dismiss_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -123,4 +125,9 @@ urlpatterns = [
     ),
     path("owner/invoices", owner_invoices_view, name="owner-invoices"),
     path("owner/invoices/<uuid:pk>", owner_invoice_detail_view, name="owner-invoice-detail"),
+
+    # --- Enquiries (public marketing-site booking form -> doctor inbox) ---
+    path("enquiries", enquiries_view, name="enquiries"),
+    path("enquiries/<uuid:pk>/convert", enquiry_convert_view, name="enquiry-convert"),
+    path("enquiries/<uuid:pk>/dismiss", enquiry_dismiss_view, name="enquiry-dismiss"),
 ]

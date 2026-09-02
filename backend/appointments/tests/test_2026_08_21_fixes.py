@@ -16,12 +16,22 @@ CLAUDE.md rules under test: 2 (traceability), 4 (authZ in depth / 404-not-403
 for cross-owner access), 6 (idempotent money-touching mutations — unaffected
 here, exercised in test_billing.py), 7 (report honestly).
 
-Migration modules (0009, 0010) have numeric-leading filenames that are not
-importable with a plain `import` statement, so their functions are loaded via
-`importlib` where exercised directly.
+NOTE (2026-09-02): this file used to also exercise the `0009_backfill_
+visit_type_display` and `0010_backfill_pet_owner_by_phone` data migrations
+directly via `importlib` (they have numeric-leading filenames that aren't
+importable with a plain `import`). Both migrations — and the whole 0002-
+0014 chain they lived in — were flattened into a single `0001_initial` (see
+docs/API_CONTRACT.md's 2026-09-02 UUID-migration note and CLAUDE.md): the
+schema those migrations *produced* is now created directly, so there is no
+separate backfill step left to test. The five tests that imported those
+modules were removed for that reason (`ModuleNotFoundError` otherwise); the
+*behaviour* they covered (doctor-created pets linking to a matching owner by
+phone; `visit_type_display` matching `visit_type`) remains covered by the
+non-migration tests in `VisitTypeDisplayTests` and `PetOwnerLinkTests` below,
+which exercise the live view/serializer code path instead of a one-time
+backfill.
 """
 
-import importlib
 from datetime import timedelta
 from decimal import Decimal
 
@@ -33,10 +43,6 @@ from appointments.models import (
 )
 
 from .base import API, ApiTestCase
-
-
-def _load_migration(name):
-    return importlib.import_module(f"appointments.migrations.{name}")
 
 
 # ---------------------------------------------------------------------------
@@ -131,39 +137,6 @@ class VisitTypeDisplayTests(ApiTestCase):
             "date": "2030-03-03", "time": "09:00"}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data["visit_type_display"], "Follow-up Session")
-
-    def test_backfill_migration_corrects_existing_wrong_display(self):
-        """Exercises the 0009 data-migration function directly against a row
-        seeded with the historic wrong default — the exact defect reported
-        in B5 ("I booked a Reassessment and it returned visit_type_display
-        = 'Initial Consultation'").
-        """
-        mod = _load_migration("0009_backfill_visit_type_display")
-        wrong = Appointment.objects.create(
-            pet=self.pet_a, doctor=self.doctor, pet_name="Rex",
-            owner_name="Alice Aye", owner_phone="9991110001",
-            date=timezone.localdate(), time="09:00",
-            visit_type="Reassessment", visit_type_display="Initial Consultation",
-        )
-        # RunPython functions take (apps, schema_editor); pass real `apps`
-        # so `apps.get_model` resolves against the actual app registry.
-        from django.apps import apps as real_apps
-        mod.backfill_visit_type_display(real_apps, None)
-        wrong.refresh_from_db()
-        self.assertEqual(wrong.visit_type_display, "Re-assessment")
-
-    def test_backfill_migration_leaves_correct_rows_alone(self):
-        mod = _load_migration("0009_backfill_visit_type_display")
-        from django.apps import apps as real_apps
-        correct = Appointment.objects.create(
-            pet=self.pet_a, doctor=self.doctor, pet_name="Rex",
-            owner_name="Alice Aye", owner_phone="9991110001",
-            date=timezone.localdate(), time="10:30",
-            visit_type="Hydrotherapy", visit_type_display="Hydrotherapy",
-        )
-        mod.backfill_visit_type_display(real_apps, None)
-        correct.refresh_from_db()
-        self.assertEqual(correct.visit_type_display, "Hydrotherapy")
 
 
 # ---------------------------------------------------------------------------
@@ -288,45 +261,6 @@ class PetOwnerLinkTests(ApiTestCase):
         self.assertEqual(r.status_code, 201, r.content)
         pet = Pet.objects.get(name="DoctorPhoneMatch")
         self.assertIsNone(pet.owner_id)
-
-    def test_backfill_migration_links_unambiguous_existing_pets(self):
-        mod = _load_migration("0010_backfill_pet_owner_by_phone")
-        from django.apps import apps as real_apps
-        orphan = Pet.objects.create(
-            name="Backfilled", owner=None, owner_name="Alice Aye",
-            owner_phone=self.owner_a.phone,
-        )
-        mod.backfill_pet_owner_by_phone(real_apps, None)
-        orphan.refresh_from_db()
-        self.assertEqual(orphan.owner_id, self.owner_a.id)
-
-    def test_backfill_migration_skips_ambiguous_phone(self):
-        mod = _load_migration("0010_backfill_pet_owner_by_phone")
-        from django.apps import apps as real_apps
-        UserProfile.objects.create_user(
-            username="owner_dup3", password="OwnerPass!23", role="OWNER",
-            first_name="Dup", last_name="Three", phone="9994440004",
-        )
-        UserProfile.objects.create_user(
-            username="owner_dup4", password="OwnerPass!23", role="OWNER",
-            first_name="Dup", last_name="Four", phone="9994440004",
-        )
-        orphan = Pet.objects.create(
-            name="StillOrphan", owner=None, owner_name="Dup",
-            owner_phone="9994440004",
-        )
-        mod.backfill_pet_owner_by_phone(real_apps, None)
-        orphan.refresh_from_db()
-        self.assertIsNone(orphan.owner_id)
-
-    def test_backfill_migration_does_not_touch_already_owned_pets(self):
-        mod = _load_migration("0010_backfill_pet_owner_by_phone")
-        from django.apps import apps as real_apps
-        # pet_b is owned by owner_b but shares no phone collision; sanity
-        # check the migration doesn't reassign an already-set owner.
-        mod.backfill_pet_owner_by_phone(real_apps, None)
-        self.pet_b.refresh_from_db()
-        self.assertEqual(self.pet_b.owner_id, self.owner_b.id)
 
 
 # ---------------------------------------------------------------------------
