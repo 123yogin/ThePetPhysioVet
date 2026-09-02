@@ -2,7 +2,7 @@ import datetime
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
-from django.core.management.base import BaseCommand
+from appointments.management.base import DevOnlyCommand
 from django.utils import timezone
 
 from appointments.models import (
@@ -12,7 +12,7 @@ from appointments.models import (
 )
 
 
-class Command(BaseCommand):
+class Command(DevOnlyCommand):
     help = "Seeds a realistic demo dataset exercising every model. Safe to re-run."
 
     def handle(self, *args, **options):

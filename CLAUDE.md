@@ -159,6 +159,43 @@ DRF validation errors previously had no `detail`, so the SPA fell through to `st
 clinicians saw the literal words "Bad Request"; 404s leaked Django's "No Pet matches the given
 query." 404 wording is deliberately identical for "missing" and "not yours".
 
+## Production hardening — 2026-09-02
+
+Three deployment blockers, each fixed at the cause rather than the symptom.
+
+**`seed_data` could run against production.** `DEPLOYMENT.md` instructed it, and the command
+had no environment guard — verified runnable with `DEBUG=False`. It creates
+`dr_dhanvi / DoctorPass123!`, a full-access clinician login whose password is committed to
+this repo. Fixed with `appointments/management/base.py::DevOnlyCommand`, which enforces the
+rule in `execute()` (not `handle()`, so a subclass cannot skip it by forgetting `super()`).
+**Anything that fabricates data or credentials subclasses that, never `BaseCommand`** — a
+copied guard is a guard that gets forgotten on the next command.
+
+**Rate limiting silently didn't work.** There was no `CACHES` setting, so Django used
+per-process `LocMemCache` while the Dockerfile runs `gunicorn --workers 3`. "5 resets per
+email per 15 minutes" was really up to 15, and reset on restart. Now env-selected —
+`REDIS_URL` -> Redis, else the database cache (shared, no new infrastructure), LocMem only
+under DEBUG — **plus a boot-time refusal if a deployed environment ever resolves to a
+per-process backend.** `createcachetable` runs in the entrypoint.
+
+**HTTPS was opt-in via three independent booleans.** Insecure was the default, and the flags
+could disagree — secure cookies without the redirect makes the browser drop the session
+cookie, so login fails with no visible error. Now one derived switch: HTTPS, secure cookies
+and HSTS are **on by default** in production, and only `ALLOW_INSECURE_HTTP=true` turns all
+three off together, with a `RuntimeWarning` at every boot.
+
+Also found while correcting the docs: settings never read `EMAIL_HOST`/`PORT`/`USER`/
+`PASSWORD`, so the SMTP backend would have used `localhost:25` and dropped every reset email
+while the API still returned 200. Added, with a fail-fast when the SMTP backend has no host.
+
+**Still NOT production-ready:** no payment gateway (Razorpay unwired — "record payment" is
+manual entry), no SMS or push, uploaded media on local disk rather than object storage, no
+frontend test suite, and `Notification`/`Package` still dead.
+
+**`seed_data` is not idempotent** despite what the dev notes below imply: it keys on
+`(pet, date, time)`, so running it on a different day adds a fresh generation of
+appointments rather than updating the existing ones.
+
 ## Remediation sprint — still open
 
 **Still open — do not assume these are done:**

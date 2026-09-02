@@ -132,7 +132,28 @@ SECRET_KEY=<64 random chars>
 DEBUG=False
 ALLOWED_HOSTS=<SERVER_IP>,localhost,127.0.0.1
 DATABASE_URL=<Internal URL from step 2.3>
+
+# Required — the app refuses to boot without these. Password reset emails
+# come from here; a wrong value silently sends links that go nowhere.
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+DEFAULT_FROM_EMAIL=no-reply@<your domain>
+FRONTEND_BASE_URL=http://<SERVER_IP>
+EMAIL_HOST=<smtp host>
+EMAIL_PORT=587
+EMAIL_HOST_USER=<smtp user>
+EMAIL_HOST_PASSWORD=<smtp password>
+EMAIL_USE_TLS=True
+
+# ONLY while you have no domain and no certificate. HTTPS is enforced by
+# default; this switches it off and prints a warning at every boot. Delete it
+# the moment a certificate exists — see Part 3.
+ALLOW_INSECURE_HTTP=true
 ```
+
+> **Without an SMTP provider, password reset does not work.** The app will start,
+> but the reset email is never delivered and a locked-out user stays locked out.
+> Any transactional provider works (Brevo, Mailgun, SES); the free tiers are ample
+> for a single clinic.
 
 `localhost,127.0.0.1` are required for the container healthcheck to pass.
 
@@ -142,14 +163,22 @@ Generate the secret with:
 python3 -c 'import secrets; print(secrets.token_urlsafe(64))'
 ```
 
-### 2.5 Seed the first data
+### 2.5 Create the first real clinician account
+
+**Do not run `seed_data` here.** It creates demo accounts whose passwords are committed to
+this repository — `dr_dhanvi / DoctorPass123!` has full access to every patient record.
+The command now refuses to run when `DEBUG` is off, so this is enforced rather than trusted,
+but the reason is worth knowing.
 
 ```bash
-docker exec -it <backend-container> python manage.py seed_data
+docker exec -it <backend-container> python manage.py create_doctor <username> <email>
 ```
 
-Migrations and `collectstatic` already run automatically in the entrypoint before gunicorn
-binds, so there is nothing else to do.
+It prompts for a password interactively so it never lands in your shell history. Pet owners
+sign themselves up; the public signup endpoint can only ever create an OWNER.
+
+Migrations, the cache table and `collectstatic` all run automatically in the entrypoint
+before gunicorn binds, so there is nothing else to do.
 
 ---
 
@@ -167,11 +196,15 @@ When you have a domain:
 
 ```
 ALLOWED_HOSTS=app.yourdomain.com,localhost,127.0.0.1
-SECURE_SSL_REDIRECT=True
-SESSION_COOKIE_SECURE=True
-CSRF_COOKIE_SECURE=True
 CSRF_TRUSTED_ORIGINS=https://app.yourdomain.com
+FRONTEND_BASE_URL=https://app.yourdomain.com
 ```
+
+**and delete `ALLOW_INSECURE_HTTP`.** HTTPS enforcement, secure cookies and HSTS are on by
+default in production and all switch on together the moment that variable is gone — there
+are no longer three separate flags to keep in agreement. (They used to be independent, and
+setting the cookie flags without the redirect made the browser silently drop the session
+cookie, so login failed with no visible error.)
 
 `CSRF_TRUSTED_ORIGINS` is **required** — Django admin login over HTTPS fails CSRF without it.
 
@@ -219,7 +252,7 @@ Run on 2026-08-20 against real Postgres 16 in Docker, not asserted from inspecti
 docker compose build              both images built (amd64 + arm64)
 docker compose up                 postgres / backend / frontend all healthy
 migrations                        0001–0007 applied on Postgres
-seed_data                         demo data created
+create_doctor                     real clinician account (seed_data is dev-only)
 GET  /                            200   SPA loads through nginx
 GET  /invoices/1                  200   deep link returns SPA, not 404
 POST /api/v1/auth/login           200   same-origin proxy works

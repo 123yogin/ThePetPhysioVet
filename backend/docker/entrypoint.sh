@@ -23,6 +23,12 @@ fi
 
 echo "[entrypoint] Applying database migrations..."
 python manage.py migrate --noinput
+
+# The database-backed cache needs its table. Idempotent, and a no-op when
+# REDIS_URL is set (the command simply reports the backend isn't a DB cache),
+# so this is safe to run unconditionally on every start. Without it, the
+# password-reset rate limiter would raise on its first cache write.
+python manage.py createcachetable
 echo "[entrypoint] Migrations applied."
 
 echo "[entrypoint] Collecting static files..."

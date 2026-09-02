@@ -3,6 +3,8 @@ from pathlib import Path
 from datetime import timedelta
 
 import dj_database_url
+import warnings
+
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -188,6 +190,25 @@ if not EMAIL_BACKEND:
             "set (i.e. in any non-local environment)."
         )
 
+# SMTP connection details. Django's defaults are localhost:25 with no auth,
+# so setting EMAIL_BACKEND to the SMTP backend without these silently fails to
+# deliver — the request still returns 200 (deliberately, to avoid leaking
+# whether an account exists) so nobody notices until a user reports they never
+# got their reset link. Only required when actually using the SMTP backend.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", default=True)
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+
+if EMAIL_BACKEND.endswith("smtp.EmailBackend") and not EMAIL_HOST:
+    raise ImproperlyConfigured(
+        "EMAIL_BACKEND is set to the SMTP backend but EMAIL_HOST is empty. "
+        "Django would fall back to localhost:25 and silently drop every "
+        "password-reset email, while the API still returns 200."
+    )
+
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "")
 if not DEFAULT_FROM_EMAIL:
     if DEBUG:
@@ -211,6 +232,60 @@ if not FRONTEND_BASE_URL:
             "FRONTEND_BASE_URL environment variable is required when DEBUG is "
             "not set (i.e. in any non-local environment)."
         )
+
+# --- Cache ---------------------------------------------------------------
+#
+# There was no CACHES setting at all, so Django fell back to LocMemCache —
+# which is PER PROCESS. The Dockerfile runs `gunicorn --workers 3`, so the
+# password-reset rate limit of "5 per email per 15 minutes" was really up to
+# 15, depending which worker a request happened to land on, and reset on every
+# restart. A security control that silently degrades under the deployment's
+# own default worker count is not a control.
+#
+# The fix is a shared cache, chosen by environment rather than assumed:
+#   REDIS_URL set  -> Redis (preferred; also what the target architecture uses)
+#   otherwise      -> the database, which every deployment already has
+#   DEBUG          -> local memory, since there is only one process
+#
+# DatabaseCache needs its table created; `docker/entrypoint.sh` runs
+# `createcachetable` (idempotent) before gunicorn binds.
+REDIS_URL = os.environ.get("REDIS_URL", "")
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+elif DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache",
+        }
+    }
+
+# Belt and braces: if anything ever reintroduces a per-process or no-op cache
+# in a deployed environment, fail at boot rather than degrade a rate limiter
+# into decoration. This is the check that would have caught the original bug.
+_UNSHARED_CACHE_BACKENDS = (
+    "django.core.cache.backends.locmem.LocMemCache",
+    "django.core.cache.backends.dummy.DummyCache",
+)
+if not DEBUG and CACHES["default"]["BACKEND"] in _UNSHARED_CACHE_BACKENDS:
+    raise ImproperlyConfigured(
+        "The configured cache backend is per-process, but this deployment runs "
+        "multiple worker processes. Rate limiting and idempotency guards would "
+        "silently stop working. Set REDIS_URL, or leave it unset to use the "
+        "database-backed cache."
+    )
 
 # --- CORS --------------------------------------------------------------
 # CORS_ALLOW_ALL_ORIGINS is intentionally removed. Dev origins (e.g. the Vite
@@ -271,24 +346,47 @@ SIMPLE_JWT = {
 # 2. CSRF_TRUSTED_ORIGINS is read from env — required once requests arrive
 #    over HTTPS from the proxy's perspective (e.g. the Django admin login),
 #    otherwise Django's CSRF check rejects them.
-# 3. SECURE_SSL_REDIRECT / SESSION_COOKIE_SECURE / CSRF_COOKIE_SECURE are
-#    now independently env-controlled, defaulting to False (matching the
-#    "no domain, no cert yet" bare-IP starting point) rather than being
-#    inferred from DEBUG. Turn them on explicitly via env once a real
-#    domain + certificate are in front of this. Enabling secure cookies over
-#    plain HTTP silently breaks login (the browser drops the cookie), so
-#    this must be opt-in, not assumed.
+# 3. HTTPS is ON BY DEFAULT in any non-DEBUG environment, and turning it off
+#    is a single explicitly named decision: ALLOW_INSECURE_HTTP=true.
 #
-# `manage.py check --deploy` will (correctly) warn in the bare-IP starting
-# configuration below — that's expected, not a bug to suppress; it stops
-# warning once the three flags below are turned on for a real TLS domain.
+#    These used to be three independent booleans defaulting to False. Two
+#    problems with that, both real:
+#
+#      * Insecure was the default. Deploying correctly required remembering to
+#        set three variables; deploying a clinic's patient records in plaintext
+#        required remembering nothing. The safe path must be the default path.
+#      * They can disagree. Setting SESSION_COOKIE_SECURE without
+#        SECURE_SSL_REDIRECT makes the browser drop the session cookie over
+#        plain HTTP, so login fails with no error anyone can see. Three flags
+#        that must be set consistently are one flag wearing a disguise.
+#
+#    They are now derived from one switch, so they cannot contradict each
+#    other, and the bare-IP deployment stays possible — it just has to say so.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS", default=[])
 
-SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", default=False)
-SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", default=False)
-CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", default=False)
+# Opting out of TLS. Only meaningful before a domain and certificate exist;
+# on that deployment every password, phone number and clinical note crosses
+# the network in the clear, so it is deliberately awkward to ask for.
+ALLOW_INSECURE_HTTP = _env_bool("ALLOW_INSECURE_HTTP", default=False)
+
+_HTTPS_ENFORCED = not DEBUG and not ALLOW_INSECURE_HTTP
+
+SECURE_SSL_REDIRECT = _HTTPS_ENFORCED
+SESSION_COOKIE_SECURE = _HTTPS_ENFORCED
+CSRF_COOKIE_SECURE = _HTTPS_ENFORCED
+
+if not DEBUG and ALLOW_INSECURE_HTTP:
+    # Loud, once, at boot — so an "until we get the domain" decision cannot
+    # quietly become the permanent configuration nobody remembers making.
+    warnings.warn(
+        "ALLOW_INSECURE_HTTP is set: this deployment serves plain HTTP. "
+        "Credentials and patient data are transmitted unencrypted. Remove this "
+        "variable as soon as a domain and certificate are in place.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 # HSTS only makes sense paired with an always-on SSL redirect (telling
 # browsers to *only* ever speak HTTPS to this host is actively harmful on a

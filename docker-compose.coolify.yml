@@ -40,13 +40,26 @@ services:
       # URL from the Coolify UI, e.g.
       #   postgres://user:pass@postgres-abc123:5432/petphysio
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      # HTTPS hardening stays OFF by default so a bare-IP deploy is reachable.
-      # Once a real domain + Let's Encrypt cert are in place, set all four of
-      # these to true / the real origin, and Django will enforce HTTPS.
-      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
-      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
+      # HTTPS is enforced by DEFAULT in production. Set ALLOW_INSECURE_HTTP=true
+      # only while running on a bare IP with no certificate; it turns off the
+      # SSL redirect, secure cookies and HSTS together (they cannot disagree)
+      # and logs a warning at every boot. Delete it once a cert exists.
+      ALLOW_INSECURE_HTTP: ${ALLOW_INSECURE_HTTP:-}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      # Required to boot. Password-reset mail; without a real SMTP provider a
+      # locked-out user can never recover their account.
+      EMAIL_BACKEND: ${EMAIL_BACKEND:?EMAIL_BACKEND is required}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:?DEFAULT_FROM_EMAIL is required}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL is required}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      # Optional. Unset -> the database-backed cache, which is shared across
+      # gunicorn workers. Never leave this on a per-process cache: the
+      # password-reset rate limiter depends on it.
+      REDIS_URL: ${REDIS_URL:-}
     volumes:
       - media_data:/app/media
     expose:
