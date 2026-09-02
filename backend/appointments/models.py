@@ -444,12 +444,12 @@ class Enquiry(models.Model):
     )
 
     first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100, blank=True)
     pet_name = models.CharField(max_length=100)
-    species_breed = models.CharField(max_length=200)
+    species_breed = models.CharField(max_length=200, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=50)
-    reason = models.TextField(max_length=2000)
+    reason = models.TextField(max_length=2000, blank=True)
     preferred_date = models.DateField(null=True, blank=True)
     preferred_specialist = models.CharField(max_length=150, blank=True, default="")
 
