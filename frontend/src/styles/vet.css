@@ -696,3 +696,110 @@ tr:hover td {
     transform: translateY(0);
   }
 }
+
+/* Password reveal ---------------------------------------------------------
+   The toggle sits inside the input's right edge rather than beside it, so
+   the field keeps the same width and vertical rhythm as every other input
+   on the form. No new colour values: brown-500 at rest, brown-900 on hover
+   and focus, both already in the palette above. */
+.password-field {
+  position: relative;
+  display: flex;
+}
+
+/* Reserves room for the button so a long password never runs underneath it.
+   Beats `.field input` on specificity (0-2-0 vs 0-1-1), so it applies
+   whether the input carries `.input-glass` or is styled by the `.field`
+   descendant rule. */
+.password-field .input-glass {
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0;
+  /* 44x44 hit area, centred on a ~40px-tall input rather than stretched to
+     it — the overhang is invisible because the button has no background. */
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--brown-500);
+}
+
+.password-toggle:hover {
+  color: var(--brown-900);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--brown-900);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+/* Enquiry inbox rows ------------------------------------------------------
+   Cards collapse to one scannable line and open on click. Every enquiry
+   used to render at full height, so a busy week of website requests was a
+   long scroll with nothing to skim. */
+.enquiry-summary {
+  flex: 1 1 260px;
+  /* Without this the item's automatic minimum is its MIN-CONTENT width, and
+     min-content here is the nowrap reason line capped at 52ch (~488px) — so
+     the flex row believed the summary needed 514px, wrapped the buttons onto
+     a second line on the long enquiries only, and let the summary itself
+     overhang the card on a phone. Only the cards with a long reason wrapped,
+     which is why the list looked randomly inconsistent. */
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.enquiry-summary:focus-visible {
+  outline: 2px solid var(--brown-900);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+.enquiry-chevron {
+  flex: none;
+  margin-top: 4px;
+  color: var(--brown-500);
+  transition: transform 0.18s ease;
+}
+
+.enquiry-summary[aria-expanded="true"] .enquiry-chevron {
+  transform: rotate(180deg);
+}
+
+/* Enough of the owner's message to triage on, without the card growing to
+   the length of whatever they typed. */
+.enquiry-reason-preview {
+  display: block;
+  max-width: 52ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enquiry-chevron {
+    transition: none;
+  }
+}

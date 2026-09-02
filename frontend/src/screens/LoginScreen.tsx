@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { login, signup } from '../api/auth';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
+import { PasswordField } from '../components/PasswordField';
 
 export const LoginScreen: React.FC = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -122,19 +123,15 @@ export const LoginScreen: React.FC = () => {
               />
             </div>
 
-            <div className="field">
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                className="input-glass"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoComplete="current-password"
-                required
-              />
-            </div>
+            <PasswordField
+              id="password"
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              placeholder="Enter password"
+              autoComplete="current-password"
+              required
+            />
 
             <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '4px' }}>
               <Link
@@ -235,19 +232,15 @@ export const LoginScreen: React.FC = () => {
               />
             </div>
 
-            <div className="field">
-              <label htmlFor="regPassword">Password *</label>
-              <input
-                id="regPassword"
-                type="password"
-                className="input-glass"
-                value={regPassword}
-                onChange={(e) => setRegPassword(e.target.value)}
-                placeholder="Create password"
-                autoComplete="new-password"
-                required
-              />
-            </div>
+            <PasswordField
+              id="regPassword"
+              label="Password *"
+              value={regPassword}
+              onChange={setRegPassword}
+              placeholder="Create password"
+              autoComplete="new-password"
+              required
+            />
 
             <button
               type="submit"

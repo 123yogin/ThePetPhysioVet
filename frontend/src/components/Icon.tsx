@@ -38,7 +38,10 @@ export type IconName =
   | 'celebrate'
   | 'phone'
   | 'info'
-  | 'warning';
+  | 'warning'
+  | 'eye'
+  | 'eyeOff'
+  | 'chevronDown';
 
 interface IconProps {
   name: IconName;
@@ -206,6 +209,21 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 17h.01" />
     </>
   ),
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="M10.6 6.2A9.9 9.9 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-3.2 4.1" />
+      <path d="M6.6 6.7A18.6 18.6 0 0 0 2 12s3.6 7 10 7a9.8 9.8 0 0 0 4.5-1.1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="m3 3 18 18" />
+    </>
+  ),
+  chevronDown: <path d="m6 9 6 6 6-6" />,
 };
 
 export const Icon: React.FC<IconProps> = ({ name, size = 16, label, className, style }) => (
