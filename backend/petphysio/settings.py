@@ -325,6 +325,15 @@ CORS_ALLOWED_ORIGINS = _env_list(
     "CORS_ALLOWED_ORIGINS",
     default=["http://localhost:5173", "http://127.0.0.1:5173"] if DEBUG else [],
 )
+
+# The Capacitor WebView serves the app bundle from a fixed origin per platform.
+# These are constants of the native runtime rather than deployment choices, so
+# they are always allowed: leaving them to the env var means the mobile app works
+# in dev and fails in production with a bare CORS error and no server-side trace.
+for _native_origin in ("capacitor://localhost", "https://localhost"):
+    if _native_origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_native_origin)
+
 CORS_ALLOW_CREDENTIALS = True
 
 # Django REST Framework Settings
