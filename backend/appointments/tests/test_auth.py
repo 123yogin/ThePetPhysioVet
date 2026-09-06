@@ -278,3 +278,47 @@ class LogoutTests(ApiTestCase):
             "SPA logout sends no `refresh`; backend rejects it, so the refresh "
             "token is never blacklisted server-side",
         )
+
+
+class SignupUsernameDerivationTests(ApiTestCase):
+    """DEFECT found on a device, 2026-09-06. The form says "leave blank to use
+    your email", and the client derived `email.split("@")[0]` with no uniqueness
+    check — so two different people whose emails share a local part collided,
+    and the second was refused with an error naming a field they never filled in.
+    """
+
+    def _signup(self, email, username=None):
+        body = {"first_name": "Test", "last_name": "Person", "email": email,
+                "password": "SignupPass2026"}
+        if username is not None:
+            body["username"] = username
+        return self.client.post(f"{API}/auth/signup", body, format="json")
+
+    def test_username_may_be_omitted_entirely(self):
+        r = self._signup("solo.person@example.com")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["username"], "solo.person")
+
+    def test_blank_username_is_accepted_as_the_form_promises(self):
+        r = self._signup("blank.person@example.com", username="")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertTrue(r.data["username"])
+
+    def test_two_people_sharing_an_email_local_part_both_get_accounts(self):
+        first = self._signup("info@clinic-one.example.com")
+        self.assertEqual(first.status_code, 201, first.content)
+        second = self._signup("info@clinic-two.example.com")
+        self.assertEqual(second.status_code, 201, second.content)
+        self.assertNotEqual(first.data["username"], second.data["username"])
+        self.assertEqual(first.data["username"], "info")
+        self.assertEqual(second.data["username"], "info1")
+
+    def test_an_explicit_username_is_still_honoured(self):
+        r = self._signup("chosen@example.com", username="my_own_handle")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["username"], "my_own_handle")
+
+    def test_a_taken_explicit_username_is_still_refused(self):
+        self._signup("first@example.com", username="taken_handle")
+        r = self._signup("second@example.com", username="taken_handle")
+        self.assertEqual(r.status_code, 400, r.content)
