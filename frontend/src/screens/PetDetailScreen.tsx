@@ -618,10 +618,10 @@ export const PetDetailScreen: React.FC = () => {
                 <tbody>
                   {invoices.map((inv) => (
                     <tr key={inv.id}>
-                      <td>{inv.invoice_no}</td>
-                      <td>{inv.created_at?.substring(0, 10) || '—'}</td>
-                      <td>₹{inv.total ?? '—'}</td>
-                      <td><span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>{humanizeStatus(inv.payment_status)}</span></td>
+                      <td data-label="Invoice No">{inv.invoice_no}</td>
+                      <td data-label="Date">{inv.created_at?.substring(0, 10) || '—'}</td>
+                      <td data-label="Total">₹{inv.total ?? '—'}</td>
+                      <td data-label="Status"><span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>{humanizeStatus(inv.payment_status)}</span></td>
                       <td>
                         <Link to={`/invoices/${inv.id}`} className="btn btn-secondary btn-sm">
                           View Invoice

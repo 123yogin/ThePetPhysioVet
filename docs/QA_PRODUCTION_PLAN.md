@@ -86,4 +86,65 @@ yours" · E5 the mobile app reaches production end to end
 
 ## 5. Loop log
 
-Filled in as the run proceeds: pass number, findings, fixes, deploy, re-verification.
+### Pass 1 — auth + authorisation · 21 checks, 0 failures
+A1-A8 and B1-B10 all clean against the live API. Notable: **B9 passed** — the
+privilege escalation `tests/test_exploits.py` documents (an owner PATCHing
+`role: DOCTOR` onto themselves) is genuinely closed in production. Cross-owner
+reads return **404, not 403**, so existence never leaks.
+
+### Pass 2 — validation, concurrency, deployment · 21 checks, 2 failures, both mine
+C1-C11, D1/D3, E1/E3/E4. Two "failures" triaged to test defects, not product
+defects, and proven so:
+- **D3** — my time template produced `14:00`, the slot D1 had just taken; the 400
+  was the duplicate constraint working. Five *distinct* slots in parallel:
+  `201,201,201,201,201`.
+- **E4** — the pet I picked had `doctor_name: null`, i.e. it sits in the
+  **claimable pool** `CLAUDE.md` documents as deliberate. A doctor reading it is
+  by design.
+
+**Not covered, and not claimed as passing:** the real E4 case — a doctor from
+another practice reading an *assigned* pet — is untestable on production, which
+has a single doctor account.
+
+### Pass 3 — money · 8 checks, 0 failures
+Client-supplied `subtotal`, `total` and `amount_paid` are all ignored (they are
+computed properties). Payment idempotency holds under a genuine parallel race:
+three submissions of one key produced **1 payment, ₹500 total**, confirmed in
+Postgres. Overpayment refused, negative payment refused, and an owner cannot
+settle their own invoice.
+
+**Finding (SEV-3):** `tax` *is* a stored, client-supplied column with no
+server-side rate. A ₹1,600 invoice stored `tax = 0.00` because that is what was
+sent. The 18% GST exists only in `InvoiceFormScreen.tsx`. This compounds the
+open question that veterinary clinical services appear to be **Nil-rated** under
+Entry 46 of Notification 12/2017-CTR.
+
+### Pass 4 — the app itself · pass
+Signed release APK against production: doctor signs in, lands on Clinic
+Dashboard, and the patient list shows **Coco** — real production data on a real
+device. Logcat clean: no CORS, mixed-content or fetch failures.
+
+### Fix loop
+One genuine defect fixed and re-verified against the deployed build:
+
+| | |
+|---|---|
+| Defect | Signup derived `email.split("@")[0]` client-side with no uniqueness check |
+| Impact | `info@clinic-one` and `info@clinic-two` collided; the second person was refused, citing a field the form told them to leave blank |
+| Fix | Derived server-side via the existing `_unique_owner_username()`; PR #9, `ea61772` |
+| Re-verified live | `info` → `info1` → `info2`; explicit duplicate still a clean 400 |
+
+A trap caught by existing tests: declaring `username` on the serializer dropped
+DRF's generated `UniqueValidator`, turning a duplicate into a 500. Restored by hand.
+
+### Exit condition — met
+**58 checks, zero SEV-1 or SEV-2 product defects.** Production restored to its
+exact pre-test baseline: `users=2 pets=1 appts=1 invoices=0 payments=0
+enquiries=5`, users `dr_dhanvi` + `anita.live52888`, pet `Coco`.
+
+### Still open (recorded, not fixed)
+| | Severity | Note |
+|---|---|---|
+| No request timeout anywhere in the client | SEV-3 | No `AbortController`/`AbortSignal`; a flaky connection spins forever |
+| `tax` client-supplied; GST rate frontend-only | SEV-3 | Needs a CA opinion on the rate before changing |
+| Neon credential exposed in a transcript | — | Rotate `neondb_owner` |
