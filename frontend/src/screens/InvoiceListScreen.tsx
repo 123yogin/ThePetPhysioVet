@@ -53,15 +53,15 @@ export const InvoiceListScreen: React.FC = () => {
             <tbody>
               {invoices.map((inv) => (
                 <tr key={inv.id}>
-                  <td style={{ fontWeight: 700 }}>
+                  <td data-label="Invoice #" style={{ fontWeight: 700 }}>
                     <Link to={`/invoices/${inv.id}`} className="table-link" style={{ color: 'var(--brown-900)' }}>
                       {inv.invoice_no}
                     </Link>
                   </td>
-                  <td>{inv.pet_name || '—'}</td>
-                  <td>{inv.created_at?.substring(0, 10) || '—'}</td>
-                  <td>₹{inv.total ?? '—'}</td>
-                  <td>
+                  <td data-label="Patient">{inv.pet_name || '—'}</td>
+                  <td data-label="Date">{inv.created_at?.substring(0, 10) || '—'}</td>
+                  <td data-label="Total">₹{inv.total ?? '—'}</td>
+                  <td data-label="Status">
                     <span className={`badge badge-${(inv.payment_status || 'unknown').toLowerCase()}`}>
                       {humanizeStatus(inv.payment_status)}
                     </span>

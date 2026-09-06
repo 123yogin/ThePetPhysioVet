@@ -682,17 +682,17 @@ export const AppointmentsScreen: React.FC = () => {
                 <tbody>
                   {appointments.map((appt) => (
                     <tr key={appt.id}>
-                      <td style={{ fontWeight: 700 }}>
+                      <td data-label="Date & Time" style={{ fontWeight: 700 }}>
                         {appt.date} @ {appt.time?.substring(0, 5) || '--:--'}
                       </td>
-                      <td>
+                      <td data-label="Patient">
                         <Link to={`/patients/${appt.pet_id}`} className="table-link">
                           {emojiFor(appt)} {appt.pet_name}
                         </Link>
                       </td>
-                      <td>{appt.owner_name} ({appt.owner_phone})</td>
-                      <td>{appt.visit_type_display || appt.visit_type}</td>
-                      <td>
+                      <td data-label="Owner">{appt.owner_name} ({appt.owner_phone})</td>
+                      <td data-label="Visit Type">{appt.visit_type_display || appt.visit_type}</td>
+                      <td data-label="Status / Notes">
                         <span className={`badge badge-${(appt.status || 'confirmed').toLowerCase().replace(/\s+/g, '-')}`}>
                           {humanizeStatus(appt.status)}
                         </span>

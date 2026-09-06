@@ -72,14 +72,14 @@ export const PatientsScreen: React.FC = () => {
             <tbody>
               {pets.map((pet) => (
                 <tr key={pet.id}>
-                  <td style={{ fontWeight: 700 }}>
+                  <td data-label="Patient Name" style={{ fontWeight: 700 }}>
                     <Link to={`/patients/${pet.id}`} className="table-link">
                       {petEmoji(pet.species || pet.pet_type)} {pet.name}
                     </Link>
                   </td>
-                  <td>{pet.pet_type || pet.species} {pet.breed ? `(${pet.breed})` : ''}</td>
-                  <td>{pet.owner_name}</td>
-                  <td>{pet.owner_phone}</td>
+                  <td data-label="Species / Breed">{pet.pet_type || pet.species} {pet.breed ? `(${pet.breed})` : ''}</td>
+                  <td data-label="Owner Name">{pet.owner_name}</td>
+                  <td data-label="Phone">{pet.owner_phone}</td>
                   <td>
                     <Link to={`/patients/${pet.id}`} className="btn btn-secondary btn-sm">
                       View

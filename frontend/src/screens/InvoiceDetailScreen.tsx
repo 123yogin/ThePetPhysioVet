@@ -97,10 +97,10 @@ export const InvoiceDetailScreen: React.FC = () => {
             <tbody>
               {inv.line_items?.map((item, i) => (
                 <tr key={i}>
-                  <td>{item.description}</td>
-                  <td>{item.quantity}</td>
-                  <td>₹{item.unit_price}</td>
-                  <td style={{ fontWeight: 600 }}>₹{item.amount}</td>
+                  <td data-label="Description">{item.description}</td>
+                  <td data-label="Qty">{item.quantity}</td>
+                  <td data-label="Unit Price">₹{item.unit_price}</td>
+                  <td data-label="Amount" style={{ fontWeight: 600 }}>₹{item.amount}</td>
                 </tr>
               ))}
             </tbody>

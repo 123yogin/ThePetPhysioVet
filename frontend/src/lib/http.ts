@@ -65,11 +65,17 @@ async function refreshAccessToken(): Promise<string> {
   refreshPromise = (async () => {
     let response: Response;
     try {
-      response = await fetch(apiUrl('/auth/refresh'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh }),
-      });
+      const refreshTimeout = withTimeout(REQUEST_TIMEOUT_MS);
+      try {
+        response = await fetch(apiUrl('/auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh }),
+          signal: refreshTimeout.signal,
+        });
+      } finally {
+        refreshTimeout.done();
+      }
     } catch (err) {
       // Network failure — do not clear tokens or bounce, this may be
       // transient. Let the caller surface the original error.
@@ -104,6 +110,23 @@ async function refreshAccessToken(): Promise<string> {
   }
 }
 
+// Nothing in this client ever timed out. On a flaky connection — which is the
+// normal case for a phone in a consulting room — fetch simply hangs, so the user
+// sees a spinner with no error and no retry, and taps again. That is how the
+// duplicate-booking defect got its second submission.
+//
+// Generous rather than snappy: the API is serverless and a cold start plus a
+// Neon resume is genuinely slow. Uploads get longer still, because a photo over
+// mobile data legitimately takes a while.
+const REQUEST_TIMEOUT_MS = 20000;
+const UPLOAD_TIMEOUT_MS = 120000;
+
+function withTimeout(ms: number): { signal: AbortSignal; done: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, done: () => clearTimeout(timer) };
+}
+
 export async function http<T = any>(
   endpoint: string,
   options: RequestInit & { data?: any } = {},
@@ -129,14 +152,28 @@ export async function http<T = any>(
     }
   }
 
+  const timeout = withTimeout(data instanceof FormData ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   const config: RequestInit = {
     method: data ? 'POST' : 'GET',
     headers,
     body,
+    signal: timeout.signal,
     ...customConfig,
   };
 
-  const response = await fetch(url, config);
+  let response: Response;
+  try {
+    response = await fetch(url, config);
+  } catch (err) {
+    // An abort here is our own timer, not the user navigating away: this
+    // function never exposes a signal for a caller to abort with.
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('The server took too long to respond. Check your connection and try again.');
+    }
+    throw err;
+  } finally {
+    timeout.done();
+  }
 
   // On a 401 from any endpoint except login/signup/refresh, try exactly one
   // silent refresh-and-retry before giving up. `options` (and therefore

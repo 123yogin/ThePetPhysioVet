@@ -495,6 +495,102 @@ button, input, select, textarea {
     grid-template-columns: 1fr;
   }
 
+  /* Tables become cards.
+
+     Measured on a 412px device: the appointments table was 749px wide, so 370px
+     of it — half — sat off screen behind a horizontal scroll with no affordance,
+     and the ACTIONS column holding Reschedule, Share and Complete was hidden on
+     every list screen. A wide table on a phone is not a table, it is a hidden
+     column.
+
+     Each row becomes a card and each cell a labelled line. The label comes from
+     `data-label` on the cell rather than from the header row, because the header
+     is removed from the flow here — but only visually: it stays in the DOM for
+     screen readers and for the desktop layout, which is untouched. */
+  .table-wrap {
+    overflow-x: visible;
+    border: none;
+    background: none;
+  }
+
+  .table-wrap thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The cells inside the clipped header keep their table geometry and lay out
+     to the table's full desktop width — invisible, but genuinely overflowing
+     the viewport, which is indistinguishable from a real clipping bug to
+     anything measuring the page. Collapse them too. */
+  .table-wrap thead tr,
+  .table-wrap thead th {
+    display: block;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: none;
+    overflow: hidden;
+  }
+
+  .table-wrap table,
+  .table-wrap tbody,
+  .table-wrap tr,
+  .table-wrap td {
+    display: block;
+    width: 100%;
+  }
+
+  .table-wrap tr {
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.4);
+    margin-bottom: 12px;
+  }
+
+  .table-wrap td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(62, 39, 35, 0.06);
+    text-align: right;
+  }
+
+  .table-wrap tr td:last-child {
+    border-bottom: none;
+  }
+
+  /* The label is the column heading, restored per cell. Without it a bare
+     "9812345678" or "Pending" has nothing to say what it is. */
+  .table-wrap td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--brown-700);
+    text-align: left;
+  }
+
+  /* Action cells carry buttons, which say what they do. Give them the full
+     width rather than half of it. */
+  .table-wrap td:not([data-label]) {
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* The desktop hover tint reads as a stuck selection on touch. */
+  .table-wrap tr:hover td {
+    background: transparent;
+  }
+
   /* Keep the line item on one row, but give the description its own line so
      Qty and Price get a usable width instead of 51px. The last track is `auto`,
      not 44px: the remove button only renders from the second item onward, and a
