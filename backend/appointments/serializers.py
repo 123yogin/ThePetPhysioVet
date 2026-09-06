@@ -120,6 +120,24 @@ class SignupSerializer(serializers.ModelSerializer):
     """
 
     password = serializers.CharField(write_only=True, min_length=6)
+    # Optional. The signup form tells people to "leave blank to use your email",
+    # and the client used to derive `email.split("@")[0]` locally — with no
+    # uniqueness check. So asha@example.com and asha@gmail.com, two different
+    # people, both produced "asha", and the second was refused with "A user with
+    # that username already exists" for a field they were told to leave blank.
+    # Common local parts (info@, admin@, contact@) hit this constantly. Derived
+    # server-side now, where the uniqueness is actually known.
+    # Declaring the field explicitly drops the UniqueValidator DRF would have
+    # generated from the model, so it is restored here by hand — without it a
+    # duplicate username became an IntegrityError 500 instead of a 400.
+    username = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        validators=[UniqueValidator(
+            queryset=UserProfile.objects.all(),
+            message="A user with that username already exists.",
+        )],
+    )
     # Known-issue #8: email uniqueness was not enforced, so two accounts
     # could share an email and break password-reset / account recovery.
     email = serializers.EmailField(
@@ -136,6 +154,13 @@ class SignupSerializer(serializers.ModelSerializer):
             "first_name", "last_name", "role", "phone",
         ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        if not (attrs.get("username") or "").strip():
+            from .views import _unique_owner_username
+
+            attrs["username"] = _unique_owner_username(attrs.get("email", ""))
+        return attrs
 
     def validate_role(self, value):
         if value not in ("DOCTOR", "OWNER"):

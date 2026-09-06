@@ -61,7 +61,10 @@ export const LoginScreen: React.FC = () => {
         last_name: lastName,
         email,
         phone,
-        username: regUsername || email.split('@')[0],
+        // Blank is fine: the server derives a unique username from the email.
+        // Deriving it here produced collisions between different people whose
+        // emails share a local part.
+        username: regUsername || undefined,
         password: regPassword,
         role: 'OWNER',
       });
