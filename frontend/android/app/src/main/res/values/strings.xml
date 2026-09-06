@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pet Physio Vet</string>
+    <string name="title_activity_main">Pet Physio Vet</string>
+    <string name="package_name">com.thepetphysiovet.app</string>
+    <string name="custom_url_scheme">com.thepetphysiovet.app</string>
+</resources>

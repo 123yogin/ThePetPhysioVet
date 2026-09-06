@@ -29,7 +29,7 @@ export const PatientsScreen: React.FC = () => {
             <input
               type="text"
               className="input-glass"
-              placeholder="Search by pet name, breed, or owner phone/name..."
+              placeholder="Search name, breed, or phone"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />

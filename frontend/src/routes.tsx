@@ -8,6 +8,8 @@ import { RoleLanding } from './components/RoleLanding';
 import { RequireAuth } from './components/RequireAuth';
 import { AppShell } from './components/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PlatformBridge } from './components/PlatformBridge';
+import { ScrollToTop } from './components/ScrollToTop';
 
 import { LoginScreen } from './screens/LoginScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
@@ -45,6 +47,8 @@ export const AppRoutes: React.FC = () => {
             every route would resolve one level too high and deep links would
             404. */}
         <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <PlatformBridge />
+          <ScrollToTop />
           <Routes>
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/forgot-password" element={<ForgotPasswordScreen />} />

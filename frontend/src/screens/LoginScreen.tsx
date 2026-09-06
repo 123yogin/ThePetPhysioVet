@@ -168,7 +168,7 @@ export const LoginScreen: React.FC = () => {
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-row" style={{ gap: '10px' }}>
               <div className="field">
                 <label htmlFor="firstName">First Name *</label>
                 <input

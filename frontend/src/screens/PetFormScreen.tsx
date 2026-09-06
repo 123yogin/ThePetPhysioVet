@@ -60,7 +60,7 @@ export const PetFormScreen: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="glass-card">
         <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>Pet Information</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div className="form-row">
           <div className="field">
             <label>Pet Name *</label>
             <input
@@ -86,7 +86,7 @@ export const PetFormScreen: React.FC = () => {
         <h3 style={{ margin: '24px 0 16px 0', fontSize: '16px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
           Owner Details
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div className="form-row">
           <div className="field">
             <label>Owner Full Name *</label>
             <input
@@ -123,7 +123,7 @@ export const PetFormScreen: React.FC = () => {
 
         {showMoreDetails && (
           <div style={{ marginTop: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="form-row">
               <div className="field">
                 <label>Breed</label>
                 <input

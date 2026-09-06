@@ -114,7 +114,7 @@ export const InvoiceFormScreen: React.FC = () => {
 
         <h3 style={{ margin: '20px 0 12px 0', fontSize: '16px' }}>Line Items</h3>
         {items.map((item, idx) => (
-          <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 44px', gap: '8px', marginBottom: '8px' }}>
+          <div key={idx} className="invoice-line" style={{ marginBottom: '8px' }}>
             <input
               type="text"
               className="input-glass"

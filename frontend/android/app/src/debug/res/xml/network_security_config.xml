@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only. Android has blocked cleartext HTTP since API 28, which stops
+  a debug build from reaching a local Django server over http. This file lives in
+  src/debug, so a release build never sees it and keeps the platform default:
+  cleartext refused, TLS required.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

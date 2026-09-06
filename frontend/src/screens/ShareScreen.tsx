@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchShareAppointment } from '../api/appointments';
 import { Icon } from '../components/Icon';
+import { ExternalLink } from '../components/ExternalLink';
 
 export const ShareScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -50,23 +51,23 @@ export const ShareScreen: React.FC = () => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
           {shareData?.whatsapp_url && (
-            <a
+            <ExternalLink
               href={shareData.whatsapp_url}
-              target="_blank"
-              rel="noreferrer"
+              handoff
               className="btn btn-primary"
               style={{ background: '#25D366', borderColor: '#25D366' }}
             >
               <Icon name="chat" /> Share via WhatsApp
-            </a>
+            </ExternalLink>
           )}
           {shareData?.sms_url && (
-            <a
+            <ExternalLink
               href={shareData.sms_url}
+              handoff
               className="btn btn-secondary"
             >
               <Icon name="phone" /> Send SMS Confirmation
-            </a>
+            </ExternalLink>
           )}
           {!shareData?.whatsapp_url && !shareData?.sms_url && (
             <p style={{ color: 'var(--brown-500)', margin: 0 }}>No share links are available for this appointment.</p>

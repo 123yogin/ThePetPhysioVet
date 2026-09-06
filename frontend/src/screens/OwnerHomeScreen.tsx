@@ -44,7 +44,7 @@ export const OwnerHomeScreen: React.FC = () => {
 
   // Single source of truth for bookable visit types — never hardcode this list,
   // the backend only accepts a specific set of values.
-  const { data: apptOptions, isLoading: optionsLoading, isError: optionsError } = useQuery({
+  const { data: apptOptions, isLoading: optionsLoading, isError: optionsError, refetch: refetchOptions } = useQuery({
     queryKey: ['appointmentOptions'],
     queryFn: fetchAppointmentOptions,
   });
@@ -325,7 +325,7 @@ export const OwnerHomeScreen: React.FC = () => {
                 <label>Appointment Type</label>
                 {optionsError ? (
                   <p style={{ fontSize: '13px', color: 'var(--brown-600)' }}>
-                    Couldn't load appointment types. <button type="button" className="table-link" onClick={() => window.location.reload()}>Reload the page</button>
+                    Couldn't load appointment types. <button type="button" className="table-link" onClick={() => refetchOptions()}>Try again</button>
                   </p>
                 ) : (
                   <select

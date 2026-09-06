@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ExternalLink } from '../components/ExternalLink';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -418,15 +419,13 @@ export const OwnerPetDetailScreen: React.FC = () => {
                     )}
 
                     {diag.file_url && (
-                      <a
+                      <ExternalLink
                         href={diag.file_url}
-                        target="_blank"
-                        rel="noreferrer"
                         className="table-link"
                         style={{ fontSize: '12px', marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       >
                         <Icon name="paperclip" size={12} /> View file
-                      </a>
+                      </ExternalLink>
                     )}
                   </div>
                 ))}
@@ -473,11 +472,9 @@ export const OwnerPetDetailScreen: React.FC = () => {
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                           {msg.attachments.map((att) => (
-                            <a
+                            <ExternalLink
                               key={att.id}
                               href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
                               style={{
                                 color: msg.sender_role === 'OWNER' ? '#fff' : 'var(--primary)',
                                 fontSize: '12px',
@@ -488,7 +485,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
                               }}
                             >
                               <Icon name="paperclip" size={12} /> {att.original_filename}
-                            </a>
+                            </ExternalLink>
                           ))}
                         </div>
                       )}
