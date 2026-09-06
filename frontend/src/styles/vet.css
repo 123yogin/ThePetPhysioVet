@@ -69,7 +69,8 @@ button, input, select, textarea {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid var(--glass-border);
-  padding: 28px 18px;
+  padding: calc(28px + env(safe-area-inset-top, 0px)) 18px
+    calc(28px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -161,7 +162,10 @@ button, input, select, textarea {
 
 .main-panel {
   flex: 1;
-  padding: 36px 40px;
+  padding: calc(36px + env(safe-area-inset-top, 0px))
+    calc(40px + env(safe-area-inset-right, 0px))
+    calc(36px + env(safe-area-inset-bottom, 0px))
+    calc(40px + env(safe-area-inset-left, 0px));
   max-width: 1280px;
   margin: 0 auto;
   width: 100%;
@@ -172,8 +176,8 @@ button, input, select, textarea {
 .sidebar-toggle {
   display: none;
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  right: calc(24px + env(safe-area-inset-right, 0px));
   z-index: 200;
   width: 50px;
   height: 50px;
@@ -221,7 +225,7 @@ button, input, select, textarea {
   /* The drawer FAB (50px tall at bottom: 24px) owns bottom-right here, so
      lift the toasts clear of it rather than stacking on top. */
   .flash-stack {
-    bottom: 90px;
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Lock the page behind an open drawer. The backdrop is a bare fixed overlay
@@ -244,7 +248,10 @@ button, input, select, textarea {
   }
 
   .main-panel {
-    padding: 20px 16px;
+    padding: calc(20px + env(safe-area-inset-top, 0px))
+      calc(16px + env(safe-area-inset-right, 0px))
+      calc(20px + env(safe-area-inset-bottom, 0px))
+      calc(16px + env(safe-area-inset-left, 0px));
   }
 
 }
@@ -456,6 +463,67 @@ button, input, select, textarea {
   box-sizing: border-box;
 }
 
+/* Form rows.
+   Defined here rather than inline because they have to change at the phone
+   breakpoint, and an inline grid-template-columns can only be beaten with
+   !important. Measured on a 412px device: a "1fr 1fr" row gave each field 126px
+   of text room, truncating an owner's phone number, and the invoice line item
+   squeezed Qty and Price to 51px — about two characters. */
+.form-row,
+.form-row-3,
+.invoice-line {
+  display: grid;
+  gap: 16px;
+}
+
+.form-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.form-row-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.invoice-line {
+  grid-template-columns: 3fr 1fr 1fr 44px;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .form-row,
+  .form-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Keep the line item on one row, but give the description its own line so
+     Qty and Price get a usable width instead of 51px. The last track is `auto`,
+     not 44px: the remove button only renders from the second item onward, and a
+     fixed track would hold 44px empty on the narrowest screen. */
+  .invoice-line {
+    grid-template-columns: 1fr 1fr auto;
+  }
+
+  .invoice-line > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+/* iOS zooms the whole page in when a field smaller than 16px takes focus, and
+   never zooms back out — the user is left on a magnified, sideways-scrolling
+   layout after tapping any of the 21 forms. Raising the size only on phones
+   fixes it without touching the desktop design and without `user-scalable=no`,
+   which would break pinch zoom (WCAG 1.4.4).
+
+   Keyed on the same 768px breakpoint as the drawer rather than `pointer:
+   coarse` alone: the Android WebView reports `pointer: fine`, so a
+   coarse-only rule silently never applied. `pointer: coarse` stays as a second
+   arm to catch tablets wider than the breakpoint. */
+@media (max-width: 768px), (pointer: coarse) {
+  .input-glass, .field input, .field select, .field textarea, .input-field {
+    font-size: 16px;
+  }
+}
+
 .input-glass:focus, .field input:focus, .field select:focus, .field textarea:focus {
   border-color: var(--brown-900);
   box-shadow: 0 0 0 3px rgba(62, 39, 35, 0.12);
@@ -612,7 +680,10 @@ tr:hover td {
   justify-content: center;
   min-height: 100vh;
   width: 100%;
-  padding: 24px 16px;
+  padding: calc(24px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(24px + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
   box-sizing: border-box;
 }
 
@@ -660,8 +731,8 @@ tr:hover td {
      not merely overlap those buttons, it swallowed the clicks. Bottom-right is
      empty on every screen. */
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
   z-index: 9999;
   display: flex;
   flex-direction: column;

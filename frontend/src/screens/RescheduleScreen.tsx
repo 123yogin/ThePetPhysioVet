@@ -65,7 +65,7 @@ export const RescheduleScreen: React.FC = () => {
       <p className="page-sub">Change session time for {appt.pet_name} (Owner: {appt.owner_name})</p>
 
       <form onSubmit={handleSubmit} className="glass-card">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <div className="form-row" style={{ marginBottom: '16px' }}>
           <div className="field">
             <label>New Date</label>
             <input
