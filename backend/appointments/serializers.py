@@ -1,6 +1,8 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
@@ -294,7 +296,53 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "status", "requested_date", "requested_time", "reschedule_reason",
         ]
 
+    def validate(self, attrs):
+        """Both booking paths run through here — the doctor's /appointments and
+        the owner portal's /owner/appointments. Putting these two rules in the
+        serializer rather than in either view is deliberate: the visit-type
+        vocabulary was already duplicated across three forms once, and this
+        codebase paid for it (see Appointment.VISIT_TYPES). One rule, one place.
+        """
+        # Only on creation. Editing or completing a historical record is a
+        # legitimate thing to do; scheduling a visit into the past is not.
+        if self.instance is None:
+            date = attrs.get("date")
+            if date and date < timezone.localdate():
+                raise serializers.ValidationError(
+                    {"date": "That date has already passed. Choose today or a later date."}
+                )
+
+        # A second identical submission is almost always a double tap on a slow
+        # connection, not a deliberate second booking: nothing in the product
+        # books the same animal into the same minute twice. Caught here rather
+        # than only by disabling the button, because a retry survives the button.
+        pet = attrs.get("pet") or getattr(self.instance, "pet", None)
+        date = attrs.get("date") or getattr(self.instance, "date", None)
+        time = attrs.get("time") or getattr(self.instance, "time", None)
+        if pet and date and time:
+            clash = Appointment.objects.filter(pet=pet, date=date, time=time).exclude(status="Cancelled")
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"time": f"{pet.name} already has an appointment at that date and time."}
+                )
+        return attrs
+
     def create(self, validated_data):
+        # The unique constraint is what actually stops a double tap; this turns
+        # the resulting IntegrityError into the same 400 the pre-check gives,
+        # instead of a 500 the owner cannot act on.
+        try:
+            with transaction.atomic():
+                return self._prepare(validated_data)
+        except IntegrityError:
+            pet = validated_data.get("pet")
+            raise serializers.ValidationError(
+                {"time": f"{pet.name if pet else 'This patient'} already has an appointment at that date and time."}
+            )
+
+    def _prepare(self, validated_data):
         pet = validated_data["pet"]
         validated_data.setdefault("pet_name", pet.name)
         validated_data.setdefault("owner_name", pet.owner_name)
@@ -349,9 +397,28 @@ class DiagnosticReportSerializer(serializers.ModelSerializer):
 
 
 class ProgressNoteSerializer(serializers.ModelSerializer):
+    lameness_label = serializers.CharField(source="get_lameness_score_display", read_only=True)
+
     class Meta:
         model = ProgressNote
-        fields = ["id", "session_no", "notes", "created_at"]
+        fields = [
+            "id", "session_no", "notes",
+            "pain_score", "lameness_score", "lameness_label",
+            "rom_joint", "rom_degrees", "girth_cm",
+            "created_at",
+        ]
+
+    def validate(self, attrs):
+        # A range of motion with no joint is an unreadable number, and a joint
+        # with no reading is an empty column. Reject the half-filled pair
+        # rather than storing something nobody can interpret later.
+        joint = (attrs.get("rom_joint") or "").strip()
+        degrees = attrs.get("rom_degrees")
+        if bool(joint) != (degrees is not None):
+            raise serializers.ValidationError(
+                {"rom_joint": "Record the joint and the reading together, or neither."}
+            )
+        return attrs
 
 
 class TreatmentPlanSerializer(serializers.ModelSerializer):

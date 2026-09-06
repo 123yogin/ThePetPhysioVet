@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class UserProfile(AbstractUser):
@@ -119,6 +119,19 @@ class Appointment(models.Model):
     reason_notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            # The serializer also checks for a clash, but that is check-then-act:
+            # a double tap fires both requests before either commits, both see
+            # no clash, and both insert. Only the database can serialise this.
+            # Cancelled slots are excluded so a freed slot can be rebooked.
+            models.UniqueConstraint(
+                fields=["pet", "date", "time"],
+                condition=~models.Q(status="Cancelled"),
+                name="uniq_active_appointment_per_pet_slot",
+            ),
+        ]
+
     def __str__(self):
         return f"{self.pet_name} on {self.date} at {self.time} [{self.status}]"
 
@@ -185,10 +198,53 @@ class TreatmentPlan(models.Model):
 
 
 class ProgressNote(models.Model):
+    """One session in a course of rehab.
+
+    `notes` alone cannot be plotted, cannot be reported objectively to a
+    referring vet, and cannot show an owner their animal is improving — and in
+    rehabilitation the progress evidence IS the product. The measures below are
+    the ones this discipline actually records; every one is optional, because a
+    session that only warrants a sentence should still be one click.
+    """
+
+    # Standard veterinary lameness grading. Named rather than free scored so a
+    # number in the record means the same thing between two clinicians.
+    LAMENESS_SCORES = [
+        (0, "0 — Sound"),
+        (1, "1 — Mild, intermittent"),
+        (2, "2 — Mild, consistent"),
+        (3, "3 — Moderate, obvious at walk"),
+        (4, "4 — Non-weight-bearing"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     plan = models.ForeignKey(TreatmentPlan, on_delete=models.CASCADE, related_name="progress_notes")
     session_no = models.PositiveIntegerField(default=1)
     notes = models.TextField()
+
+    pain_score = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text="0 = no pain, 10 = worst possible.",
+    )
+    lameness_score = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=LAMENESS_SCORES,
+        help_text="Covers gait and weight-bearing in one validated grade.",
+    )
+    # Degrees are meaningless without the joint they were measured at, so the
+    # two are stored together and the serializer rejects one without the other.
+    rom_joint = models.CharField(max_length=60, blank=True, default="")
+    rom_degrees = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Range of motion at `rom_joint`, in degrees.",
+    )
+    girth_cm = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Limb circumference — the usual proxy for muscle mass.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

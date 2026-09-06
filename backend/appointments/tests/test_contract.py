@@ -263,8 +263,13 @@ class AppointmentListQueryCountTests(ApiTestCase):
     """
 
     def _make_appointments(self, doctor, pet, count, prefix):
+        from datetime import timedelta
+
         from appointments.models import Appointment
-        today = self.appt_a.date
+        # Off the fixture's own date: pet_a is already booked on appt_a.date, and
+        # a pet may not hold two active appointments in the same slot. This test
+        # is about query counts, so the date is arbitrary.
+        today = self.appt_a.date + timedelta(days=365)
         for i in range(count):
             Appointment.objects.create(
                 pet=pet, doctor=doctor, pet_name=pet.name,
@@ -364,12 +369,51 @@ class TreatmentPlanContractTests(ApiTestCase):
         r1 = self.client.post(f"{API}/treatment-plans/{self.plan_a.id}/progress-notes",
                               {"notes": "session one"}, format="json")
         self.assertEqual(r1.status_code, 201, r1.content)
-        assert_keys(self, r1.data, ["id", "session_no", "notes", "created_at"],
+        assert_keys(self, r1.data,
+                    ["id", "session_no", "notes", "created_at",
+                     "pain_score", "lameness_score", "lameness_label",
+                     "rom_joint", "rom_degrees", "girth_cm"],
                     label="ProgressNote")
         self.assertEqual(r1.data["session_no"], 1)
+        # A note that carries only prose stays valid — the measures are optional.
+        self.assertIsNone(r1.data["pain_score"])
         r2 = self.client.post(f"{API}/treatment-plans/{self.plan_a.id}/progress-notes",
                               {"notes": "session two"}, format="json")
         self.assertEqual(r2.data["session_no"], 2)
+
+    def test_progress_note_records_outcome_measures(self):
+        """The measures are the point: they have to survive the round trip and
+        come back in a shape a chart can read."""
+        self.auth(self.doctor)
+        r = self.client.post(
+            f"{API}/treatment-plans/{self.plan_a.id}/progress-notes",
+            {"notes": "weight-bearing improving", "pain_score": 3,
+             "lameness_score": 2, "rom_joint": "Left stifle",
+             "rom_degrees": "118.5", "girth_cm": "31.2"},
+            format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["pain_score"], 3)
+        self.assertEqual(r.data["lameness_score"], 2)
+        self.assertEqual(r.data["lameness_label"], "2 — Mild, consistent")
+        self.assertEqual(str(r.data["rom_degrees"]), "118.5")
+
+    def test_range_of_motion_rejects_a_reading_without_its_joint(self):
+        """Degrees with no joint is an uninterpretable number in a clinical
+        record, so the pair is refused rather than half-stored."""
+        self.auth(self.doctor)
+        for payload in ({"notes": "x", "rom_degrees": "120.0"},
+                        {"notes": "x", "rom_joint": "Left hock"}):
+            r = self.client.post(
+                f"{API}/treatment-plans/{self.plan_a.id}/progress-notes",
+                payload, format="json")
+            self.assertEqual(r.status_code, 400, r.content)
+
+    def test_pain_score_outside_the_scale_is_rejected(self):
+        self.auth(self.doctor)
+        r = self.client.post(
+            f"{API}/treatment-plans/{self.plan_a.id}/progress-notes",
+            {"notes": "x", "pain_score": 11}, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
 
 
 class InvoiceContractTests(ApiTestCase):

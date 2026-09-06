@@ -9,6 +9,7 @@ import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
+import { ProgressChart } from '../components/ProgressChart';
 import { humanizeStatus, petEmoji, friendlyDate } from '../lib/labels';
 
 type TabKey = 'overview' | 'diagnoses' | 'treatment' | 'billing' | 'queries';
@@ -66,6 +67,10 @@ export const PetDetailScreen: React.FC = () => {
 
   const [noteTextByPlan, setNoteTextByPlan] = useState<Record<string, string>>({});
   const [savingNotePlanId, setSavingNotePlanId] = useState<string | null>(null);
+  // Measures stay behind a toggle so the common case — a sentence about the
+  // session — is still one field and one click.
+  const [measuresOpenPlanId, setMeasuresOpenPlanId] = useState<string | null>(null);
+  const [measuresByPlan, setMeasuresByPlan] = useState<Record<string, Record<string, string>>>({});
 
   const [replyMessage, setReplyMessage] = useState('');
   const [replyFile, setReplyFile] = useState<File | null>(null);
@@ -166,6 +171,9 @@ export const PetDetailScreen: React.FC = () => {
     }
   };
 
+  const setMeasure = (planId: string, key: string, value: string) =>
+    setMeasuresByPlan((prev) => ({ ...prev, [planId]: { ...prev[planId], [key]: value } }));
+
   const handleAddNote = async (planId: string) => {
     const text = (noteTextByPlan[planId] || '').trim();
     if (!text) {
@@ -174,9 +182,21 @@ export const PetDetailScreen: React.FC = () => {
     }
     setSavingNotePlanId(planId);
     try {
-      await addProgressNote(planId, { notes: text });
+      const m = measuresByPlan[planId] || {};
+      // Send only what was filled in — an empty box must not overwrite a
+      // measure with 0, which is a meaningful score here (0 pain, 0 lameness).
+      const num = (v?: string) => (v === undefined || v.trim() === '' ? undefined : Number(v));
+      await addProgressNote(planId, {
+        notes: text,
+        pain_score: num(m.pain_score),
+        lameness_score: num(m.lameness_score),
+        rom_joint: m.rom_joint?.trim() || undefined,
+        rom_degrees: m.rom_degrees?.trim() || undefined,
+        girth_cm: m.girth_cm?.trim() || undefined,
+      });
       addFlash('Progress note saved', 'success');
       setNoteTextByPlan((prev) => ({ ...prev, [planId]: '' }));
+      setMeasuresByPlan((prev) => ({ ...prev, [planId]: {} }));
       refetchPlans();
     } catch (err: any) {
       addFlash(err.message || 'Failed to add progress note', 'error');
@@ -480,10 +500,19 @@ export const PetDetailScreen: React.FC = () => {
 
               <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
                 <h5 style={{ margin: '0 0 12px 0' }}>Session Progress Notes</h5>
+                <ProgressChart notes={plan.progress_notes || []} />
                 {plan.progress_notes?.map((n) => (
                   <div key={n.id} style={{ padding: '10px', background: 'rgba(255,255,255,0.7)', borderRadius: '8px', marginBottom: '8px' }}>
                     <div style={{ fontSize: '12px', fontWeight: 'bold' }}>Session {n.session_no}</div>
                     <div>{n.notes}</div>
+                    {(n.pain_score !== null || n.lameness_score !== null || n.rom_degrees !== null || n.girth_cm !== null) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '6px', fontSize: '12px', color: 'var(--brown-700)' }}>
+                        {n.pain_score !== null && <span>Pain <strong>{n.pain_score}/10</strong></span>}
+                        {n.lameness_label && <span>Lameness <strong>{n.lameness_label}</strong></span>}
+                        {n.rom_degrees !== null && <span>{n.rom_joint} ROM <strong>{n.rom_degrees}°</strong></span>}
+                        {n.girth_cm !== null && <span>Girth <strong>{n.girth_cm} cm</strong></span>}
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -504,6 +533,57 @@ export const PetDetailScreen: React.FC = () => {
                     {savingNotePlanId === plan.id ? 'Saving…' : 'Add Note'}
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  className="table-link"
+                  style={{ marginTop: '8px', fontSize: '13px' }}
+                  onClick={() => setMeasuresOpenPlanId(measuresOpenPlanId === plan.id ? null : plan.id)}
+                >
+                  {measuresOpenPlanId === plan.id ? '− Hide measurements' : '+ Add measurements (pain, lameness, ROM, girth)'}
+                </button>
+
+                {measuresOpenPlanId === plan.id && (
+                  <div className="form-row" style={{ marginTop: '10px' }}>
+                    <div className="field">
+                      <label>Pain score (0–10)</label>
+                      <input type="number" min={0} max={10} className="input-glass" placeholder="0–10"
+                        value={measuresByPlan[plan.id]?.pain_score ?? ''}
+                        onChange={(e) => setMeasure(plan.id, 'pain_score', e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Lameness grade</label>
+                      <select className="input-glass"
+                        value={measuresByPlan[plan.id]?.lameness_score ?? ''}
+                        onChange={(e) => setMeasure(plan.id, 'lameness_score', e.target.value)}>
+                        <option value="">Not assessed</option>
+                        <option value="0">0 — Sound</option>
+                        <option value="1">1 — Mild, intermittent</option>
+                        <option value="2">2 — Mild, consistent</option>
+                        <option value="3">3 — Moderate, obvious at walk</option>
+                        <option value="4">4 — Non-weight-bearing</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Joint measured</label>
+                      <input type="text" className="input-glass" placeholder="e.g. Left stifle"
+                        value={measuresByPlan[plan.id]?.rom_joint ?? ''}
+                        onChange={(e) => setMeasure(plan.id, 'rom_joint', e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Range of motion (°)</label>
+                      <input type="number" step="0.1" min={0} className="input-glass" placeholder="e.g. 118.5"
+                        value={measuresByPlan[plan.id]?.rom_degrees ?? ''}
+                        onChange={(e) => setMeasure(plan.id, 'rom_degrees', e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Limb girth (cm)</label>
+                      <input type="number" step="0.1" min={0} className="input-glass" placeholder="e.g. 31.2"
+                        value={measuresByPlan[plan.id]?.girth_cm ?? ''}
+                        onChange={(e) => setMeasure(plan.id, 'girth_cm', e.target.value)} />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ))}

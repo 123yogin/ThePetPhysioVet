@@ -1279,11 +1279,18 @@ def owner_appointments_view(request):
     pet = get_object_or_404(Pet, pk=pet_id)
     IsObjectOwner().has_object_permission(request, None, pet)
 
+    # Defaulting this quietly put the wrong visit type on the clinic's schedule:
+    # an existing patient booking a follow-up was recorded as a new consultation,
+    # and nobody noticed until the appointment itself.
+    visit_type = (request.data.get("visit_type") or "").strip()
+    if not visit_type:
+        return problem(400, "Please choose what this appointment is for.")
+
     data = {
         "pet": pet.id,
         "date": request.data.get("date"),
         "time": request.data.get("time"),
-        "visit_type": request.data.get("visit_type", "Initial"),
+        "visit_type": visit_type,
         "reason_notes": request.data.get("reason_notes", ""),
     }
     serializer = AppointmentSerializer(data=data, context={"request": request})
