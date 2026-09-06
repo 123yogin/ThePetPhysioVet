@@ -138,6 +138,22 @@ class SignupSerializer(serializers.ModelSerializer):
             message="A user with that username already exists.",
         )],
     )
+    # `UserProfile.phone` is blank=True, so DRF generated an optional field and
+    # the signup form labelled it "Phone Number" with no asterisk. But
+    # `Pet.owner_phone` is NOT blank, and `owner_pets_view` fills it from this
+    # value — so an owner who skipped the optional field could not add a pet at
+    # all, and the refusal named `owner_phone`, a control their form never
+    # showed. It is also the only way the clinic can ring the client back, and
+    # the key that links a doctor-created patient to an owner account
+    # (migration 0010). Required here, at the one place it is collected.
+    phone = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "blank": "Please enter a phone number so the clinic can reach you.",
+            "required": "Please enter a phone number so the clinic can reach you.",
+        },
+    )
     # Known-issue #8: email uniqueness was not enforced, so two accounts
     # could share an email and break password-reset / account recovery.
     email = serializers.EmailField(

@@ -50,6 +50,10 @@ export const LoginScreen: React.FC = () => {
       setRegisterError('Please enter your first name and email address.');
       return;
     }
+    if (!phone.trim()) {
+      setRegisterError('Please enter a phone number so the clinic can reach you.');
+      return;
+    }
     if (!regPassword) {
       setRegisterError('Please choose a password.');
       return;
@@ -211,7 +215,7 @@ export const LoginScreen: React.FC = () => {
             </div>
 
             <div className="field">
-              <label htmlFor="phone">Phone Number</label>
+              <label htmlFor="phone">Phone Number *</label>
               <input
                 id="phone"
                 type="tel"
@@ -219,6 +223,7 @@ export const LoginScreen: React.FC = () => {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+91 98765 12345"
+                required
               />
             </div>
 

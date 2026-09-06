@@ -61,7 +61,12 @@ class SecretKeyFailFastTests(SimpleTestCase):
 class SpaRouteSmokeTests(ApiTestCase):
     """Every `/api/v1/...` path the SPA references must resolve in the URLconf."""
 
-    PATH_RE = re.compile(r"http[^(]*\(\s*[`'\"](/[^`'\"?]*)")
+    # `(?<!['"])` so the literal in `endpoint.startsWith('http')` is not read
+    # as a call to the `http` helper, and `[^(\n]*` so a match cannot span
+    # lines and pair an `http` on one line with an unrelated call on the
+    # next — together those made this test report `/api`, a prefix test in
+    # http.ts, as an unroutable endpoint the SPA calls.
+    PATH_RE = re.compile(r"(?<!['\"])\bhttp[^(\n]*\(\s*[`'\"](/[^`'\"?]*)")
 
     def _spa_paths(self):
         paths = set()
@@ -146,7 +151,9 @@ class PiiLeakTests(ApiTestCase):
     def test_signup_validation_error_does_not_echo_password(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "drwho", "password": "SuperSecret123", "email": "x@e.com",
-            "first_name": "A", "last_name": "B", "role": "OWNER"}, format="json")
+            "first_name": "A", "last_name": "B", "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 400)
         self.assertNotIn("SuperSecret123", str(r.data))
 

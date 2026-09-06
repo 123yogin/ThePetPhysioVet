@@ -1190,10 +1190,22 @@ def owner_pets_view(request):
     data = request.data.copy()
     if hasattr(data, "setdefault"):
         data.setdefault("owner_name", request.user.get_full_name() or request.user.username)
-        data.setdefault("owner_phone", request.user.phone)
         data.setdefault("owner_email", request.user.email)
+        # Only default from the profile when there is something there. Signup
+        # now requires a phone, but accounts created before that do not have
+        # one, and `setdefault` with "" was worse than omitting the key: it
+        # turned a missing contact number into "owner_phone: This field may
+        # not be blank", naming a field the owner's form never rendered.
+        if request.user.phone:
+            data.setdefault("owner_phone", request.user.phone)
     serializer = PetSerializer(data=data, context={"request": request})
     serializer.is_valid(raise_exception=True)
+    # A phone-less legacy account supplies it on the pet form instead; store it
+    # on the profile so it is asked exactly once.
+    submitted_phone = (serializer.validated_data.get("owner_phone") or "").strip()
+    if submitted_phone and not request.user.phone:
+        request.user.phone = submitted_phone
+        request.user.save(update_fields=["phone"])
     # An owner is never a DOCTOR, so there is no "creating doctor" to assign
     # (unlike pets_view). Rather than leaving every owner-created pet
     # perpetually unassigned, inherit the doctor from the owner's existing

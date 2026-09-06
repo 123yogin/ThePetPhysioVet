@@ -161,7 +161,9 @@ class SignupTests(ApiTestCase):
         """API_CONTRACT.md §5: bcrypt, cost >= 12, first in PASSWORD_HASHERS."""
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "bcryptuser", "password": "S3curePass!", "email": "b@e.com",
-            "first_name": "B", "last_name": "C", "role": "OWNER"}, format="json")
+            "first_name": "B", "last_name": "C", "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         user = UserProfile.objects.get(username="bcryptuser")
         self.assertTrue(user.password.startswith("bcrypt_sha256$"), user.password[:30])
@@ -180,14 +182,18 @@ class SignupTests(ApiTestCase):
     def test_signup_rejects_invalid_role(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "hacker", "password": "S3curePass!", "email": "h@e.com",
-            "first_name": "H", "last_name": "K", "role": "ADMIN"}, format="json")
+            "first_name": "H", "last_name": "K", "role": "ADMIN",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 400, r.content)
 
     def test_signup_cannot_set_is_staff_or_is_superuser(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "escalate", "password": "S3curePass!", "email": "e@e.com",
             "first_name": "E", "last_name": "S", "role": "OWNER",
-            "is_staff": True, "is_superuser": True}, format="json")
+            "is_staff": True, "is_superuser": True,
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         user = UserProfile.objects.get(username="escalate")
         self.assertFalse(user.is_staff, "mass-assignment set is_staff")
@@ -196,7 +202,9 @@ class SignupTests(ApiTestCase):
     def test_duplicate_username_rejected(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "drwho", "password": "S3curePass!", "email": "x@e.com",
-            "first_name": "X", "last_name": "Y", "role": "OWNER"}, format="json")
+            "first_name": "X", "last_name": "Y", "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 400, r.content)
 
     def test_duplicate_email_rejected(self):
@@ -204,7 +212,9 @@ class SignupTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "another", "password": "S3curePass!",
             "email": "dr@example.com", "first_name": "A", "last_name": "N",
-            "role": "OWNER"}, format="json")
+            "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(
             r.status_code, 400,
             "duplicate email accepted -> two accounts share an email "
@@ -289,7 +299,7 @@ class SignupUsernameDerivationTests(ApiTestCase):
 
     def _signup(self, email, username=None):
         body = {"first_name": "Test", "last_name": "Person", "email": email,
-                "password": "SignupPass2026"}
+                "password": "SignupPass2026", "phone": "9800000000"}
         if username is not None:
             body["username"] = username
         return self.client.post(f"{API}/auth/signup", body, format="json")
@@ -322,3 +332,60 @@ class SignupUsernameDerivationTests(ApiTestCase):
         self._signup("first@example.com", username="taken_handle")
         r = self._signup("second@example.com", username="taken_handle")
         self.assertEqual(r.status_code, 400, r.content)
+
+
+class OwnerFirstPetContactNumberTests(ApiTestCase):
+    """DEFECT found on the iOS build against production, 2026-09-06.
+
+    `UserProfile.phone` was blank=True, so signup generated an optional field
+    and the form labelled it "Phone Number" with no asterisk. `Pet.owner_phone`
+    is NOT blank, and `owner_pets_view` filled it via
+    `data.setdefault("owner_phone", request.user.phone)` — so an owner who
+    skipped the optional field got HTTP 400 "owner_phone: This field may not be
+    blank" on the very next thing they do, naming a field their form never
+    rendered. Adding your first pet is step one of the owner portal, so the
+    portal was unusable for anyone who left one optional box empty.
+    """
+
+    def test_signup_requires_a_phone_number(self):
+        r = self.anon().post(f"{API}/auth/signup", {
+            "first_name": "Nophone", "last_name": "Owner",
+            "email": "nophone@owner.test", "password": "OwnerPass2026",
+        }, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertIn("phone", r.data.get("errors", {}))
+
+    def test_a_new_owner_can_add_their_first_pet(self):
+        r = self.anon().post(f"{API}/auth/signup", {
+            "first_name": "Withphone", "last_name": "Owner",
+            "email": "withphone@owner.test", "password": "OwnerPass2026",
+            "phone": "9800000000",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+
+        c = self.anon()
+        c.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
+        r = c.post(f"{API}/owner/pets", {"name": "Bruno", "species": "Dog"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["owner_phone"], "9800000000")
+
+    def test_a_legacy_phoneless_owner_supplies_it_on_the_pet_form(self):
+        """Accounts that predate the required field must not be stranded, and
+        must not be asked twice: the number is adopted onto the profile."""
+        user = UserProfile.objects.create_user(
+            username="legacy_owner", password="OwnerPass2026",
+            email="legacy@owner.test", role="OWNER", first_name="Legacy",
+        )
+        self.assertEqual(user.phone, "")
+
+        c = self.auth(user)
+        r = c.post(f"{API}/owner/pets", {"name": "Mia", "species": "Cat"}, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+
+        r = c.post(f"{API}/owner/pets",
+                   {"name": "Mia", "species": "Cat", "owner_phone": "9700000001"},
+                   format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        user.refresh_from_db()
+        self.assertEqual(user.phone, "9700000001",
+                         "the number was not adopted, so the owner is asked again")
