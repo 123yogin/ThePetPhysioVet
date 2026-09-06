@@ -263,8 +263,13 @@ class AppointmentListQueryCountTests(ApiTestCase):
     """
 
     def _make_appointments(self, doctor, pet, count, prefix):
+        from datetime import timedelta
+
         from appointments.models import Appointment
-        today = self.appt_a.date
+        # Off the fixture's own date: pet_a is already booked on appt_a.date, and
+        # a pet may not hold two active appointments in the same slot. This test
+        # is about query counts, so the date is arbitrary.
+        today = self.appt_a.date + timedelta(days=365)
         for i in range(count):
             Appointment.objects.create(
                 pet=pet, doctor=doctor, pet_name=pet.name,

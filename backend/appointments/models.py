@@ -119,6 +119,19 @@ class Appointment(models.Model):
     reason_notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            # The serializer also checks for a clash, but that is check-then-act:
+            # a double tap fires both requests before either commits, both see
+            # no clash, and both insert. Only the database can serialise this.
+            # Cancelled slots are excluded so a freed slot can be rebooked.
+            models.UniqueConstraint(
+                fields=["pet", "date", "time"],
+                condition=~models.Q(status="Cancelled"),
+                name="uniq_active_appointment_per_pet_slot",
+            ),
+        ]
+
     def __str__(self):
         return f"{self.pet_name} on {self.date} at {self.time} [{self.status}]"
 

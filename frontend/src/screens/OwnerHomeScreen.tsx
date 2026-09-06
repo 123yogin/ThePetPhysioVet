@@ -333,6 +333,7 @@ export const OwnerHomeScreen: React.FC = () => {
                     value={visitType}
                     onChange={(e) => setVisitType(e.target.value)}
                     disabled={optionsLoading}
+                    required
                   >
                     {optionsLoading && <option value="">Loading...</option>}
                     {visitTypeOptions.map((opt) => (

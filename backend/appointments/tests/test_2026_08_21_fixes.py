@@ -52,21 +52,23 @@ from .base import API, ApiTestCase
 class VisitTypeOptionsTests(ApiTestCase):
     def test_hydrotherapy_and_laser_therapy_are_accepted_on_doctor_create(self):
         self.auth(self.doctor)
-        for visit_type in ("Hydrotherapy", "LaserTherapy"):
+        # One slot per visit type: these assert the vocabulary, and reusing a
+        # single slot now (correctly) trips the duplicate-booking guard.
+        for hour, visit_type in enumerate(("Hydrotherapy", "LaserTherapy"), start=9):
             with self.subTest(visit_type=visit_type):
                 r = self.client.post(f"{API}/appointments", {
                     "pet": self.pet_a.id, "visit_type": visit_type,
-                    "date": "2030-02-02", "time": "09:00"}, format="json")
+                    "date": "2030-02-02", "time": f"{hour:02d}:00"}, format="json")
                 self.assertEqual(r.status_code, 201, r.content)
                 self.assertEqual(r.data["visit_type"], visit_type)
 
     def test_existing_visit_type_codes_still_valid(self):
         self.auth(self.doctor)
-        for visit_type in ("Initial", "Followup", "Reassessment"):
+        for hour, visit_type in enumerate(("Initial", "Followup", "Reassessment"), start=9):
             with self.subTest(visit_type=visit_type):
                 r = self.client.post(f"{API}/appointments", {
                     "pet": self.pet_a.id, "visit_type": visit_type,
-                    "date": "2030-02-03", "time": "09:00"}, format="json")
+                    "date": "2030-02-03", "time": f"{hour:02d}:00"}, format="json")
                 self.assertEqual(r.status_code, 201, r.content)
 
     def test_invalid_visit_type_still_rejected(self):
