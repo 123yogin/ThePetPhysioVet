@@ -37,11 +37,34 @@ function grabFrame() {
   throw new Error(`unrecognised screencap layout: ${buf.length} bytes for ${width}x${height}`);
 }
 
-const near = (a, b, tolerance = 24) =>
-  Math.abs(a.r - b.r) <= tolerance && Math.abs(a.g - b.g) <= tolerance && Math.abs(a.b - b.b) <= tolerance;
+// Match the marker by HUE, not by absolute value. An emulator (or a real
+// phone) dims its screen, and every captured colour scales with it: this check
+// once read rgb(102,0,102) for a pure magenta marker and reported the page
+// origin as "not found", which looked exactly like a layout regression. Magenta
+// is red and blue roughly equal with almost no green, at any brightness.
+const near = (px) => {
+  const { r, g, b } = px;
+  if (r < 30 || b < 30) return false;               // too dark to judge
+  if (g > r * 0.35 || g > b * 0.35) return false;    // green means not magenta
+  return Math.abs(r - b) < Math.max(r, b) * 0.3;     // red and blue in balance
+};
 
 export async function checkTopStrip(page) {
   const dpr = await page.evaluate('return devicePixelRatio;');
+
+  // Establish a known state first. The route sweep can leave the nav drawer
+  // open, and this check then measured a screen with a drawer over it and found
+  // no marker at all — reporting a failure that was purely test ordering.
+  await page.evaluate(`
+    const backdrop = document.querySelector('.sidebar-backdrop');
+    if (backdrop) backdrop.click();
+    for (let i = 0; i < 30 && document.body.classList.contains('sidebar-open'); i++) {
+      await new Promise(r => setTimeout(r, 50));
+    }
+    window.scrollTo(0, 0);
+    await new Promise(r => setTimeout(r, 400));
+    return true;
+  `);
 
   await page.evaluate(`
     const el = document.createElement('div');
@@ -62,7 +85,7 @@ export async function checkTopStrip(page) {
 
   let pageOriginRow = -1;
   for (let y = 0; y < Math.min(height, MARKER_CSS_HEIGHT * dpr * 3); y++) {
-    if (near(at(y), MARKER)) {
+    if (near(at(y))) {
       pageOriginRow = y;
       break;
     }

@@ -418,8 +418,8 @@ class TreatmentPlanContractTests(ApiTestCase):
 
 class InvoiceContractTests(ApiTestCase):
     REQUIRED = ["id", "invoice_no", "pet_id", "pet_name", "subtotal", "tax",
-                "total", "payment_status", "payment_mode", "created_at",
-                "line_items", "payments", "amount_paid", "balance_due"]
+                "is_tax_invoice", "total", "payment_status", "payment_mode",
+                "created_at", "line_items", "payments", "amount_paid", "balance_due"]
     OPTIONAL = ["package"]
 
     def test_invoice_shape_uses_contract_names_not_legacy_names(self):
@@ -436,7 +436,8 @@ class InvoiceContractTests(ApiTestCase):
         self.auth(self.doctor)
         r = self.client.get(f"{API}/invoices/{self.invoice_a.id}")
         assert_keys(self, r.data["line_items"][0],
-                    ["description", "quantity", "unit_price", "amount"],
+                    ["description", "quantity", "unit_price", "amount",
+                     "tax_rate", "tax_amount"],
                     ["id"], "LineItem")
 
     def test_payment_shape_does_not_leak_idempotency_key(self):

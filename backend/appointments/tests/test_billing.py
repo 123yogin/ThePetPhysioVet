@@ -17,16 +17,17 @@ class InvoiceComputationTests(ApiTestCase):
         r = self.client.post(f"{API}/invoices", {
             "pet_id": self.pet_a.id,
             "line_items": [
-                {"description": "Hydro", "quantity": 2, "unit_price": "500.00"},
-                {"description": "Laser", "quantity": 1, "unit_price": "250.00"},
+                # 8% on 1000 = 80, 8% on 250 = 20 -> 100 tax, as before.
+                {"description": "Hydro", "quantity": 2, "unit_price": "500.00", "tax_rate": "8.00"},
+                {"description": "Laser", "quantity": 1, "unit_price": "250.00", "tax_rate": "8.00"},
             ],
-            "tax": "100.00",
             # hostile client input — all of these must be ignored:
             "subtotal": "1.00", "total": "1.00", "amount_paid": "9999.00",
             "balance_due": "0.00", "payment_status": "PAID",
         }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(Decimal(str(r.data["subtotal"])), Decimal("1250.00"))
+        self.assertEqual(Decimal(str(r.data["tax"])), Decimal("100.00"))
         self.assertEqual(Decimal(str(r.data["total"])), Decimal("1350.00"))
         self.assertEqual(Decimal(str(r.data["amount_paid"])), Decimal("0.00"))
         self.assertEqual(Decimal(str(r.data["balance_due"])), Decimal("1350.00"))
@@ -270,3 +271,52 @@ class RevenueRealSumsTests(ApiTestCase):
         r = self.client.get(f"{API}/dashboard/stats")
         self.assertEqual(r.data["today_appointments"], [],
                          "another doctor's appointments leaked into the dashboard")
+
+
+class GstIsPerLineAndServerComputedTests(ApiTestCase):
+    """GST used to be one client-supplied column on the invoice. It could be
+    dictated (a 1,600 invoice was stored with tax 0.00 in production because the
+    request said so) and it could not describe a real Indian veterinary bill,
+    where an exempt clinical service, medicines at 5% and boarding at 18% appear
+    together.
+    """
+
+    def _post(self, line_items, extra=None):
+        self.auth(self.doctor)
+        body = {"pet_id": str(self.pet_a.id), "line_items": line_items}
+        body.update(extra or {})
+        return self.client.post(f"{API}/invoices", body, format="json")
+
+    def test_an_invoice_level_tax_is_refused_outright(self):
+        r = self._post([{"description": "Session", "quantity": 1, "unit_price": "1000.00"}],
+                       {"tax": "180.00"})
+        self.assertEqual(r.status_code, 400, r.content)
+
+    def test_clinical_services_default_to_nil(self):
+        """Entry 46 of Notification 12/2017-CTR: veterinary clinical services
+        are exempt. Omitting the rate must not silently apply 18%."""
+        r = self._post([{"description": "Hydrotherapy", "quantity": 1, "unit_price": "1000.00"}])
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Decimal(str(r.data["tax"])), Decimal("0.00"))
+        self.assertEqual(Decimal(str(r.data["total"])), Decimal("1000.00"))
+        self.assertFalse(r.data["is_tax_invoice"])
+
+    def test_mixed_rates_on_one_bill(self):
+        r = self._post([
+            {"description": "Rehab session", "quantity": 1, "unit_price": "1000.00", "tax_rate": "0.00"},
+            {"description": "Medicines", "quantity": 1, "unit_price": "200.00", "tax_rate": "5.00"},
+            {"description": "Boarding", "quantity": 1, "unit_price": "100.00", "tax_rate": "18.00"},
+        ])
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Decimal(str(r.data["subtotal"])), Decimal("1300.00"))
+        self.assertEqual(Decimal(str(r.data["tax"])), Decimal("28.00"))   # 0 + 10 + 18
+        self.assertEqual(Decimal(str(r.data["total"])), Decimal("1328.00"))
+        self.assertTrue(r.data["is_tax_invoice"])
+
+    def test_a_negative_rate_is_refused(self):
+        r = self._post([{"description": "S", "quantity": 1, "unit_price": "100.00", "tax_rate": "-5.00"}])
+        self.assertEqual(r.status_code, 400, r.content)
+
+    def test_a_rate_above_100_is_refused(self):
+        r = self._post([{"description": "S", "quantity": 1, "unit_price": "100.00", "tax_rate": "150.00"}])
+        self.assertEqual(r.status_code, 400, r.content)

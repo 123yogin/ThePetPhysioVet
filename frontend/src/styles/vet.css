@@ -485,7 +485,8 @@ button, input, select, textarea {
 }
 
 .invoice-line {
-  grid-template-columns: 3fr 1fr 1fr 44px;
+  /* description · qty · price · GST rate · remove */
+  grid-template-columns: 3fr 1fr 1fr 2fr 44px;
   gap: 8px;
 }
 
@@ -597,6 +598,12 @@ button, input, select, textarea {
      fixed track would hold 44px empty on the narrowest screen. */
   .invoice-line {
     grid-template-columns: 1fr 1fr auto;
+  }
+
+  /* The GST select needs a full line on a phone: its labels are words, not
+     numbers, and 1fr of 412px cannot show "18% — grooming, boarding". */
+  .invoice-line > select {
+    grid-column: 1 / -1;
   }
 
   .invoice-line > :first-child {

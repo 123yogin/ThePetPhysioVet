@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Icon } from '../components/Icon';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -12,26 +12,29 @@ export const InvoiceFormScreen: React.FC = () => {
   const defaultPetId = searchParams.get('pet') || '';
   const { addFlash } = useFlash();
 
-  const GST_RATE = 0.18;
+  // GST is per line, not per invoice. A flat 18% was applied to everything,
+  // including the clinical services that Entry 46 of Notification 12/2017-CTR
+  // exempts, and the resulting figure was sent to the server and stored
+  // verbatim. The server now computes tax from these rates; what follows is a
+  // preview of that, not the source of truth.
+  const TAX_RATES = [
+    { value: 0, label: 'Nil — clinical service' },
+    { value: 5, label: '5% — medicines' },
+    { value: 12, label: '12%' },
+    { value: 18, label: '18% — grooming, boarding' },
+  ];
 
   const [petId, setPetId] = useState(defaultPetId);
-  const [items, setItems] = useState([{ description: '', quantity: 1, unit_price: 0 }]);
-  const [taxOverridden, setTaxOverridden] = useState(false);
-  const [tax, setTax] = useState(0);
+  const [items, setItems] = useState([{ description: '', quantity: 1, unit_price: 0, tax_rate: 0 }]);
   const [paymentMode, setPaymentMode] = useState('post_treatment');
   const [loading, setLoading] = useState(false);
 
-  const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
-  const computedTax = Math.round(subtotal * GST_RATE * 100) / 100;
-
-  // Recompute tax automatically as line items change, unless the doctor has
-  // explicitly chosen to override the auto-calculated GST amount.
-  useEffect(() => {
-    if (!taxOverridden) {
-      setTax(computedTax);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computedTax, taxOverridden]);
+  const lineAmount = (item: any) => (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+  const subtotal = items.reduce((sum, item) => sum + lineAmount(item), 0);
+  const tax = items.reduce(
+    (sum, item) => sum + Math.round(lineAmount(item) * (Number(item.tax_rate) || 0)) / 100,
+    0,
+  );
 
   const total = subtotal + (Number(tax) || 0);
 
@@ -41,7 +44,7 @@ export const InvoiceFormScreen: React.FC = () => {
   });
 
   const handleAddItem = () => {
-    setItems((prev) => [...prev, { description: '', quantity: 1, unit_price: 0 }]);
+    setItems((prev) => [...prev, { description: '', quantity: 1, unit_price: 0, tax_rate: 0 }]);
   };
 
   const handleItemChange = (index: number, field: string, val: any) => {
@@ -65,7 +68,6 @@ export const InvoiceFormScreen: React.FC = () => {
       const inv = await createInvoice({
         pet_id: petId,
         line_items: items,
-        tax: Number(tax),
         payment_mode: paymentMode,
       });
       addFlash(`Invoice ${inv.invoice_no} created`, 'success');
@@ -139,6 +141,16 @@ export const InvoiceFormScreen: React.FC = () => {
               onChange={(e) => handleItemChange(idx, 'unit_price', Number(e.target.value))}
               required
             />
+            <select
+              className="input-glass"
+              value={item.tax_rate ?? 0}
+              onChange={(e) => handleItemChange(idx, 'tax_rate', Number(e.target.value))}
+              aria-label={`GST rate for line item ${idx + 1}`}
+            >
+              {TAX_RATES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
             {items.length > 1 && (
               <button
                 type="button"
@@ -157,39 +169,14 @@ export const InvoiceFormScreen: React.FC = () => {
           + Add Line Item
         </button>
 
-        <div className="field">
-          <label>Tax Amount (₹ GST @ 18%)</label>
-          <input
-            type="number"
-            className="input-glass"
-            value={tax}
-            readOnly={!taxOverridden}
-            disabled={!taxOverridden}
-            onChange={(e) => setTax(Number(e.target.value))}
-            style={!taxOverridden ? { opacity: 0.75 } : undefined}
-          />
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '13px', fontWeight: 'normal' }}>
-            <input
-              type="checkbox"
-              checked={taxOverridden}
-              onChange={(e) => {
-                setTaxOverridden(e.target.checked);
-                if (!e.target.checked) setTax(computedTax);
-              }}
-              style={{ width: 'auto' }}
-            />
-            Override auto-calculated GST amount
-          </label>
-        </div>
-
         <div className="glass-card" style={{ marginTop: '16px', padding: '16px', background: 'rgba(255,255,255,0.7)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
             <span>Subtotal</span>
             <strong>₹{subtotal.toFixed(2)}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-            <span>Tax (GST){taxOverridden ? ' — overridden' : ''}</span>
-            <strong>₹{(Number(tax) || 0).toFixed(2)}</strong>
+            <span>GST{tax === 0 ? ' — exempt' : ''}</span>
+            <strong>₹{tax.toFixed(2)}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 0 0', borderTop: '1px solid var(--glass-border)', marginTop: '8px', fontSize: '16px' }}>
             <span>Total</span>

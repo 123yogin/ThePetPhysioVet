@@ -103,12 +103,16 @@ class ApiTestCase(APITestCase):
     # --- helpers ---------------------------------------------------------
 
     def _make_invoice(self, pet, owner, no, amount, tax="0.00"):
-        inv = Invoice.objects.create(
-            invoice_no=no, pet=pet, owner=owner, tax=Decimal(tax),
-        )
+        """`tax` stays an AMOUNT so existing callers read the same, but GST now
+        lives on the line item, so it is converted to the equivalent rate."""
+        inv = Invoice.objects.create(invoice_no=no, pet=pet, owner=owner)
+        amount_dec = Decimal(amount)
+        tax_dec = Decimal(tax)
+        rate = (tax_dec / amount_dec * Decimal("100")).quantize(Decimal("0.01")) \
+            if amount_dec > 0 and tax_dec else Decimal("0.00")
         LineItem.objects.create(
             invoice=inv, description="Session", quantity=1,
-            unit_price=Decimal(amount), amount=Decimal(amount),
+            unit_price=amount_dec, amount=amount_dec, tax_rate=rate,
         )
         return inv
 
