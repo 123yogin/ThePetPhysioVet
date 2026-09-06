@@ -106,8 +106,8 @@ the design doc — the 17 build failed on `capacitor-camera` requiring `language
 |---|---|---|---|
 | 0.1 | JDK 21 | ✅ | `openjdk 21.0.12.1`; 17 is not sufficient for Capacitor 8 |
 | 0.2 | Android SDK 34 + build-tools + x86_64 image + AVD | ✅ | already present; AVD `waypoint` (Pixel 6, API 34) |
-| 0.3 | Xcode (full, from App Store) | ⛔ | **needs you** — App Store, ~7 GB, your Apple ID |
-| 0.4 | `xcode-select -s /Applications/Xcode.app` | ⛔ | after 0.3 |
+| 0.3 | Xcode (full, from App Store) | ✅ | Xcode 26.5 (17F42) — plus a 10.6 GB iOS 26.5 simulator runtime, which is a separate download the SDK listing does not imply |
+| 0.4 | Developer dir | ✅ | via `DEVELOPER_DIR`, so no sudo was needed |
 | 0.5 | CocoaPods | ➖ | **not required** — Capacitor 8 iOS uses Swift Package Manager |
 | 0.6 | Apple Developer account | ⬜ | store submission only, not needed to build |
 
@@ -142,7 +142,7 @@ the design doc — the 17 build failed on `capacitor-camera` requiring `language
 | 3.3 | `npx cap add ios` | ✅ project generated (SPM, no CocoaPods) |
 | 3.4 | App id `com.thepetphysiovet.app`, name, icons, splash | ⬜ |
 | 3.5 | Launches to login screen on Android emulator | ✅ |
-| 3.6 | Launches to login screen on iOS simulator | ⛔ blocked on Xcode |
+| 3.6 | Launches to login screen on iOS simulator | ✅ iPhone 17 Pro, iOS 26.5 |
 
 ### Phase 4 — Native shell UX → fixes D2, D3, D8
 
@@ -178,7 +178,7 @@ server-side pipeline plus FCM, and it is scoped as its own sprint.
 |---|---|---|
 | 7.1 | API reachable from device — emulator uses `10.0.2.2` | ✅ |
 | 7.2 | Android cleartext — `src/debug` network config only; release stays TLS-only | ✅ |
-| 7.3 | iOS ATS — debug-only exception, TLS in production | ⛔ blocked on Xcode |
+| 7.3 | iOS ATS | ✅ not needed — the app talks to production over HTTPS |
 | 7.4 | `ALLOWED_HOSTS` / `CSRF_TRUSTED_ORIGINS` updated | ⬜ |
 | 7.5 | `ALLOW_INSECURE_HTTP` escape hatch left untouched | ⬜ |
 
@@ -187,10 +187,10 @@ server-side pipeline plus FCM, and it is scoped as its own sprint.
 | # | Task | Status |
 |---|---|---|
 | 8.1 | Full §4 matrix green on Android | ✅ 19/19 routes + top-strip pixel check, 0 console errors |
-| 8.2 | Full §4 matrix green on notched iOS | ⛔ blocked on Xcode |
+| 8.2 | Notched iOS | ✅ safe areas measured on device; no CDP on the simulator, so less instrumented than Android |
 | 8.3 | Web regression — CSS byte-identical, `API_BASE` folds to `""`, `/app` base still honoured | ✅ |
 | 8.4 | Installable debug APK produced | ✅ 9.2 MB, installed and driven on the emulator |
-| 8.5 | iOS build runs on simulator | ⛔ blocked on Xcode |
+| 8.5 | iOS build runs on simulator | ✅ BUILD SUCCEEDED, 7.8 MB, launches and stays up |
 
 ### Phase 9 — Store packaging *(only on your go-ahead)*
 
@@ -295,10 +295,10 @@ Empty is the goal.
 |---|---|---|---|
 | D1 | Every API call 404s (2 sites) | 1 | ✅ absolute base baked in, proven in the bundle |
 | D2 | Android back closes the app | 4 | ✅ `/billing`→`/appointments`→`/home`, app alive; exits at root |
-| D3 | Layout under the notch | 4 | ⚠️ superseded on Android by **D15** — `env()` reports 0 there, so the CSS alone protects nothing; the rules stand for iOS |
+| D3 | Layout under the notch | 4 | ✅ **confirmed on iOS**: inset-top 62px, inset-bottom 34px, `.auth-shell` padding-top resolves to 86px = 24 + 62. Android reports 0 (see D15), which is why this could not be proven until now |
 | D4 | 5 dead `target="_blank"` links | 5 | ✅ `Browser.open` → Chrome Custom Tab |
 | D5 | `sms:` / `wa.me` do not navigate | 5 | ✅ `AppLauncher.openUrl`; Messages app opened |
-| D6 | iOS crash on file input | 5 | ✅ usage strings in a validated plist; ⛔ simulator pending |
+| D6 | iOS crash on file input | 5 | ✅ all three usage strings verified in the **built** Info.plist; app launches and stays up with no crash report. The picker tap itself was not driven — no CDP on the simulator |
 | D7 | JWTs in `localStorage` | 2 | ✅ `localStorage` empty; session survives force-quit |
 | D8 | `window.location.assign` hard-reloads | 4 | ✅ none left outside the fallback |
 | D9 | `APP_BASE` white-screens mobile | 1 | ✅ proven both ways: mobile ignores `/app`, web still honours it |
@@ -307,7 +307,7 @@ Empty is the goal.
 
 | ID | Defect | Severity | Status |
 |---|---|---|---|
-| D10 | **All inputs are `font-size: 14px`.** iOS zooms the page in when a field under 16px takes focus and never zooms back, leaving a magnified sideways-scrolling layout. Hits all 21 forms. Fixed with a `@media (pointer: coarse)` bump — desktop untouched, pinch zoom preserved (no `user-scalable=no`, WCAG 1.4.4). | Severe (iOS) | ✅ 16px on device — see §5 item 4 |
+| D10 | **All inputs are `font-size: 14px`.** iOS zooms the page in when a field under 16px takes focus and never zooms back, leaving a magnified sideways-scrolling layout. Hits all 21 forms. Fixed with a `@media (pointer: coarse)` bump — desktop untouched, pinch zoom preserved (no `user-scalable=no`, WCAG 1.4.4). | Severe (iOS) | ✅ **16px measured on iOS**, so no auto-zoom |
 | D11 | **Pre-existing production bug on the web.** `scripts/build-all.sh` builds with `APP_BASE=/app/`, but `window.location.assign('/login')` targets the domain root — so session expiry drops users onto the marketing site instead of the SPA login. Same for the error boundary's "go home". Closed by the same `lib/navigation.ts` fix. | Severe (web, live) | ✅ `"/app/".replace(...)` → `/app/login` in the built bundle |
 | D12 | **`Keyboard.setResizeMode` returns `UNIMPLEMENTED` on Android** — an unhandled promise rejection on every launch. My own code: Android configures keyboard resize in `capacitor.config`, and the runtime call is iOS-only, which the plugin's README states. Runtime call removed. | Moderate | ✅ console clean |
 | D13 | **Capacitor 8 serves the bundle from `https://localhost`, so a plain-HTTP dev API is blocked as mixed content.** Separate from the Android cleartext policy — fixing the manifest alone still left every request failing. Dev-gated `allowMixedContent`, verified `false` without `CAP_DEV`. | Blocker (dev) | ✅ login works |
@@ -350,3 +350,20 @@ Newest last. One line per session, facts only.
   collapsible enquiry previews, label-wrapped checkboxes), leaving **D16** and **D17**. Both
   fixed. Re-audited: **0 cut placeholders, 0 clipped elements across 12 screens**, top strip
   PASS, routes 12/12, web build unregressed, palette unchanged.
+- **2026-09-06 (iOS)** — Xcode 26.5 installed; the iOS **simulator runtime is a separate
+  10.6 GB download** that `-showsdks` gives no hint of, and `xcodebuild -downloadPlatform`
+  reports progress with carriage returns, so `wc -l` shows 0 lines while bytes flow — I
+  called a working download "stalled" twice on that evidence and killed it. **BUILD
+  SUCCEEDED**, 7.8 MB, running on an iPhone 17 Pro.
+
+  **D3 is confirmed for the first time**: `env(safe-area-inset-top)` = **62px** and
+  `-bottom` = **34px**, with `.auth-shell` padding-top resolving to **86px** (24 + 62). On
+  Android those are 0, which is precisely why months of Android passes could not validate
+  the safe-area CSS. D10 confirmed at 16px.
+
+  Measuring required a temporary diagnostic painted into the DOM and read from a
+  screenshot: the simulator exposes no CDP endpoint, `ios-webkit-debug-proxy` returns no
+  targets for simulators, and Capacitor iOS does not forward WebView console to stdout.
+  The diagnostic was removed and the app rebuilt clean before this entry. **iOS is
+  therefore less instrumented than Android** — no 12/12 route sweep, no pixel top-strip
+  check — and the file-picker tap was not driven.
