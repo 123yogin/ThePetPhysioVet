@@ -367,3 +367,18 @@ Newest last. One line per session, facts only.
   The diagnostic was removed and the app rebuilt clean before this entry. **iOS is
   therefore less instrumented than Android** — no 12/12 route sweep, no pixel top-strip
   check — and the file-picker tap was not driven.
+
+## iOS production verification — 2026-09-06
+
+118 checks green on an iPhone 17 Pro simulator (iOS 26.5) against production,
+covering both portals end to end. Two shipped defects found and fixed: **D16**
+sign-in was impossible on iOS (keychain `-34018`, no entitlements file) and
+**D17** a new owner could not add their first pet (optional signup phone feeding
+a required field). Detail and the three harness defects that produced false
+results first: `docs/DESIGN_mobile.md`.
+
+**R8 — a check must be able to name what it examined.** Counting the subjects is
+part of the assertion, not an extra. A sweep that reports "no table overflows"
+having met no tables, or "access refused" having requested `/undefined`, is
+green and worthless. Both happened in this run and both were caught only by
+adding a census.
