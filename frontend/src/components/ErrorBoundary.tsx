@@ -1,4 +1,5 @@
 import React from 'react';
+import { navigateTo } from '../lib/navigation';
 import { Icon } from './Icon';
 
 interface ErrorBoundaryProps {
@@ -43,7 +44,11 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   };
 
   handleReload = () => {
-    window.location.assign('/');
+    // Clear the error as well as navigating: the boundary keeps rendering the
+    // failure until its own state is reset, so without this the user lands on
+    // the home route still looking at the error panel.
+    this.setState({ error: null });
+    navigateTo('/');
   };
 
   render() {
