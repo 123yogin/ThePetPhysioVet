@@ -13,7 +13,7 @@ export async function login(username: string, password?: string, role?: string):
     data: { username, password, role },
   });
   if (data.access) {
-    setTokens(data.access, data.refresh);
+    await setTokens(data.access, data.refresh);
   }
   // Seed ['me'] with the identity we were just handed. Without this the first
   // render after login can read a PREVIOUS user's cached profile (staleTime is
@@ -30,7 +30,7 @@ export async function signup(userData: Record<string, any>): Promise<User> {
     data: userData,
   });
   if (data.access) {
-    setTokens(data.access, data.refresh);
+    await setTokens(data.access, data.refresh);
   }
   queryClient.setQueryData(['me'], data);
   return data;
@@ -40,7 +40,7 @@ export async function logout(): Promise<void> {
   try {
     await http('/auth/logout', { method: 'POST', data: { refresh: getRefreshToken() } });
   } finally {
-    clearTokens();
+    await clearTokens();
     // Drop every cached response, not just ['me']. The cache holds one user's
     // pets, invoices and appointments; leaving it in place means the next
     // person to sign in on this browser can be shown the previous user's data

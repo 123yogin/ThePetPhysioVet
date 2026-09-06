@@ -1,4 +1,5 @@
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './tokens';
+import { navigateTo } from './navigation';
 
 // Endpoints that must never trigger a refresh attempt on 401 — attempting to
 // refresh for any of these would either be nonsensical (login/signup are
@@ -23,10 +24,23 @@ function isAuthExemptPath(endpoint: string): boolean {
   return NO_REFRESH_PATHS.some((exempt) => path === exempt || path.endsWith(exempt));
 }
 
-function redirectToLogin(): void {
-  if (typeof window !== 'undefined') {
-    window.location.assign('/login');
+// Native builds have no proxy and their document origin is the app bundle
+// (`capacitor://localhost`), so a relative `/api/v1/...` resolves against the bundle
+// and never reaches the server. Empty on web, where the origin already serves /api.
+const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
+
+function apiUrl(endpoint: string): string {
+  if (endpoint.startsWith('http')) {
+    return endpoint;
   }
+  const path = endpoint.startsWith('/api')
+    ? endpoint
+    : `/api/v1${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  return `${API_BASE}${path}`;
+}
+
+function redirectToLogin(): void {
+  navigateTo('/login');
 }
 
 // Module-level in-flight promise. Every 401 that needs a refresh awaits this
@@ -43,7 +57,7 @@ async function refreshAccessToken(): Promise<string> {
 
   const refresh = getRefreshToken();
   if (!refresh) {
-    clearTokens();
+    await clearTokens();
     redirectToLogin();
     throw new Error('Session expired. Please log in again.');
   }
@@ -51,7 +65,7 @@ async function refreshAccessToken(): Promise<string> {
   refreshPromise = (async () => {
     let response: Response;
     try {
-      response = await fetch('/api/v1/auth/refresh', {
+      response = await fetch(apiUrl('/auth/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh }),
@@ -63,14 +77,14 @@ async function refreshAccessToken(): Promise<string> {
     }
 
     if (!response.ok) {
-      clearTokens();
+      await clearTokens();
       redirectToLogin();
       throw new Error('Session expired. Please log in again.');
     }
 
     const data = await response.json().catch(() => ({}));
     if (!data.access) {
-      clearTokens();
+      await clearTokens();
       redirectToLogin();
       throw new Error('Session expired. Please log in again.');
     }
@@ -79,7 +93,7 @@ async function refreshAccessToken(): Promise<string> {
     // one we just presented. Store both, or the next refresh sends a
     // blacklisted token and the user is logged out anyway. `data.refresh` is
     // optional so a non-rotating server still works.
-    setTokens(data.access, data.refresh);
+    await setTokens(data.access, data.refresh);
     return data.access as string;
   })();
 
@@ -97,12 +111,7 @@ export async function http<T = any>(
 ): Promise<T> {
   const { data, headers: customHeaders, ...customConfig } = options;
 
-  let url = endpoint;
-  if (!url.startsWith('http')) {
-    if (!url.startsWith('/api')) {
-      url = `/api/v1${url.startsWith('/') ? '' : '/'}${url}`;
-    }
-  }
+  const url = apiUrl(endpoint);
 
   const token = getAccessToken();
   const headers: Record<string, string> = {

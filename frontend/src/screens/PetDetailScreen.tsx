@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ExternalLink } from '../components/ExternalLink';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPetDetail } from '../api/pets';
@@ -282,7 +283,7 @@ export const PetDetailScreen: React.FC = () => {
       {activeTab === 'overview' && (
         <div className="glass-card">
           <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '700' }}>Clinical Details</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="form-row">
             <div><strong>Breed:</strong> {pet.breed || 'N/A'}</div>
             <div><strong>Age / Sex:</strong> {pet.age || 'N/A'} / {sexLabel(pet.sex)}</div>
             <div><strong>Weight:</strong> {pet.weight ? `${pet.weight} kg` : 'N/A'}</div>
@@ -311,7 +312,7 @@ export const PetDetailScreen: React.FC = () => {
           <div className="glass-card" style={{ marginBottom: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Upload Scan or Report</h3>
             <form onSubmit={handleUploadDiagnosis}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div className="form-row" style={{ marginBottom: '16px' }}>
                 <div className="field">
                   <label>Report Type</label>
                   <select value={diagType} onChange={(e) => setDiagType(e.target.value)} className="input-glass">
@@ -371,9 +372,9 @@ export const PetDetailScreen: React.FC = () => {
                     <div>{d.notes || 'No notes'}</div>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                       {d.file_url && (
-                        <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <ExternalLink href={d.file_url} className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                           <Icon name="paperclip" size={13} /> View File ({d.original_filename})
-                        </a>
+                        </ExternalLink>
                       )}
                       {confirmDeleteId === d.id ? (
                         <>
@@ -421,7 +422,7 @@ export const PetDetailScreen: React.FC = () => {
           <div className="glass-card" style={{ marginBottom: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Create New Physical Therapy Plan</h3>
             <form onSubmit={handleCreatePlan}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div className="form-row-3" style={{ marginBottom: '16px' }}>
                 <div className="field">
                   <label>Therapies (separate multiple with a comma)</label>
                   <input
@@ -599,11 +600,9 @@ export const PetDetailScreen: React.FC = () => {
                   {m.attachments && m.attachments.length > 0 && (
                     <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {m.attachments.map((att) => (
-                        <a
+                        <ExternalLink
                           key={att.id}
                           href={att.url}
-                          target="_blank"
-                          rel="noreferrer"
                           style={{
                             color: m.sender_role === 'DOCTOR' ? '#fff' : 'var(--primary)',
                             fontSize: '12px',
@@ -614,7 +613,7 @@ export const PetDetailScreen: React.FC = () => {
                           }}
                         >
                           <Icon name="paperclip" size={12} /> {att.original_filename}
-                        </a>
+                        </ExternalLink>
                       ))}
                     </div>
                   )}
