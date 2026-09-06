@@ -463,8 +463,9 @@ class TreatmentPlanSerializer(serializers.ModelSerializer):
 class LineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = LineItem
-        fields = ["id", "description", "quantity", "unit_price", "amount"]
-        read_only_fields = ["amount"]
+        fields = ["id", "description", "quantity", "unit_price", "amount",
+                  "tax_rate", "tax_amount"]
+        read_only_fields = ["amount", "tax_amount"]
         # Known-issue #4: a negative unit_price/quantity minted a negative
         # invoice and dragged /revenue.total_revenue below zero. The model
         # field validators (MinValueValidator(0)) already propagate here via
@@ -473,6 +474,8 @@ class LineItemSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "quantity": {"min_value": 0},
             "unit_price": {"min_value": 0},
+            # A negative rate would be a discount smuggled in as tax.
+            "tax_rate": {"min_value": 0, "max_value": 100},
         }
 
     def validate(self, attrs):
@@ -520,11 +523,16 @@ class InvoiceSerializer(serializers.ModelSerializer):
     amount_paid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     balance_due = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     payment_status = serializers.CharField(read_only=True)
+    # Was a writable column. A client could state its own tax, and did: a 1,600
+    # invoice was stored with tax 0.00 in production purely because the request
+    # said so. It is now summed from the line rates like every other money field.
+    tax = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    is_tax_invoice = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
-            "id", "invoice_no", "pet_id", "pet_name", "subtotal", "tax", "total",
+            "id", "invoice_no", "pet_id", "pet_name", "subtotal", "tax", "is_tax_invoice", "total",
             "payment_status", "payment_mode", "created_at", "line_items",
             "payments", "package", "amount_paid", "balance_due",
         ]

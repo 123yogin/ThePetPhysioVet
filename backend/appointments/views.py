@@ -838,10 +838,15 @@ def invoices_view(request):
     if not isinstance(line_items_data, list) or not line_items_data:
         return problem(400, "At least one line item is required.")
 
-    try:
-        tax = Decimal(str(request.data.get("tax") or "0"))
-    except InvalidOperation:
-        return problem(400, "tax must be a number.")
+    # A client-supplied `tax` is deliberately ignored now. It used to be stored
+    # verbatim, so an invoice could carry whatever tax the caller stated; GST is
+    # computed from each line's own rate instead.
+    if "tax" in request.data:
+        return problem(
+            400,
+            "Tax is calculated from each line item.",
+            "Set `tax_rate` on each line item instead of sending an invoice-level `tax`.",
+        )
 
     payment_mode = request.data.get("payment_mode") or "post_treatment"
     if payment_mode not in dict(Invoice.PAYMENT_MODE_CHOICES):
@@ -886,7 +891,7 @@ def invoices_view(request):
         invoice_no = f"{prefix}{last_seq + 1:03d}"
 
         invoice = Invoice.objects.create(
-            invoice_no=invoice_no, pet=pet, owner=pet.owner, tax=tax, payment_mode=payment_mode,
+            invoice_no=invoice_no, pet=pet, owner=pet.owner, payment_mode=payment_mode,
         )
 
         for item_serializer in item_serializers:

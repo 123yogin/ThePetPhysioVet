@@ -279,7 +279,6 @@ class Invoice(models.Model):
         UserProfile, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="invoices",
     )
-    tax = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES, default="post_treatment")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -290,6 +289,23 @@ class Invoice(models.Model):
         return f"Invoice {self.invoice_no}"
 
     # --- server-computed fields (never trust client input for these) ---
+
+    @property
+    def tax(self):
+        """Derived, like every other money field on this model.
+
+        It was the one exception: a stored column the client supplied, so an
+        invoice could be saved with any tax the caller felt like — verified in
+        production, where a 1,600 invoice stored tax = 0.00 purely because that
+        is what the request said.
+        """
+        return sum((item.tax_amount for item in self.line_items.all()), Decimal("0.00"))
+
+    @property
+    def is_tax_invoice(self):
+        """A supply with no tax needs a bill of supply, not a tax invoice
+        (s.31(3)(c) CGST). The document has to say which it is."""
+        return self.tax > 0
 
     @property
     def subtotal(self):
@@ -333,6 +349,38 @@ class LineItem(models.Model):
     quantity = models.IntegerField(default=1, validators=[MinValueValidator(0)])
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # GST is per line, not per invoice: one bill can carry an exempt clinical
+    # service, medicines at 5%, and boarding at 18%. A single invoice-level rate
+    # cannot express that, and the flat 18% this app used to apply was wrong for
+    # the most common line of all.
+    #
+    # Default Nil. Entry 46 of Notification 12/2017-Central Tax (Rate), heading
+    # 9983, SAC 998351: "Services by a veterinary clinic in relation to health
+    # care of animals or birds" — Nil. Still current after GST 2.0 (Notification
+    # 16/2025-CTR amends other entries and leaves serial 46 alone).
+    #
+    # NOT legal advice, and one case is genuinely unsettled: entry 46 is drafted
+    # around the supplier being a veterinary clinic, and a standalone animal
+    # physiotherapy practice that is not one sits in a grey area with no AAR on
+    # point. That is exactly why this is a per-line field with a documented
+    # default rather than a constant: a clinic and its accountant can set what
+    # applies to them without a code change.
+    TAX_RATES = [
+        (Decimal("0.00"), "Nil — veterinary clinical service (exempt)"),
+        (Decimal("5.00"), "5% — medicines"),
+        (Decimal("12.00"), "12%"),
+        (Decimal("18.00"), "18% — grooming, boarding, training"),
+    ]
+    tax_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        help_text="GST percentage for this line. Nil for veterinary clinical services.",
+    )
+
+    @property
+    def tax_amount(self):
+        return (self.amount * self.tax_rate / Decimal("100")).quantize(Decimal("0.01"))
 
     def save(self, *args, **kwargs):
         if self.amount is None:
