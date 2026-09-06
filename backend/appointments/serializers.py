@@ -349,9 +349,28 @@ class DiagnosticReportSerializer(serializers.ModelSerializer):
 
 
 class ProgressNoteSerializer(serializers.ModelSerializer):
+    lameness_label = serializers.CharField(source="get_lameness_score_display", read_only=True)
+
     class Meta:
         model = ProgressNote
-        fields = ["id", "session_no", "notes", "created_at"]
+        fields = [
+            "id", "session_no", "notes",
+            "pain_score", "lameness_score", "lameness_label",
+            "rom_joint", "rom_degrees", "girth_cm",
+            "created_at",
+        ]
+
+    def validate(self, attrs):
+        # A range of motion with no joint is an unreadable number, and a joint
+        # with no reading is an empty column. Reject the half-filled pair
+        # rather than storing something nobody can interpret later.
+        joint = (attrs.get("rom_joint") or "").strip()
+        degrees = attrs.get("rom_degrees")
+        if bool(joint) != (degrees is not None):
+            raise serializers.ValidationError(
+                {"rom_joint": "Record the joint and the reading together, or neither."}
+            )
+        return attrs
 
 
 class TreatmentPlanSerializer(serializers.ModelSerializer):

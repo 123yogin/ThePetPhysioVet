@@ -76,6 +76,14 @@ export interface ProgressNote {
   id: string;
   session_no: number;
   notes: string;
+  // Objective measures. All optional: a session that only warrants a sentence
+  // should stay one click. DRF serialises DecimalField as a string.
+  pain_score: number | null;
+  lameness_score: number | null;
+  lameness_label: string | null;
+  rom_joint: string;
+  rom_degrees: string | null;
+  girth_cm: string | null;
   created_at: string;
 }
 

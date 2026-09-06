@@ -16,7 +16,17 @@ export async function fetchTreatmentPlanDetail(id: string): Promise<TreatmentPla
   return http<TreatmentPlan>(`/treatment-plans/${id}`);
 }
 
-export async function addProgressNote(planId: string, data: { session_no?: number; notes: string }): Promise<ProgressNote> {
+export interface ProgressNoteInput {
+  session_no?: number;
+  notes: string;
+  pain_score?: number | null;
+  lameness_score?: number | null;
+  rom_joint?: string;
+  rom_degrees?: string | null;
+  girth_cm?: string | null;
+}
+
+export async function addProgressNote(planId: string, data: ProgressNoteInput): Promise<ProgressNote> {
   return http<ProgressNote>(`/treatment-plans/${planId}/progress-notes`, {
     method: 'POST',
     data,
