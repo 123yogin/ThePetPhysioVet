@@ -225,3 +225,76 @@ class RequirementsParityTests(ApiTestCase):
             "installs the root one and Docker installs the backend one, so they "
             "must match exactly. Copy whichever you edited over the other.",
         )
+
+
+class ModelPackageIntegrityTests(ApiTestCase):
+    """models/ is a package now; these pin what the split must never break.
+
+    The 583-line models.py became eight domain modules. Django keys a model by
+    app_label and class name rather than module path, so the 19 tables, 8
+    migrations and 17 content types were untouched — but nothing structural
+    stops a later edit from moving a model into a new app_label, renaming a
+    table, or dropping a name out of the package's re-exports, and any of those
+    would be a silent production break rather than a test failure.
+    """
+
+    EXPECTED_MODELS = {
+        "UserProfile", "PasswordResetToken",           # accounts
+        "Pet",                                         # pets
+        "Appointment",                                 # scheduling
+        "DiagnosticReport", "TreatmentPlan", "ProgressNote",   # clinical
+        "Invoice", "LineItem", "Payment", "Package",   # billing
+        "Notification", "NotificationPref",            # notifications
+        "QueryThread", "QueryMessage", "QueryAttachment",      # messaging
+        "Enquiry",                                     # enquiries
+    }
+
+    def test_no_pending_migrations(self):
+        """The split must not have changed the schema.
+
+        `makemigrations --check` exits non-zero the moment the models stop
+        matching the migration state, which is exactly what a stray db_table or
+        app_label change would do.
+        """
+        from io import StringIO
+        from django.core.management import call_command
+
+        out = StringIO()
+        try:
+            call_command("makemigrations", "appointments", check=True,
+                         dry_run=True, stdout=out, stderr=out)
+        except SystemExit as exc:  # non-zero means unapplied model changes
+            self.fail(
+                "The models no longer match the migrations. Splitting models.py "
+                "must not change the schema; run makemigrations to see what "
+                f"drifted.\n{out.getvalue()}"
+            )
+
+    def test_every_model_is_reexported_from_the_package(self):
+        """`from appointments.models import X` must keep working for all of them."""
+        from appointments import models as pkg
+
+        for name in sorted(self.EXPECTED_MODELS):
+            self.assertTrue(
+                hasattr(pkg, name),
+                f"{name} is no longer importable from appointments.models — add it "
+                "to the re-exports in models/__init__.py",
+            )
+
+    def test_all_models_keep_the_appointments_app_label(self):
+        """A model that drifts to another app_label renames its table."""
+        from django.apps import apps
+
+        registered = {m.__name__ for m in apps.get_app_config("appointments").get_models()}
+        self.assertEqual(registered, self.EXPECTED_MODELS)
+
+    def test_table_names_are_unchanged(self):
+        """Tables are appointments_<model>; production holds 19 of them."""
+        from django.apps import apps
+
+        for model in apps.get_app_config("appointments").get_models():
+            self.assertTrue(
+                model._meta.db_table.startswith("appointments_"),
+                f"{model.__name__} is mapped to {model._meta.db_table}, which would "
+                "orphan the live table",
+            )
