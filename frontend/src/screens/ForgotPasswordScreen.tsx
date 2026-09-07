@@ -33,7 +33,7 @@ export const ForgotPasswordScreen: React.FC = () => {
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
         <h1 className="auth-brand" style={{ fontSize: '26px' }}>
-          <BrandMark size={40} label="The Pet Physio Vet" />
+          <BrandMark size={84} label="The Pet Physio Vet" stacked />
         </h1>
 
         {submitted ? (

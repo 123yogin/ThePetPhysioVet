@@ -23,7 +23,7 @@ export const ResetPasswordScreen: React.FC = () => {
       <div className="auth-shell">
         <div className="auth-card" style={{ maxWidth: '460px' }}>
           <h1 className="auth-brand" style={{ fontSize: '26px' }}>
-            <BrandMark size={40} label="The Pet Physio Vet" />
+            <BrandMark size={84} label="The Pet Physio Vet" stacked />
           </h1>
           <div className="alert alert-danger" role="alert">
             <span>This password reset link is missing its token. Please request a new link.</span>
@@ -70,7 +70,7 @@ export const ResetPasswordScreen: React.FC = () => {
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
         <h1 className="auth-brand" style={{ fontSize: '26px' }}>
-          <BrandMark size={40} label="The Pet Physio Vet" />
+          <BrandMark size={84} label="The Pet Physio Vet" stacked />
         </h1>
 
         <form onSubmit={handleSubmit}>
