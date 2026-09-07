@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ThePetPhysioVet</title>
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%logo.svg" />
+    <link rel="apple-touch-icon" href="%BASE_URL%logo.png" />
+    <meta name="theme-color" content="#DCAD8B" />
     <!--
       Parity fix (does NOT touch vet.css, which stays byte-identical). Django
       makes `.auth-shell` / `.app-shell` DIRECT children of <body>, so under
@@ -19,7 +22,49 @@
     </style>
   </head>
   <body>
+    <!--
+      The launch frame lives here rather than in a React component because
+      main.tsx awaits loadTokens() before its first render — on a device that
+      is the keychain, so nothing painted for ~2s and the user saw a blank
+      cream screen. In the markup it paints as soon as the HTML parses, and the
+      CSS animation runs once, at that first paint. It sits OUTSIDE #root so
+      React never owns or remounts it; the script below takes it away once the
+      app has actually rendered something.
+    -->
+    <div id="splash" class="splash splash-in" role="presentation" aria-hidden="true">
+      <div class="splash-mark"><img src="%BASE_URL%logo.svg" alt="" width="168" height="168" /></div>
+      <p class="splash-word">The Pet Physio Vet</p>
+    </div>
     <div id="root"></div>
+    <script>
+      (function () {
+        var el = document.getElementById('splash');
+        if (!el) return;
+        var root = document.getElementById('root');
+        var start = Date.now();
+        // Long enough for the animation to finish, so it is never cut off.
+        var MIN_MS = 1400;
+        var HARD_CAP_MS = 8000;
+        var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) { el.className = 'splash'; MIN_MS = 400; }
+        function done() {
+          el.className = reduced ? 'splash splash-out' : 'splash splash-out';
+          setTimeout(function () { el.remove(); }, 420);
+        }
+        (function poll() {
+          var waited = Date.now() - start;
+          // Two conditions, because either alone was not enough. The flag from
+          // lib/appReady.ts says React got past its auth check; the .app-booting
+          // check says nothing on screen is still a loading placeholder. With
+          // only the flag, a redirect through a second guard could still put
+          // "Loading session..." up right as the splash left.
+          var appReady = document.documentElement.dataset.appReady === '1'
+            && !document.querySelector('.app-booting');
+          if (waited > HARD_CAP_MS || (appReady && waited >= MIN_MS)) return done();
+          setTimeout(poll, 60);
+        })();
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

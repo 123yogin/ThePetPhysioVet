@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login, signup } from '../api/auth';
 import { useFlash } from '../lib/flash';
-import { Icon } from '../components/Icon';
+import { markAppReady } from '../lib/appReady';
 import { PasswordField } from '../components/PasswordField';
 
 export const LoginScreen: React.FC = () => {
@@ -15,6 +15,9 @@ export const LoginScreen: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+
+  // This screen needs no session, so the launch frame can go as soon as it paints.
+  useEffect(() => markAppReady(), []);
   const [regUsername, setRegUsername] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
@@ -84,9 +87,18 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
-        <h1 className="auth-brand" style={{ fontSize: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <Icon name="paw" size={24} /> The Pet Physio Vet
-        </h1>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <img
+            src={`${import.meta.env.BASE_URL}logo.svg`}
+            alt=""
+            width={84}
+            height={84}
+            style={{ display: 'block', borderRadius: '50%' }}
+          />
+          <h1 className="auth-brand" style={{ fontSize: '26px', margin: 0, textAlign: 'center' }}>
+            The Pet Physio Vet
+          </h1>
+        </div>
 
         {/* Mode Selector Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.6)', padding: '4px', borderRadius: '12px' }}>

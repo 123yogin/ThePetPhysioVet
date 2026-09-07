@@ -977,3 +977,69 @@ tr:hover td {
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------------------
+   Launch animation (components/SplashScreen.tsx)
+
+   The ground is the app's own cream, identical to the native launch images and
+   to the page behind it, so the OS splash, this and the app are one continuous
+   surface with no flash of white. Cream rather than the mark's tan because on
+   tan the disc vanished into the background; on cream it reads as a circle.
+   Both values below already exist in the palette above, so the colour count is
+   unchanged.
+   ------------------------------------------------------------------------ */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: var(--cream);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.splash-mark img {
+  display: block;
+  width: clamp(120px, 38vw, 190px);
+  height: auto;
+  border-radius: 50%;
+}
+
+.splash-word {
+  margin: 0;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+  font-size: clamp(17px, 5vw, 21px);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--brown-900);
+}
+
+/* The mark settles in, then the wordmark follows it. */
+.splash-in .splash-mark { animation: splash-rise 760ms cubic-bezier(0.16, 0.84, 0.3, 1) both; }
+.splash-in .splash-word { animation: splash-fade 620ms ease-out 480ms both; }
+
+.splash-out {
+  opacity: 0;
+  transition: opacity 400ms ease-in;
+}
+
+@keyframes splash-rise {
+  from { opacity: 0; transform: scale(0.82) translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes splash-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Honour the OS setting: keep the brand frame, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .splash-in .splash-mark,
+  .splash-in .splash-word { animation: none; }
+  .splash-out { transition: none; }
+}

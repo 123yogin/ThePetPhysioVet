@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The mark's disc colour, so the adaptive icon's background is continuous
+         with the circle the figure sits on. -->
+    <color name="ic_launcher_background">#DCAD8B</color>
 </resources>

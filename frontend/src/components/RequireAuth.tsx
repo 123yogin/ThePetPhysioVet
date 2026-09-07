@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchMe } from '../api/auth';
 import { getAccessToken } from '../lib/tokens';
+import { markAppReady } from '../lib/appReady';
 
 interface RequireAuthProps {
   children: React.ReactNode;
@@ -20,13 +21,17 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children, allowedRoles
     retry: false,
   });
 
+  React.useEffect(() => {
+    if (!token || !isLoading) markAppReady();
+  }, [token, isLoading]);
+
   if (!token) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', color: '#5d4037' }}>
+      <div className="app-booting" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', color: '#5d4037' }}>
         <p style={{ fontWeight: 600 }}>Loading session...</p>
       </div>
     );

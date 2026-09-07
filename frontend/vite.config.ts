@@ -12,12 +12,27 @@ export default defineConfig(({ mode }) => {
     );
   }
 
+  const base = process.env.APP_BASE || '/';
+
   return {
     // Assets are served from /app/ in production (the marketing site owns
     // the root). Overridden per-build via APP_BASE; defaults to '/' so
     // `npm run dev` and the standalone Docker image are unchanged.
-    base: process.env.APP_BASE || '/',
-    plugins: [react()],
+    base,
+    plugins: [
+      react(),
+      {
+        // Vite leaves plain hrefs in index.html alone, so the launch frame's
+        // logo and the favicon stayed relative. On the web the SPA is served
+        // from any depth, so `./logo.svg` resolved against /app/owner/pets/<id>
+        // and 404'd. This substitutes the configured base at build time, which
+        // is '/' for the native bundle and '/app/' for the web deploy.
+        name: 'html-base-url',
+        transformIndexHtml(html: string) {
+          return html.replaceAll('%BASE_URL%', base);
+        },
+      },
+    ],
     server: {
       host: "0.0.0.0",
       port: 5173,
