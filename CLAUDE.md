@@ -17,10 +17,30 @@ The build has run well ahead of this document; the notes below replace the earli
 SQLite (`backend/db.sqlite3`). **No Django templates remain** — the
 template→React migration is done on the rendering side.
 
-**Data model** — 15 models in `backend/appointments/models.py`:
-`UserProfile`, `Pet`, `Appointment`, `DiagnosticReport`, `TreatmentPlan`,
-`ProgressNote`, `Invoice`, `LineItem`, `Payment`, `Package`, `Notification`,
-`NotificationPref`, `QueryThread`, `QueryMessage`, `QueryAttachment`.
+**Data model** — **17 models** in the package `backend/appointments/models/`
+(it was a single 583-line `models.py`; split by domain, no schema change —
+`makemigrations --check` is pinned by `ModelPackageIntegrityTests`):
+
+| module | models |
+| --- | --- |
+| `accounts.py` | `UserProfile`, `PasswordResetToken` |
+| `pets.py` | `Pet` |
+| `scheduling.py` | `Appointment` |
+| `clinical.py` | `DiagnosticReport`, `TreatmentPlan`, `ProgressNote` |
+| `billing.py` | `Invoice`, `LineItem`, `Payment`, `Package` |
+| `notifications.py` | `Notification`, `NotificationPref` |
+| `messaging.py` | `QueryThread`, `QueryMessage`, `QueryAttachment` |
+| `enquiries.py` | `Enquiry` |
+
+Import from `appointments.models` as before — every name is re-exported.
+Cross-model FKs are lazy `"appointments.X"` strings, so the modules import
+nothing from each other; keep it that way or you reintroduce a cycle.
+
+**The app is named `appointments` but holds the entire domain.** Renaming it
+would touch 19 live tables, 24 inbound FKs, 8 `django_migrations` rows and 17
+content types for no functional gain, so it stays. Read the module table above
+rather than the directory name.
+
 Ownership FKs (`Pet.owner`, `Pet.doctor`, `Appointment.doctor`, `Invoice.owner`)
 are what make rule 4 enforceable. Migrations `0001`–`0005`; `0003` backfills
 ownership from the legacy `owner_phone` strings.
