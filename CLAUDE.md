@@ -279,7 +279,10 @@ Trade-off: this disables all confirmations, including destructive commands — i
 - Django paths are relative to `backend/`. `vet.css` now lives **only** at
   `frontend/src/styles/vet.css` — the old `backend/appointments/static/vet.css`
   copy is gone along with the templates.
-- Uploads land in the repo-root `media/` (`MEDIA_ROOT`), served locally, not on Object Storage.
+- Uploads land in **`backend/media/`**, not the repo root: `BASE_DIR` is `backend/`, so
+  `MEDIA_ROOT = BASE_DIR / "media"` resolves there. Served locally, not on Object Storage.
+  (An empty repo-root `media/` used to sit here and was deleted — nothing wrote to it, and
+  the compose files mount the named volume `media_data` at `/app/media` instead.)
 
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`

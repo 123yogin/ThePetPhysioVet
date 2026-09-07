@@ -19,7 +19,6 @@ a Django REST API backend and a React SPA frontend that communicate over HTTP.
 │   └── requirements.txt
 ├── frontend/         React + Vite + TypeScript SPA
 │   ├── src/          components / screens / lib / styles
-│   ├── tests/e2e/    Playwright end-to-end + parity tests
 │   ├── tools/        CDP-driven device harness (route sweep, layout, pixel checks)
 │   ├── index.html
 │   └── package.json
