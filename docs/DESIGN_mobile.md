@@ -98,7 +98,8 @@ A WebView opens no popup. Diagnostic report PDFs, invoice documents and the What
 share link render as buttons that do nothing when tapped. No error, no console message.
 
 ### D5 — `sms:` share link does not navigate (silent)
-`ShareScreen` uses `sms:{phone}?body=...` from `views.py:787`. WebViews do not follow
+`ShareScreen` uses `sms:{phone}?body=...` from `views/scheduling.py`
+(`appointment_share_view`). WebViews do not follow
 non-http schemes without native URL handling. Also affects `https://wa.me/...`, which
 should hand off to the installed WhatsApp app rather than loading a web page in-frame.
 

@@ -545,7 +545,7 @@ enquiry cannot be dismissed (`400`) — a real appointment exists for it by then
    follow-up).** Every doctor-facing route that fetches a `Pet`, `Appointment`,
    `DiagnosticReport`, `TreatmentPlan`, `Invoice`, `Payment`, or `QueryThread` —
    list **and** single-object (detail/action) — is scoped to the requesting
-   doctor via the shared `_doctor_scoped()` helper in `views.py`. This includes
+   doctor via the shared `_doctor_scoped()` helper in `views/_shared.py`. This includes
    every list endpoint in this document already marked "doctor-scoped" above,
    **and** every by-ID detail/action route on those same resources: `GET/PATCH
    /pets/:id`, `GET/POST /pets/:id/diagnoses`, `DELETE /diagnoses/:id`, `GET/POST

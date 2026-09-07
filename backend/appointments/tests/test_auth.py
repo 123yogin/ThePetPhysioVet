@@ -109,23 +109,44 @@ class AnonymousAccessTests(ApiTestCase):
                 r = getattr(self.anon(), method)(f"{API}{path}", body, format="json")
                 self.assertEqual(r.status_code, 401, f"{path} -> {r.status_code}")
 
+    @staticmethod
+    def _views_source():
+        """Every line of view source, across the whole views package.
+
+        `views` used to be one module, so `inspect.getsource(views)` was the
+        whole haystack. It is a package now, and getsource() on a package
+        returns only __init__.py — a few dozen lines of re-exports — which
+        would have quietly reduced this guard to grepping an import list. So
+        read every module in the package and concatenate.
+        """
+        import pkgutil
+        import importlib
+        import inspect
+        from appointments import views
+
+        chunks = [inspect.getsource(views)]
+        for info in pkgutil.iter_modules(views.__path__):
+            module = importlib.import_module(f"appointments.views.{info.name}")
+            chunks.append(inspect.getsource(module))
+        return "\n".join(chunks), len(chunks) - 1
+
     def test_no_anonymous_doctor_fallback_in_source(self):
         """Regression guard for the deleted `filter(role="DOCTOR").first()` default.
 
         QA round 3: a sibling test was found VACUOUS because
         `inspect.getsource()` on an @api_view-decorated view returns DRF's
         443-char wrapper, not the view body (`.__wrapped__` gives the same
-        wrapper — it is not a workaround). This test greps the MODULE, which
+        wrapper — it is not a workaround). This greps the SOURCE FILES, which
         is not affected; the positive controls below prove the haystack is
         real, so this can never silently pass against empty/wrapper source.
         """
-        import inspect
-        from appointments import views
-        src = inspect.getsource(views)
+        src, module_count = self._views_source()
 
         # Positive controls: if these ever fail, the grep target is wrong and
         # the negative assertions below are meaningless.
-        self.assertGreater(len(src), 10000, "module source looks truncated")
+        self.assertGreater(module_count, 5,
+                           "the views package should contain the domain modules")
+        self.assertGreater(len(src), 10000, "views source looks truncated")
         self.assertIn("def refresh_view(request):", src)
         self.assertIn("def login_view(request):", src)
 
@@ -133,11 +154,9 @@ class AnonymousAccessTests(ApiTestCase):
         self.assertNotIn("role='DOCTOR').first()", src)
 
     def test_source_grep_guard_is_not_vacuous(self):
-        """Meta-test: prove getsource(module) really can fail."""
-        import inspect
-        from appointments import views
-        src = inspect.getsource(views)
-        self.assertNotIn("a-string-that-is-definitely-not-in-views-py", src)
+        """Meta-test: prove the source grep really can fail."""
+        src, _ = self._views_source()
+        self.assertNotIn("a-string-that-is-definitely-not-in-the-views-package", src)
         self.assertIn("authenticate(", src)  # the thing we care about IS there
 
 

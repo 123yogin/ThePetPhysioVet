@@ -47,6 +47,18 @@ ownership from the legacy `owner_phone` strings.
 `Invoice.subtotal/total/amount_paid/balance_due/payment_status` are **computed
 properties, not columns** — they cannot drift or be spoofed by a client.
 
+**Views** — `backend/appointments/views/` is a package of 11 domain modules
+(`auth`, `dashboard`, `pets`, `clinical`, `scheduling`, `billing`,
+`notifications`, `messaging`, `owner`, `enquiries`, plus `_shared`). It was one
+1674-line `views.py`. Boundaries came from the helper-usage graph: a helper used
+by more than one domain is in `_shared.py` — `problem()`, `_doctor_scoped()`
+(22 callers), `_rate_limited()`, `_client_ip()`, `_unique_owner_username()` —
+and one used by a single domain sits with it. Every name is re-exported from
+`appointments.views`, so `urls.py`, `serializers.py` and the `dir(views)`
+permission audit in `test_authz.py` were untouched. **Relative imports inside
+these modules need two dots** (`from ..models import ...`); one dot resolves to
+`appointments.views` and fails.
+
 **API** — ~40 routes in `backend/appointments/urls.py` across auth, dashboard,
 pets, appointments, diagnostic reports, treatment plans, billing, notifications,
 queries, and the owner portal. **The authoritative spec is
