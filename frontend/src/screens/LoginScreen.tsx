@@ -4,6 +4,7 @@ import { login, signup } from '../api/auth';
 import { useFlash } from '../lib/flash';
 import { markAppReady } from '../lib/appReady';
 import { PasswordField } from '../components/PasswordField';
+import { BrandMark } from '../components/BrandMark';
 
 export const LoginScreen: React.FC = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -87,18 +88,9 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-          <img
-            src={`${import.meta.env.BASE_URL}logo.svg`}
-            alt=""
-            width={84}
-            height={84}
-            style={{ display: 'block', borderRadius: '50%' }}
-          />
-          <h1 className="auth-brand" style={{ fontSize: '26px', margin: 0, textAlign: 'center' }}>
-            The Pet Physio Vet
-          </h1>
-        </div>
+        <h1 className="auth-brand" style={{ fontSize: '26px' }}>
+          <BrandMark size={84} label="The Pet Physio Vet" stacked />
+        </h1>
 
         {/* Mode Selector Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.6)', padding: '4px', borderRadius: '12px' }}>

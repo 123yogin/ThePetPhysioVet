@@ -5,6 +5,7 @@ import { logout, fetchMe } from '../api/auth';
 import { fetchEnquiries, enquiriesQueryKey } from '../api/enquiries';
 import { useFlash } from '../lib/flash';
 import { Icon, IconName } from './Icon';
+import { BrandMark } from './BrandMark';
 
 interface NavItem {
   to: string;
@@ -77,8 +78,8 @@ export const Sidebar: React.FC = () => {
   return (
     <aside className="sidebar" id="app-sidebar">
       <div className="sidebar-brand" style={{ paddingBottom: '12px' }}>
-        <div style={{ fontSize: '18px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Icon name="paw" size={20} /> Pet Physio Vet
+        <div style={{ fontSize: '18px', fontWeight: '800' }}>
+          <BrandMark size={28} label="Pet Physio Vet" />
         </div>
         <div style={{ fontSize: '12px', color: 'var(--brown-600)', marginTop: '2px', fontWeight: '600', minHeight: '15px' }}>
           {userName || ' '}
