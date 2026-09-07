@@ -181,3 +181,47 @@ class MethodNotAllowedTests(ApiTestCase):
                 r = getattr(self.client, method)(f"{API}{path}", {}, format="json")
                 self.assertEqual(r.status_code, 405, f"{method} {path} -> "
                                                      f"{r.status_code}")
+
+
+class RequirementsParityTests(ApiTestCase):
+    """The two requirements lists must not drift.
+
+    Vercel's Python runtime installs the repo-root requirements.txt for
+    api/index.py (there is no api/requirements.txt); the Dockerfile installs
+    backend/requirements.txt, which it COPYs on its own. They were byte-identical
+    copies with nothing keeping them that way, so a version bump in one would
+    have given the serverless function and the container different dependencies
+    with no signal at all.
+
+    They cannot be collapsed into a single file: a `-r backend/requirements.txt`
+    include at the root fails the Vercel build ("could not parse
+    requirements.txt: Error parsing included file"), which was measured, and the
+    reverse include fails in Docker because only backend/requirements.txt is
+    copied into the image. So the duplication stays and this pins it.
+    """
+
+    @staticmethod
+    def _pins(path):
+        """Requirement lines only — comments and blank lines are free to differ."""
+        return [
+            line.strip()
+            for line in path.read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+    def test_root_and_backend_requirements_are_identical(self):
+        from pathlib import Path
+
+        backend_dir = Path(__file__).resolve().parents[2]
+        root = backend_dir.parent
+        root_pins = self._pins(root / "requirements.txt")
+        backend_pins = self._pins(backend_dir / "requirements.txt")
+
+        self.assertTrue(root_pins, "root requirements.txt has no pins")
+        self.assertEqual(
+            root_pins,
+            backend_pins,
+            "requirements.txt and backend/requirements.txt have drifted. Vercel "
+            "installs the root one and Docker installs the backend one, so they "
+            "must match exactly. Copy whichever you edited over the other.",
+        )
