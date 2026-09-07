@@ -53,7 +53,7 @@ These are enforced on every commit. A task is not done if it violates one.
 - **Geometry is asserted in device pixels, not viewport pixels.** `getBoundingClientRect()`
   measures against the viewport, and on Android the viewport extends under the status bar —
   so the DOM reported `titleTop: 20, onScreen: true` for a title that was behind the clock
-  (D15), and the route sweep passed 20/20 through it. `tools/top-strip.mjs` reads the raw
+  (D15), and the route sweep passed 20/20 through it. `frontend/tools/top-strip.mjs` reads the raw
   framebuffer and the OS's own `statusBars` inset, and asserts the page's first row is not
   above it. It is proven against the defect: reintroducing D15 at runtime makes it report
   `hidden 48.8 CSS px, pass: false`.
@@ -282,7 +282,7 @@ Empty is the goal.
 | 2 | **Design doc said Capacitor 7 / JDK 17.** Both wrong: Capacitor 8 is current and requires JDK 21. The 17 build failed. Doc to be corrected. | 2026-09-05 | open |
 | 3 | **Is the camera plugin needed?** `Info.plist` alone closes the D6 crash, and Capacitor's WebView implements `onShowFileChooser`, so `<input type="file">` may already work. Adding the plugin is a UX upgrade, not a defect fix. Deciding on emulator evidence rather than theory (R3). | 2026-09-05 | open |
 | 4 | **`pointer: coarse` is unreliable.** The Android WebView reports `pointer: fine`, so the first D10 fix silently never applied — measured, not assumed. Re-keyed to the app's existing 768px breakpoint, with `pointer: coarse` kept as a second arm for tablets. | 2026-09-05 | resolved |
-| 6 | **Screenshots caught what measurement missed.** D15 was invisible to the DOM probe: `scrollTop: 0`, `titleTop: 20`, `titleOnScreen: true` — all true of the viewport, none true of the device. The route sweep passed 20/20 straight through it. Now covered by `tools/top-strip.mjs`. | 2026-09-05 | resolved |
+| 6 | **Screenshots caught what measurement missed.** D15 was invisible to the DOM probe: `scrollTop: 0`, `titleTop: 20`, `titleOnScreen: true` — all true of the viewport, none true of the device. The route sweep passed 20/20 straight through it. Now covered by `frontend/tools/top-strip.mjs`. | 2026-09-05 | resolved |
 | 8 | **A layout audit needs to know what it is measuring.** The first run reported a 121px "cut" placeholder on `/appointments/new` — a *textarea*, whose placeholder wraps, so measuring it on one line is meaningless. Withdrawn and the tool corrected to inputs only. Two other flagged items were also correct-by-design once checked: the enquiry previews truncate deliberately and expand on tap, and the 20x20 checkboxes carry a `label[for]` giving a 331x36 hit area. | 2026-09-05 | resolved |
 | 7 | **The first version of that pixel check also missed D15.** It painted a marker strip and asked whether the pixels were visible — but an edge-to-edge WebView sits under a *transparent* status bar, so the marker showed through and read as 100% visible (`315/315 rows, pass: true`) on the very defect it was written for. Visibility was the wrong assertion; page origin versus the OS-reported inset is the right one. Every check now has to be proven against the defect it claims to catch, not just observed to pass. | 2026-09-05 | resolved |
 | 5 | **The verification harness had two bugs of its own**, both of which would have produced false failures: a fixed sleep raced the drawer animation (reported 0/10 nav reachable on a healthy screen), and `scrollable()` stopped at the first ancestor with computed `overflow-x: auto`, flagging the calendar's own chips as unreachable when `scrollIntoView` proved otherwise. Both fixed; three consecutive runs now agree. | 2026-09-05 | resolved |
@@ -337,13 +337,13 @@ Newest last. One line per session, facts only.
   Re-swept afterwards: **19/19 routes PASS**, 0 console errors, web build unregressed, palette
   unchanged. D15 is the lesson of the sprint — a DOM probe reported the title on screen while a
   screenshot showed it behind the clock.
-- **2026-09-05 (harness hardening)** — Added `tools/top-strip.mjs`, a device-pixel check that
+- **2026-09-05 (harness hardening)** — Added `frontend/tools/top-strip.mjs`, a device-pixel check that
   the page starts below the OS-reported `statusBars` inset, and wired it into the sweep. Its
   first implementation asked whether a painted marker was visible and **passed D15**, because
   the transparent status bar let the marker show through; rewritten to compare page origin
   against the system inset. Proven in three states: shipped `pass`, D15 reintroduced at runtime
   `fail (48.8 CSS px hidden)`, restored `pass`.
-- **2026-09-05 (layout audit)** — Added `tools/layout-audit.mjs`: per-screen checks for text
+- **2026-09-05 (layout audit)** — Added `frontend/tools/layout-audit.mjs`: per-screen checks for text
   truncated by its own box, placeholders wider than their field, content parked off the right,
   sub-44px tap targets, and content clipped with nothing to scroll it. First run flagged issues
   on **7 of 12 screens**; three were correct-by-design and withdrawn (textarea placeholder,

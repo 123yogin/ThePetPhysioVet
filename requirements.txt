@@ -1,12 +1,8 @@
-Django>=5.0,<6.1
-djangorestframework>=3.14.0
-djangorestframework-simplejwt>=5.3.1
-django-cors-headers>=4.3.1
-Pillow>=10.2.0
-bcrypt>=4.1.2
-dj-database-url>=2.1.0
-
-# --- Production deployment (Dockerfile / docker-compose) -------------------
-gunicorn>=22.0.0,<23.0.0
-whitenoise>=6.7.0,<7.0.0
-psycopg[binary]>=3.1.19,<3.3.0
+# Vercel's Python runtime installs this file for api/index.py (there is no
+# api/requirements.txt). The Dockerfile installs backend/requirements.txt.
+#
+# Both were byte-identical copies with nothing keeping them in sync, so a
+# version bump in one would silently give the serverless function and the
+# container different dependencies. backend/requirements.txt is the real list,
+# because that is the one the Dockerfile COPYs on its own; this includes it.
+-r backend/requirements.txt
