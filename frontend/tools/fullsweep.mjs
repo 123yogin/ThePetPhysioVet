@@ -31,11 +31,24 @@ const out = await ev(`(async () => {
     el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     el.click(); };
-  // a screen is only settled once its query has resolved
-  const settled = route => location.pathname.includes('/' + route)
-    && !!document.querySelector('h1,h2,.page-title')
-    && !/Loading/i.test(document.body.innerText)
-    && !document.querySelector('.app-booting, .skeleton');
+  // A screen is settled once its query has resolved AND its content has stopped
+  // growing. Heading-only was not enough: every screen renders its title before
+  // the list arrives, so geometry and content assertions ran against a half-built
+  // page and reported absent data that was merely late.
+  let _lastLen = -1, _stable = 0;
+  const settled = route => {
+    if (!location.pathname.includes('/' + route)) return false;
+    if (!document.querySelector('h1,h2,.page-title')) return false;
+    if (document.querySelector('.app-booting, .skeleton')) return false;
+    if (/Loading/i.test(document.body.innerText)) return false;
+    const len = document.body.innerText.length;
+    if (len === _lastLen) { _stable++; } else { _stable = 0; _lastLen = len; }
+    return _stable >= 2;          // unchanged across three consecutive polls
+  };
+  // innerText returns CSS-transformed text, so a badge styled
+  // `text-transform: uppercase` reads as PENDING even though the DOM says
+  // "Pending". Enum-leak checks must use textContent or they false-positive.
+  const rawText = () => (document.body.textContent || '').replace(/\s+/g, ' ');
 
   const census = { tables: 0, rows: 0, where: [] };
   function geometry(label) {
