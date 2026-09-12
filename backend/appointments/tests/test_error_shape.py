@@ -70,6 +70,50 @@ class NotFoundIsIndistinguishableTests(ApiTestCase):
             self.assertNotIn("matches the given query", res.data["detail"], url)
 
 
+class ExpiredTokenTests(ApiTestCase):
+    """An expired session is a session problem, not a diagnostic report.
+
+    Shipped and seen in production on the sign-in page:
+
+        Given token not valid for any token type code: token_not_valid messages:
+        {'token_class': ErrorDetail(string='AccessToken', code='token_not_valid'),
+         'token_type': ErrorDetail(string='access', code='token_not_valid'),
+         'message': ErrorDetail(string='Token is expired', code='token_not_valid')}
+
+    Two faults at once: SimpleJWT's diagnostic keys were rendered to a user, and
+    `messages` is a list of dicts, which the flattener stringified into a Python
+    repr. Both are covered here.
+    """
+
+    def test_an_expired_token_reads_as_a_session_message(self):
+        token = self._expired(self._access_for(self.doctor))
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        res = self.client.get(f"{API}/pets")
+
+        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.data["detail"], "Your session has expired. Please sign in again.")
+
+    def test_no_internals_reach_the_user(self):
+        token = self._expired(self._access_for(self.doctor))
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        body = self.client.get(f"{API}/pets").data["detail"]
+
+        for leak in ("ErrorDetail", "token_not_valid", "token_class", "AccessToken", "{", "}"):
+            self.assertNotIn(leak, body, f"{leak!r} must not reach a user")
+
+    def test_a_list_of_dicts_is_never_stringified(self):
+        """Defence in depth: even unrecognised nesting must not emit a repr."""
+        from petphysio.exceptions import _flatten
+
+        out = _flatten({"messages": [{"token_class": "AccessToken"}]})
+        self.assertNotIn("{", out)
+        self.assertIn("AccessToken", out)
+
+    def _access_for(self, user):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        return RefreshToken.for_user(user).access_token
+
+
 class ProblemDetailWordingTests(ApiTestCase):
     """DRF's own envelope key is not a field name."""
 

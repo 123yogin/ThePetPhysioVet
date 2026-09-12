@@ -57,6 +57,16 @@ def _is_envelope_detail(key, value):
     return key == "detail" and not isinstance(value, (list, dict))
 
 
+def _is_token_failure(data):
+    """True for SimpleJWT's "this bearer token is no good" payload.
+
+    Keyed on its `code`, which is `token_not_valid` for expired, malformed and
+    blacklisted tokens alike -- rather than on the exception class, so this
+    module does not have to import SimpleJWT to format its errors.
+    """
+    return isinstance(data, dict) and str(data.get("code", "")) == "token_not_valid"
+
+
 def _flatten(detail, prefix=""):
     """Turn DRF's nested error structure into one readable sentence."""
     if isinstance(detail, dict):
@@ -70,7 +80,13 @@ def _flatten(detail, prefix=""):
             parts.append(_flatten(value, f"{label}: " if label else ""))
         return " ".join(p for p in parts if p)
     if isinstance(detail, list):
-        return prefix + " ".join(str(d) for d in detail)
+        # Recurse rather than `str()`. A list element can itself be a dict --
+        # SimpleJWT's `messages` is a list of them -- and stringifying one dumps
+        # a Python repr, `ErrorDetail(string=..., code=...)` internals included,
+        # onto the page. That was shipped: an expired session rendered
+        #   "... messages: {'token_class': ErrorDetail(string='AccessToken', ...)}"
+        # to a user sitting on the sign-in screen.
+        return prefix + " ".join(p for p in (_flatten(d) for d in detail) if p)
     return prefix + str(detail)
 
 
@@ -83,7 +99,16 @@ def rfc7807_exception_handler(exc, context):
 
     status_code = response.status_code
     title = _TITLES.get(status_code, "Request failed")
-    detail = _flatten(response.data) if response.data is not None else title
+
+    # An expired or malformed JWT is a session problem, not a report to read.
+    # SimpleJWT answers with {detail, code, messages: [{token_class, ...}]}, and
+    # every part of that except the fact of expiry is diagnostic -- "token_class",
+    # "token_not_valid" and the rest mean nothing to a pet owner. Handled before
+    # flattening so none of it can reach the page.
+    if status_code == 401 and _is_token_failure(response.data):
+        detail = "Your session has expired. Please sign in again."
+    else:
+        detail = _flatten(response.data) if response.data is not None else title
 
     # Every 404 says the same thing, whatever raised it.
     #
