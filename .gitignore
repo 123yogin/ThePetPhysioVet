@@ -45,3 +45,7 @@ dist/
 .antigravity/
 .vercel
 .env*
+
+# Vite's dep cache. It was committed at the initial commit; its real home is
+# node_modules/.vite, and a root .vite/deps is a leftover from an older config.
+.vite/

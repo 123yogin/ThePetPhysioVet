@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmPasswordReset } from '../api/auth';
 import { useFlash } from '../lib/flash';
-import { Icon } from '../components/Icon';
 import { PasswordField } from '../components/PasswordField';
+import { BrandMark } from '../components/BrandMark';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -22,8 +22,8 @@ export const ResetPasswordScreen: React.FC = () => {
     return (
       <div className="auth-shell">
         <div className="auth-card" style={{ maxWidth: '460px' }}>
-          <h1 className="auth-brand" style={{ fontSize: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-            <Icon name="paw" size={24} /> The Pet Physio Vet
+          <h1 className="auth-brand" style={{ fontSize: '26px' }}>
+            <BrandMark size={84} label="The Pet Physio Vet" stacked />
           </h1>
           <div className="alert alert-danger" role="alert">
             <span>This password reset link is missing its token. Please request a new link.</span>
@@ -69,8 +69,8 @@ export const ResetPasswordScreen: React.FC = () => {
   return (
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
-        <h1 className="auth-brand" style={{ fontSize: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <Icon name="paw" size={24} /> The Pet Physio Vet
+        <h1 className="auth-brand" style={{ fontSize: '26px' }}>
+          <BrandMark size={84} label="The Pet Physio Vet" stacked />
         </h1>
 
         <form onSubmit={handleSubmit}>

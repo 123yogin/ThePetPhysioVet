@@ -98,7 +98,8 @@ A WebView opens no popup. Diagnostic report PDFs, invoice documents and the What
 share link render as buttons that do nothing when tapped. No error, no console message.
 
 ### D5 — `sms:` share link does not navigate (silent)
-`ShareScreen` uses `sms:{phone}?body=...` from `views.py:787`. WebViews do not follow
+`ShareScreen` uses `sms:{phone}?body=...` from `views/scheduling.py`
+(`appointment_share_view`). WebViews do not follow
 non-http schemes without native URL handling. Also affects `https://wa.me/...`, which
 should hand off to the installed WhatsApp app rather than loading a web page in-frame.
 
@@ -329,3 +330,61 @@ the status bar overlays.
 
 The wider lesson for §8: an automated sweep proves reachability, not appearance. Both are
 needed.
+
+## iOS production verification — 2026-09-06
+
+The Android harness attaches over the Chrome DevTools Protocol. iOS has no
+equivalent: the simulator exposes no CDP endpoint, `ios-webkit-debug-proxy`
+finds no targets for simulators, and Capacitor iOS does not forward the WebView
+console to stdout. So the suite was **injected into the page** and drove the
+real components from the inside, rendering its report to the DOM where a
+screenshot could read it. The harness lived only in `index.html` during the run
+and is not in the shipped bundle (asserted against `dist/index.html`).
+
+Run on an iPhone 17 Pro simulator (iOS 26.5, 402×874 @3x) against
+`https://petphysio.vercel.app`. Final result: **118 checks, 0 failed**, covering
+authentication, cross-owner authorisation, booking integrity, GST and payment
+idempotency, clinical validation, and a UI sweep of all 9 doctor routes and all
+4 owner routes.
+
+### D16 — sign-in was impossible on iOS
+`POST /auth/login` returned 200 and the app stayed on `/login` showing **"An OS
+error occurred (-34018)"** — `errSecMissingEntitlement`. `setTokens` awaits the
+keychain; the keychain refused every write because Capacitor's iOS template
+ships no entitlements file, so the login mutation rejected after a perfectly
+successful authentication. **No API-level test could have caught this**: they
+never touch token storage. Fixed with `App.entitlements`
+(`keychain-access-groups`) plus a token store that prefers the keychain instead
+of requiring it — see `src/lib/tokens.ts`.
+
+### D17 — a new owner could not add their first pet
+`UserProfile.phone` was `blank=True`, so signup generated an optional field, but
+`Pet.owner_phone` is not blank and `owner_pets_view` filled it from that value.
+An owner who left the optional box empty got `400 owner_phone: This field may
+not be blank` on the first thing they do, naming a control their form never
+rendered. Phone is required at signup now, and the add-pet form collects it for
+accounts that predate the change.
+
+### Three harness defects that produced false results first
+Recorded because each is the same failure mode the project has been bitten by
+before — a green check that asserted nothing.
+
+1. **Trivially-passing authZ.** Round 1 reported "owner A cannot read B's pet"
+   as a pass. Owner B's pet had failed to be created, so the request was
+   `/owner/pets/undefined` and the 404 meant "no such route shape", not "access
+   refused". Every dependent check now fails loudly when its prerequisite is
+   missing rather than asserting against `undefined`.
+2. **Tapping the wrong control.** The login screen has two "Sign In" elements —
+   the segmented tab and the form's submit button. Selecting by text picked the
+   tab, so the form was never submitted and 12 checks failed against a defect
+   that did not exist. The selector now requires `type=submit`.
+3. **Measuring a spinner.** The route sweep waited for a heading, which appears
+   before the data does, so geometry was asserted against empty screens. This
+   was only caught by adding a **table census**: the sweep reported "no table
+   runs past the right edge" on all 9 routes while having encountered *zero
+   tables*. After waiting for the query to settle the census reads
+   `1 table, 20 rows on patients` — the assertion now has a subject.
+
+**The rule this reinforces (see also the 2026-08-21 note above): a check that
+cannot say what it examined is not evidence.** Assert reachability and count the
+subjects, never just the absence of a symptom.

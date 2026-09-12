@@ -15,8 +15,15 @@
         <item name="android:background">@null</item>
     </style>
 
-
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <!-- Android 12+ ignores `android:background` here and paints the icon on
+             windowSplashScreenBackground, which defaults to white — that was the
+             white ring around the mark on launch. Setting all three keeps the
+             disc colour continuous from the OS launch screen, through the web
+             splash, to the app. -->
+        <item name="windowSplashScreenBackground">@color/splashBackground</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
         <item name="android:background">@drawable/splash</item>
     </style>
 </resources>

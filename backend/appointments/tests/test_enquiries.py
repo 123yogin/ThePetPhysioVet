@@ -91,11 +91,22 @@ class EnquiryCreateTests(ApiTestCase):
         self.assertEqual(enquiry.status, "NEW")
 
     def test_missing_required_field_is_400(self):
+        """Was popping `reason`, which is `blank=True` on the model and so has
+        never been required — this asserted a 400 the API had no reason to give.
+        `petName` is the genuinely required one."""
         payload = dict(VALID_PAYLOAD)
-        payload.pop("reason")
+        payload.pop("petName")
         r = self.anon().post(f"{API}/enquiries", payload, format="json")
         self.assertEqual(r.status_code, 400, r.content)
         self.assertIn("detail", r.data)
+
+    def test_reason_is_optional(self):
+        """Deliberate: someone who gives their name, their pet and a phone
+        number but writes no free text is still a lead the clinic can ring."""
+        payload = dict(VALID_PAYLOAD)
+        payload.pop("reason")
+        r = self.anon().post(f"{API}/enquiries", payload, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
 
     def test_invalid_email_is_400(self):
         r = self.anon().post(f"{API}/enquiries",

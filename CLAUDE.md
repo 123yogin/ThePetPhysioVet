@@ -17,15 +17,47 @@ The build has run well ahead of this document; the notes below replace the earli
 SQLite (`backend/db.sqlite3`). **No Django templates remain** — the
 template→React migration is done on the rendering side.
 
-**Data model** — 15 models in `backend/appointments/models.py`:
-`UserProfile`, `Pet`, `Appointment`, `DiagnosticReport`, `TreatmentPlan`,
-`ProgressNote`, `Invoice`, `LineItem`, `Payment`, `Package`, `Notification`,
-`NotificationPref`, `QueryThread`, `QueryMessage`, `QueryAttachment`.
+**Data model** — **17 models** in the package `backend/appointments/models/`
+(it was a single 583-line `models.py`; split by domain, no schema change —
+`makemigrations --check` is pinned by `ModelPackageIntegrityTests`):
+
+| module | models |
+| --- | --- |
+| `accounts.py` | `UserProfile`, `PasswordResetToken` |
+| `pets.py` | `Pet` |
+| `scheduling.py` | `Appointment` |
+| `clinical.py` | `DiagnosticReport`, `TreatmentPlan`, `ProgressNote` |
+| `billing.py` | `Invoice`, `LineItem`, `Payment`, `Package` |
+| `notifications.py` | `Notification`, `NotificationPref` |
+| `messaging.py` | `QueryThread`, `QueryMessage`, `QueryAttachment` |
+| `enquiries.py` | `Enquiry` |
+
+Import from `appointments.models` as before — every name is re-exported.
+Cross-model FKs are lazy `"appointments.X"` strings, so the modules import
+nothing from each other; keep it that way or you reintroduce a cycle.
+
+**The app is named `appointments` but holds the entire domain.** Renaming it
+would touch 19 live tables, 24 inbound FKs, 8 `django_migrations` rows and 17
+content types for no functional gain, so it stays. Read the module table above
+rather than the directory name.
+
 Ownership FKs (`Pet.owner`, `Pet.doctor`, `Appointment.doctor`, `Invoice.owner`)
 are what make rule 4 enforceable. Migrations `0001`–`0005`; `0003` backfills
 ownership from the legacy `owner_phone` strings.
 `Invoice.subtotal/total/amount_paid/balance_due/payment_status` are **computed
 properties, not columns** — they cannot drift or be spoofed by a client.
+
+**Views** — `backend/appointments/views/` is a package of 11 domain modules
+(`auth`, `dashboard`, `pets`, `clinical`, `scheduling`, `billing`,
+`notifications`, `messaging`, `owner`, `enquiries`, plus `_shared`). It was one
+1674-line `views.py`. Boundaries came from the helper-usage graph: a helper used
+by more than one domain is in `_shared.py` — `problem()`, `_doctor_scoped()`
+(22 callers), `_rate_limited()`, `_client_ip()`, `_unique_owner_username()` —
+and one used by a single domain sits with it. Every name is re-exported from
+`appointments.views`, so `urls.py`, `serializers.py` and the `dir(views)`
+permission audit in `test_authz.py` were untouched. **Relative imports inside
+these modules need two dots** (`from ..models import ...`); one dot resolves to
+`appointments.views` and fails.
 
 **API** — ~40 routes in `backend/appointments/urls.py` across auth, dashboard,
 pets, appointments, diagnostic reports, treatment plans, billing, notifications,
@@ -249,6 +281,10 @@ See `PRODUCT_PLAN.md` for the phased roadmap and per-phase acceptance criteria.
 ## Non-negotiable rules for all agents
 1. **Security first.** Never commit secrets. The old `.env` leaked a live DB
    credential — secrets live in OCI Vault only. Fail-fast if a prod secret is missing.
+   **The Neon password was rotated on 2026-09-12** after the previous one was
+   exposed in a working session; the live value is in Vercel's `DATABASE_URL`
+   (production) and nowhere in this repo. Retrieve it with
+   `vercel env pull` — never paste a live credential into a chat or a file.
 2. **Traceability.** Every change maps to an SRS acceptance criterion (AC-xx) or a
    PRODUCT_PLAN phase. State which one in PR/commit descriptions.
 3. **Data ownership.** One service owns its schema. No cross-service DB joins —
@@ -279,7 +315,10 @@ Trade-off: this disables all confirmations, including destructive commands — i
 - Django paths are relative to `backend/`. `vet.css` now lives **only** at
   `frontend/src/styles/vet.css` — the old `backend/appointments/static/vet.css`
   copy is gone along with the templates.
-- Uploads land in the repo-root `media/` (`MEDIA_ROOT`), served locally, not on Object Storage.
+- Uploads land in **`backend/media/`**, not the repo root: `BASE_DIR` is `backend/`, so
+  `MEDIA_ROOT = BASE_DIR / "media"` resolves there. Served locally, not on Object Storage.
+  (An empty repo-root `media/` used to sit here and was deleted — nothing wrote to it, and
+  the compose files mount the named volume `media_data` at `/app/media` instead.)
 
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`

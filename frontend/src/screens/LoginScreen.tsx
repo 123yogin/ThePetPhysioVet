@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login, signup } from '../api/auth';
 import { useFlash } from '../lib/flash';
-import { Icon } from '../components/Icon';
+import { markAppReady } from '../lib/appReady';
 import { PasswordField } from '../components/PasswordField';
+import { BrandMark } from '../components/BrandMark';
 
 export const LoginScreen: React.FC = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -15,6 +16,9 @@ export const LoginScreen: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+
+  // This screen needs no session, so the launch frame can go as soon as it paints.
+  useEffect(() => markAppReady(), []);
   const [regUsername, setRegUsername] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
@@ -50,6 +54,10 @@ export const LoginScreen: React.FC = () => {
       setRegisterError('Please enter your first name and email address.');
       return;
     }
+    if (!phone.trim()) {
+      setRegisterError('Please enter a phone number so the clinic can reach you.');
+      return;
+    }
     if (!regPassword) {
       setRegisterError('Please choose a password.');
       return;
@@ -80,8 +88,8 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="auth-shell">
       <div className="auth-card" style={{ maxWidth: '460px' }}>
-        <h1 className="auth-brand" style={{ fontSize: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <Icon name="paw" size={24} /> The Pet Physio Vet
+        <h1 className="auth-brand" style={{ fontSize: '26px' }}>
+          <BrandMark size={84} label="The Pet Physio Vet" stacked />
         </h1>
 
         {/* Mode Selector Tabs */}
@@ -211,7 +219,7 @@ export const LoginScreen: React.FC = () => {
             </div>
 
             <div className="field">
-              <label htmlFor="phone">Phone Number</label>
+              <label htmlFor="phone">Phone Number *</label>
               <input
                 id="phone"
                 type="tel"
@@ -219,6 +227,7 @@ export const LoginScreen: React.FC = () => {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+91 98765 12345"
+                required
               />
             </div>
 

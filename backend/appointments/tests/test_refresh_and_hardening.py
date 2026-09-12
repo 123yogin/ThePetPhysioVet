@@ -168,7 +168,9 @@ class SignupRoleHardeningTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "wannabedoc", "password": "Attack3r!pass",
             "email": "wannabe@evil.test", "first_name": "Mal", "last_name": "Ory",
-            "role": "DOCTOR"}, format="json")
+            "role": "DOCTOR",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data["role"], "OWNER",
                          "signup response claims a role it did not grant")
@@ -179,7 +181,9 @@ class SignupRoleHardeningTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "attacker2", "password": "Attack3r!pass",
             "email": "attacker2@evil.test", "first_name": "M", "last_name": "O",
-            "role": "DOCTOR"}, format="json")
+            "role": "DOCTOR",
+            "phone": "9800000000",
+        }, format="json")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
         for path in ("/pets", "/invoices", "/dashboard/stats", "/revenue",
                      "/appointments", "/queries/inbox"):
@@ -193,7 +197,9 @@ class SignupRoleHardeningTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "attacker3", "password": "Attack3r!pass",
             "email": "attacker3@evil.test", "first_name": "M", "last_name": "O",
-            "role": "DOCTOR"}, format="json")
+            "role": "DOCTOR",
+            "phone": "9800000000",
+        }, format="json")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
         owned = self.client.get(f"{API}/owner/pets")
         self.assertEqual(owned.status_code, 200, owned.content)
@@ -203,7 +209,9 @@ class SignupRoleHardeningTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "honest", "password": "Honest!pass1",
             "email": "honest@example.test", "first_name": "H", "last_name": "O",
-            "role": "OWNER"}, format="json")
+            "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data["role"], "OWNER")
 
@@ -211,7 +219,9 @@ class SignupRoleHardeningTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "norole", "password": "Norole!pass1",
             "email": "norole@example.test", "first_name": "N",
-            "last_name": "R"}, format="json")
+            "last_name": "R",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data["role"], "OWNER")
 
@@ -474,7 +484,9 @@ class CreateDoctorCommandTests(ApiTestCase):
         self.anon().post(f"{API}/auth/signup", {
             "username": "apidoc", "password": "Apidoc!pass1",
             "email": "apidoc@x.test", "first_name": "A", "last_name": "D",
-            "role": "DOCTOR"}, format="json")
+            "role": "DOCTOR",
+            "phone": "9800000000",
+        }, format="json")
         self.auth(self.owner_a)
         self.client.patch(f"{API}/auth/profile", {"role": "DOCTOR"},
                           format="json")

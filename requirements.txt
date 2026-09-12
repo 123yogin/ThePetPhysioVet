@@ -1,3 +1,17 @@
+# Vercel's Python runtime installs THIS file for api/index.py, because there is
+# no api/requirements.txt. The Dockerfile installs backend/requirements.txt,
+# which it COPYs on its own.
+#
+# So the two lists must be identical, and they cannot be collapsed into one:
+# a `-r backend/requirements.txt` include here fails the Vercel build outright
+# ("could not parse requirements.txt: Error parsing included file"), and the
+# reverse include fails in Docker because only backend/requirements.txt is
+# copied into the image.
+#
+# RequirementsParityTests in appointments/tests/test_config_and_routes.py pins
+# them together, so editing one without the other fails the test suite instead
+# of silently giving the serverless function and the container different
+# dependency versions.
 Django>=5.0,<6.1
 djangorestframework>=3.14.0
 djangorestframework-simplejwt>=5.3.1

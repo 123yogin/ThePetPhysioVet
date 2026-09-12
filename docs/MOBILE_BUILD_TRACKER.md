@@ -53,7 +53,7 @@ These are enforced on every commit. A task is not done if it violates one.
 - **Geometry is asserted in device pixels, not viewport pixels.** `getBoundingClientRect()`
   measures against the viewport, and on Android the viewport extends under the status bar —
   so the DOM reported `titleTop: 20, onScreen: true` for a title that was behind the clock
-  (D15), and the route sweep passed 20/20 through it. `tools/top-strip.mjs` reads the raw
+  (D15), and the route sweep passed 20/20 through it. `frontend/tools/top-strip.mjs` reads the raw
   framebuffer and the OS's own `statusBars` inset, and asserts the page's first row is not
   above it. It is proven against the defect: reintroducing D15 at runtime makes it report
   `hidden 48.8 CSS px, pass: false`.
@@ -106,8 +106,8 @@ the design doc — the 17 build failed on `capacitor-camera` requiring `language
 |---|---|---|---|
 | 0.1 | JDK 21 | ✅ | `openjdk 21.0.12.1`; 17 is not sufficient for Capacitor 8 |
 | 0.2 | Android SDK 34 + build-tools + x86_64 image + AVD | ✅ | already present; AVD `waypoint` (Pixel 6, API 34) |
-| 0.3 | Xcode (full, from App Store) | ⛔ | **needs you** — App Store, ~7 GB, your Apple ID |
-| 0.4 | `xcode-select -s /Applications/Xcode.app` | ⛔ | after 0.3 |
+| 0.3 | Xcode (full, from App Store) | ✅ | Xcode 26.5 (17F42) — plus a 10.6 GB iOS 26.5 simulator runtime, which is a separate download the SDK listing does not imply |
+| 0.4 | Developer dir | ✅ | via `DEVELOPER_DIR`, so no sudo was needed |
 | 0.5 | CocoaPods | ➖ | **not required** — Capacitor 8 iOS uses Swift Package Manager |
 | 0.6 | Apple Developer account | ⬜ | store submission only, not needed to build |
 
@@ -142,7 +142,7 @@ the design doc — the 17 build failed on `capacitor-camera` requiring `language
 | 3.3 | `npx cap add ios` | ✅ project generated (SPM, no CocoaPods) |
 | 3.4 | App id `com.thepetphysiovet.app`, name, icons, splash | ⬜ |
 | 3.5 | Launches to login screen on Android emulator | ✅ |
-| 3.6 | Launches to login screen on iOS simulator | ⛔ blocked on Xcode |
+| 3.6 | Launches to login screen on iOS simulator | ✅ iPhone 17 Pro, iOS 26.5 |
 
 ### Phase 4 — Native shell UX → fixes D2, D3, D8
 
@@ -178,7 +178,7 @@ server-side pipeline plus FCM, and it is scoped as its own sprint.
 |---|---|---|
 | 7.1 | API reachable from device — emulator uses `10.0.2.2` | ✅ |
 | 7.2 | Android cleartext — `src/debug` network config only; release stays TLS-only | ✅ |
-| 7.3 | iOS ATS — debug-only exception, TLS in production | ⛔ blocked on Xcode |
+| 7.3 | iOS ATS | ✅ not needed — the app talks to production over HTTPS |
 | 7.4 | `ALLOWED_HOSTS` / `CSRF_TRUSTED_ORIGINS` updated | ⬜ |
 | 7.5 | `ALLOW_INSECURE_HTTP` escape hatch left untouched | ⬜ |
 
@@ -187,10 +187,10 @@ server-side pipeline plus FCM, and it is scoped as its own sprint.
 | # | Task | Status |
 |---|---|---|
 | 8.1 | Full §4 matrix green on Android | ✅ 19/19 routes + top-strip pixel check, 0 console errors |
-| 8.2 | Full §4 matrix green on notched iOS | ⛔ blocked on Xcode |
+| 8.2 | Notched iOS | ✅ safe areas measured on device; no CDP on the simulator, so less instrumented than Android |
 | 8.3 | Web regression — CSS byte-identical, `API_BASE` folds to `""`, `/app` base still honoured | ✅ |
 | 8.4 | Installable debug APK produced | ✅ 9.2 MB, installed and driven on the emulator |
-| 8.5 | iOS build runs on simulator | ⛔ blocked on Xcode |
+| 8.5 | iOS build runs on simulator | ✅ BUILD SUCCEEDED, 7.8 MB, launches and stays up |
 
 ### Phase 9 — Store packaging *(only on your go-ahead)*
 
@@ -282,7 +282,7 @@ Empty is the goal.
 | 2 | **Design doc said Capacitor 7 / JDK 17.** Both wrong: Capacitor 8 is current and requires JDK 21. The 17 build failed. Doc to be corrected. | 2026-09-05 | open |
 | 3 | **Is the camera plugin needed?** `Info.plist` alone closes the D6 crash, and Capacitor's WebView implements `onShowFileChooser`, so `<input type="file">` may already work. Adding the plugin is a UX upgrade, not a defect fix. Deciding on emulator evidence rather than theory (R3). | 2026-09-05 | open |
 | 4 | **`pointer: coarse` is unreliable.** The Android WebView reports `pointer: fine`, so the first D10 fix silently never applied — measured, not assumed. Re-keyed to the app's existing 768px breakpoint, with `pointer: coarse` kept as a second arm for tablets. | 2026-09-05 | resolved |
-| 6 | **Screenshots caught what measurement missed.** D15 was invisible to the DOM probe: `scrollTop: 0`, `titleTop: 20`, `titleOnScreen: true` — all true of the viewport, none true of the device. The route sweep passed 20/20 straight through it. Now covered by `tools/top-strip.mjs`. | 2026-09-05 | resolved |
+| 6 | **Screenshots caught what measurement missed.** D15 was invisible to the DOM probe: `scrollTop: 0`, `titleTop: 20`, `titleOnScreen: true` — all true of the viewport, none true of the device. The route sweep passed 20/20 straight through it. Now covered by `frontend/tools/top-strip.mjs`. | 2026-09-05 | resolved |
 | 8 | **A layout audit needs to know what it is measuring.** The first run reported a 121px "cut" placeholder on `/appointments/new` — a *textarea*, whose placeholder wraps, so measuring it on one line is meaningless. Withdrawn and the tool corrected to inputs only. Two other flagged items were also correct-by-design once checked: the enquiry previews truncate deliberately and expand on tap, and the 20x20 checkboxes carry a `label[for]` giving a 331x36 hit area. | 2026-09-05 | resolved |
 | 7 | **The first version of that pixel check also missed D15.** It painted a marker strip and asked whether the pixels were visible — but an edge-to-edge WebView sits under a *transparent* status bar, so the marker showed through and read as 100% visible (`315/315 rows, pass: true`) on the very defect it was written for. Visibility was the wrong assertion; page origin versus the OS-reported inset is the right one. Every check now has to be proven against the defect it claims to catch, not just observed to pass. | 2026-09-05 | resolved |
 | 5 | **The verification harness had two bugs of its own**, both of which would have produced false failures: a fixed sleep raced the drawer animation (reported 0/10 nav reachable on a healthy screen), and `scrollable()` stopped at the first ancestor with computed `overflow-x: auto`, flagging the calendar's own chips as unreachable when `scrollIntoView` proved otherwise. Both fixed; three consecutive runs now agree. | 2026-09-05 | resolved |
@@ -295,10 +295,10 @@ Empty is the goal.
 |---|---|---|---|
 | D1 | Every API call 404s (2 sites) | 1 | ✅ absolute base baked in, proven in the bundle |
 | D2 | Android back closes the app | 4 | ✅ `/billing`→`/appointments`→`/home`, app alive; exits at root |
-| D3 | Layout under the notch | 4 | ⚠️ superseded on Android by **D15** — `env()` reports 0 there, so the CSS alone protects nothing; the rules stand for iOS |
+| D3 | Layout under the notch | 4 | ✅ **confirmed on iOS**: inset-top 62px, inset-bottom 34px, `.auth-shell` padding-top resolves to 86px = 24 + 62. Android reports 0 (see D15), which is why this could not be proven until now |
 | D4 | 5 dead `target="_blank"` links | 5 | ✅ `Browser.open` → Chrome Custom Tab |
 | D5 | `sms:` / `wa.me` do not navigate | 5 | ✅ `AppLauncher.openUrl`; Messages app opened |
-| D6 | iOS crash on file input | 5 | ✅ usage strings in a validated plist; ⛔ simulator pending |
+| D6 | iOS crash on file input | 5 | ✅ all three usage strings verified in the **built** Info.plist; app launches and stays up with no crash report. The picker tap itself was not driven — no CDP on the simulator |
 | D7 | JWTs in `localStorage` | 2 | ✅ `localStorage` empty; session survives force-quit |
 | D8 | `window.location.assign` hard-reloads | 4 | ✅ none left outside the fallback |
 | D9 | `APP_BASE` white-screens mobile | 1 | ✅ proven both ways: mobile ignores `/app`, web still honours it |
@@ -307,7 +307,7 @@ Empty is the goal.
 
 | ID | Defect | Severity | Status |
 |---|---|---|---|
-| D10 | **All inputs are `font-size: 14px`.** iOS zooms the page in when a field under 16px takes focus and never zooms back, leaving a magnified sideways-scrolling layout. Hits all 21 forms. Fixed with a `@media (pointer: coarse)` bump — desktop untouched, pinch zoom preserved (no `user-scalable=no`, WCAG 1.4.4). | Severe (iOS) | ✅ 16px on device — see §5 item 4 |
+| D10 | **All inputs are `font-size: 14px`.** iOS zooms the page in when a field under 16px takes focus and never zooms back, leaving a magnified sideways-scrolling layout. Hits all 21 forms. Fixed with a `@media (pointer: coarse)` bump — desktop untouched, pinch zoom preserved (no `user-scalable=no`, WCAG 1.4.4). | Severe (iOS) | ✅ **16px measured on iOS**, so no auto-zoom |
 | D11 | **Pre-existing production bug on the web.** `scripts/build-all.sh` builds with `APP_BASE=/app/`, but `window.location.assign('/login')` targets the domain root — so session expiry drops users onto the marketing site instead of the SPA login. Same for the error boundary's "go home". Closed by the same `lib/navigation.ts` fix. | Severe (web, live) | ✅ `"/app/".replace(...)` → `/app/login` in the built bundle |
 | D12 | **`Keyboard.setResizeMode` returns `UNIMPLEMENTED` on Android** — an unhandled promise rejection on every launch. My own code: Android configures keyboard resize in `capacitor.config`, and the runtime call is iOS-only, which the plugin's README states. Runtime call removed. | Moderate | ✅ console clean |
 | D13 | **Capacitor 8 serves the bundle from `https://localhost`, so a plain-HTTP dev API is blocked as mixed content.** Separate from the Android cleartext policy — fixing the manifest alone still left every request failing. Dev-gated `allowMixedContent`, verified `false` without `CAP_DEV`. | Blocker (dev) | ✅ login works |
@@ -337,16 +337,48 @@ Newest last. One line per session, facts only.
   Re-swept afterwards: **19/19 routes PASS**, 0 console errors, web build unregressed, palette
   unchanged. D15 is the lesson of the sprint — a DOM probe reported the title on screen while a
   screenshot showed it behind the clock.
-- **2026-09-05 (harness hardening)** — Added `tools/top-strip.mjs`, a device-pixel check that
+- **2026-09-05 (harness hardening)** — Added `frontend/tools/top-strip.mjs`, a device-pixel check that
   the page starts below the OS-reported `statusBars` inset, and wired it into the sweep. Its
   first implementation asked whether a painted marker was visible and **passed D15**, because
   the transparent status bar let the marker show through; rewritten to compare page origin
   against the system inset. Proven in three states: shipped `pass`, D15 reintroduced at runtime
   `fail (48.8 CSS px hidden)`, restored `pass`.
-- **2026-09-05 (layout audit)** — Added `tools/layout-audit.mjs`: per-screen checks for text
+- **2026-09-05 (layout audit)** — Added `frontend/tools/layout-audit.mjs`: per-screen checks for text
   truncated by its own box, placeholders wider than their field, content parked off the right,
   sub-44px tap targets, and content clipped with nothing to scroll it. First run flagged issues
   on **7 of 12 screens**; three were correct-by-design and withdrawn (textarea placeholder,
   collapsible enquiry previews, label-wrapped checkboxes), leaving **D16** and **D17**. Both
   fixed. Re-audited: **0 cut placeholders, 0 clipped elements across 12 screens**, top strip
   PASS, routes 12/12, web build unregressed, palette unchanged.
+- **2026-09-06 (iOS)** — Xcode 26.5 installed; the iOS **simulator runtime is a separate
+  10.6 GB download** that `-showsdks` gives no hint of, and `xcodebuild -downloadPlatform`
+  reports progress with carriage returns, so `wc -l` shows 0 lines while bytes flow — I
+  called a working download "stalled" twice on that evidence and killed it. **BUILD
+  SUCCEEDED**, 7.8 MB, running on an iPhone 17 Pro.
+
+  **D3 is confirmed for the first time**: `env(safe-area-inset-top)` = **62px** and
+  `-bottom` = **34px**, with `.auth-shell` padding-top resolving to **86px** (24 + 62). On
+  Android those are 0, which is precisely why months of Android passes could not validate
+  the safe-area CSS. D10 confirmed at 16px.
+
+  Measuring required a temporary diagnostic painted into the DOM and read from a
+  screenshot: the simulator exposes no CDP endpoint, `ios-webkit-debug-proxy` returns no
+  targets for simulators, and Capacitor iOS does not forward WebView console to stdout.
+  The diagnostic was removed and the app rebuilt clean before this entry. **iOS is
+  therefore less instrumented than Android** — no 12/12 route sweep, no pixel top-strip
+  check — and the file-picker tap was not driven.
+
+## iOS production verification — 2026-09-06
+
+118 checks green on an iPhone 17 Pro simulator (iOS 26.5) against production,
+covering both portals end to end. Two shipped defects found and fixed: **D16**
+sign-in was impossible on iOS (keychain `-34018`, no entitlements file) and
+**D17** a new owner could not add their first pet (optional signup phone feeding
+a required field). Detail and the three harness defects that produced false
+results first: `docs/DESIGN_mobile.md`.
+
+**R8 — a check must be able to name what it examined.** Counting the subjects is
+part of the assertion, not an extra. A sweep that reports "no table overflows"
+having met no tables, or "access refused" having requested `/undefined`, is
+green and worthless. Both happened in this run and both were caught only by
+adding a census.

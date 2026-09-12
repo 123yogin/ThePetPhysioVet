@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's cream page ground, so the OS launch screen, the web splash and
+         the app itself are one continuous surface. Distinct from
+         ic_launcher_background, which is the icon's own disc colour. -->
+    <color name="splashBackground">#FAF6F1</color>
+</resources>

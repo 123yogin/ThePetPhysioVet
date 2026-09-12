@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchOwnerPets, createOwnerPet, createOwnerAppointment, fetchOwnerAppointments } from '../api/owner';
 import { fetchAppointmentOptions } from '../api/appointments';
+import { fetchMe } from '../api/auth';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
 import { petEmoji, friendlyDate, friendlyTime } from '../lib/labels';
@@ -24,6 +25,7 @@ export const OwnerHomeScreen: React.FC = () => {
   const [sex, setSex] = useState('Male');
   const [weight, setWeight] = useState('');
   const [complaint, setComplaint] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
 
   // New Appointment State
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
@@ -58,6 +60,12 @@ export const OwnerHomeScreen: React.FC = () => {
     }
   }, [visitTypeOptions, visitType]);
 
+  // Accounts created before signup required a phone have none, and the clinic
+  // cannot ring a client it has no number for. Ask on the one form that needs
+  // it; the server stores it on the profile, so it is asked once.
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: fetchMe });
+  const needsContactPhone = !!me && !me.phone;
+
   // Next upcoming appointment per pet, so "when is my pet next seen" is
   // answered on the home screen instead of three taps away.
   const nextApptByPet = new Map<string, Appointment>();
@@ -83,11 +91,15 @@ export const OwnerHomeScreen: React.FC = () => {
       fd.append('sex', sex);
       fd.append('weight', weight);
       fd.append('complaint', complaint);
+      if (needsContactPhone) {
+        fd.append('owner_phone', contactPhone.trim());
+      }
       return createOwnerPet(fd);
     },
     onSuccess: (newPet) => {
       addFlash(`${petEmoji(newPet.species)} ${newPet.name} has been added.`, 'success');
       queryClient.invalidateQueries({ queryKey: ['ownerPets'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
       setShowAddPet(false);
       setShowMoreDetails(false);
       setPetName('');
@@ -95,6 +107,7 @@ export const OwnerHomeScreen: React.FC = () => {
       setAge('');
       setWeight('');
       setComplaint('');
+      setContactPhone('');
     },
     onError: (err: any) => {
       addFlash(err?.message || 'Failed to add pet. Please try again.', 'error');
@@ -184,6 +197,21 @@ export const OwnerHomeScreen: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {needsContactPhone && (
+              <div className="field" style={{ marginTop: '12px' }}>
+                <label>Your Contact Number *</label>
+                <input
+                  type="tel"
+                  className="input-glass"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="+91 98765 12345"
+                  required
+                />
+                <small className="text-muted">So the clinic can reach you about {petName || 'your pet'}.</small>
+              </div>
+            )}
 
             <button
               type="button"

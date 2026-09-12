@@ -109,23 +109,44 @@ class AnonymousAccessTests(ApiTestCase):
                 r = getattr(self.anon(), method)(f"{API}{path}", body, format="json")
                 self.assertEqual(r.status_code, 401, f"{path} -> {r.status_code}")
 
+    @staticmethod
+    def _views_source():
+        """Every line of view source, across the whole views package.
+
+        `views` used to be one module, so `inspect.getsource(views)` was the
+        whole haystack. It is a package now, and getsource() on a package
+        returns only __init__.py — a few dozen lines of re-exports — which
+        would have quietly reduced this guard to grepping an import list. So
+        read every module in the package and concatenate.
+        """
+        import pkgutil
+        import importlib
+        import inspect
+        from appointments import views
+
+        chunks = [inspect.getsource(views)]
+        for info in pkgutil.iter_modules(views.__path__):
+            module = importlib.import_module(f"appointments.views.{info.name}")
+            chunks.append(inspect.getsource(module))
+        return "\n".join(chunks), len(chunks) - 1
+
     def test_no_anonymous_doctor_fallback_in_source(self):
         """Regression guard for the deleted `filter(role="DOCTOR").first()` default.
 
         QA round 3: a sibling test was found VACUOUS because
         `inspect.getsource()` on an @api_view-decorated view returns DRF's
         443-char wrapper, not the view body (`.__wrapped__` gives the same
-        wrapper — it is not a workaround). This test greps the MODULE, which
+        wrapper — it is not a workaround). This greps the SOURCE FILES, which
         is not affected; the positive controls below prove the haystack is
         real, so this can never silently pass against empty/wrapper source.
         """
-        import inspect
-        from appointments import views
-        src = inspect.getsource(views)
+        src, module_count = self._views_source()
 
         # Positive controls: if these ever fail, the grep target is wrong and
         # the negative assertions below are meaningless.
-        self.assertGreater(len(src), 10000, "module source looks truncated")
+        self.assertGreater(module_count, 5,
+                           "the views package should contain the domain modules")
+        self.assertGreater(len(src), 10000, "views source looks truncated")
         self.assertIn("def refresh_view(request):", src)
         self.assertIn("def login_view(request):", src)
 
@@ -133,11 +154,9 @@ class AnonymousAccessTests(ApiTestCase):
         self.assertNotIn("role='DOCTOR').first()", src)
 
     def test_source_grep_guard_is_not_vacuous(self):
-        """Meta-test: prove getsource(module) really can fail."""
-        import inspect
-        from appointments import views
-        src = inspect.getsource(views)
-        self.assertNotIn("a-string-that-is-definitely-not-in-views-py", src)
+        """Meta-test: prove the source grep really can fail."""
+        src, _ = self._views_source()
+        self.assertNotIn("a-string-that-is-definitely-not-in-the-views-package", src)
         self.assertIn("authenticate(", src)  # the thing we care about IS there
 
 
@@ -161,7 +180,9 @@ class SignupTests(ApiTestCase):
         """API_CONTRACT.md §5: bcrypt, cost >= 12, first in PASSWORD_HASHERS."""
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "bcryptuser", "password": "S3curePass!", "email": "b@e.com",
-            "first_name": "B", "last_name": "C", "role": "OWNER"}, format="json")
+            "first_name": "B", "last_name": "C", "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         user = UserProfile.objects.get(username="bcryptuser")
         self.assertTrue(user.password.startswith("bcrypt_sha256$"), user.password[:30])
@@ -180,14 +201,18 @@ class SignupTests(ApiTestCase):
     def test_signup_rejects_invalid_role(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "hacker", "password": "S3curePass!", "email": "h@e.com",
-            "first_name": "H", "last_name": "K", "role": "ADMIN"}, format="json")
+            "first_name": "H", "last_name": "K", "role": "ADMIN",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 400, r.content)
 
     def test_signup_cannot_set_is_staff_or_is_superuser(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "escalate", "password": "S3curePass!", "email": "e@e.com",
             "first_name": "E", "last_name": "S", "role": "OWNER",
-            "is_staff": True, "is_superuser": True}, format="json")
+            "is_staff": True, "is_superuser": True,
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         user = UserProfile.objects.get(username="escalate")
         self.assertFalse(user.is_staff, "mass-assignment set is_staff")
@@ -196,7 +221,9 @@ class SignupTests(ApiTestCase):
     def test_duplicate_username_rejected(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "drwho", "password": "S3curePass!", "email": "x@e.com",
-            "first_name": "X", "last_name": "Y", "role": "OWNER"}, format="json")
+            "first_name": "X", "last_name": "Y", "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 400, r.content)
 
     def test_duplicate_email_rejected(self):
@@ -204,7 +231,9 @@ class SignupTests(ApiTestCase):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "another", "password": "S3curePass!",
             "email": "dr@example.com", "first_name": "A", "last_name": "N",
-            "role": "OWNER"}, format="json")
+            "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(
             r.status_code, 400,
             "duplicate email accepted -> two accounts share an email "
@@ -289,7 +318,7 @@ class SignupUsernameDerivationTests(ApiTestCase):
 
     def _signup(self, email, username=None):
         body = {"first_name": "Test", "last_name": "Person", "email": email,
-                "password": "SignupPass2026"}
+                "password": "SignupPass2026", "phone": "9800000000"}
         if username is not None:
             body["username"] = username
         return self.client.post(f"{API}/auth/signup", body, format="json")
@@ -322,3 +351,150 @@ class SignupUsernameDerivationTests(ApiTestCase):
         self._signup("first@example.com", username="taken_handle")
         r = self._signup("second@example.com", username="taken_handle")
         self.assertEqual(r.status_code, 400, r.content)
+
+
+class OwnerFirstPetContactNumberTests(ApiTestCase):
+    """DEFECT found on the iOS build against production, 2026-09-06.
+
+    `UserProfile.phone` was blank=True, so signup generated an optional field
+    and the form labelled it "Phone Number" with no asterisk. `Pet.owner_phone`
+    is NOT blank, and `owner_pets_view` filled it via
+    `data.setdefault("owner_phone", request.user.phone)` — so an owner who
+    skipped the optional field got HTTP 400 "owner_phone: This field may not be
+    blank" on the very next thing they do, naming a field their form never
+    rendered. Adding your first pet is step one of the owner portal, so the
+    portal was unusable for anyone who left one optional box empty.
+    """
+
+    def test_signup_requires_a_phone_number(self):
+        r = self.anon().post(f"{API}/auth/signup", {
+            "first_name": "Nophone", "last_name": "Owner",
+            "email": "nophone@owner.test", "password": "OwnerPass2026",
+        }, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertIn("phone", r.data.get("errors", {}))
+
+    def test_a_new_owner_can_add_their_first_pet(self):
+        r = self.anon().post(f"{API}/auth/signup", {
+            "first_name": "Withphone", "last_name": "Owner",
+            "email": "withphone@owner.test", "password": "OwnerPass2026",
+            "phone": "9800000000",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+
+        c = self.anon()
+        c.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
+        r = c.post(f"{API}/owner/pets", {"name": "Bruno", "species": "Dog"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["owner_phone"], "9800000000")
+
+    def test_a_legacy_phoneless_owner_supplies_it_on_the_pet_form(self):
+        """Accounts that predate the required field must not be stranded, and
+        must not be asked twice: the number is adopted onto the profile."""
+        user = UserProfile.objects.create_user(
+            username="legacy_owner", password="OwnerPass2026",
+            email="legacy@owner.test", role="OWNER", first_name="Legacy",
+        )
+        self.assertEqual(user.phone, "")
+
+        c = self.auth(user)
+        r = c.post(f"{API}/owner/pets", {"name": "Mia", "species": "Cat"}, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+
+        r = c.post(f"{API}/owner/pets",
+                   {"name": "Mia", "species": "Cat", "owner_phone": "9700000001"},
+                   format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        user.refresh_from_db()
+        self.assertEqual(user.phone, "9700000001",
+                         "the number was not adopted, so the owner is asked again")
+
+
+class PhoneValidationTests(ApiTestCase):
+    """Phone had no validation anywhere across six fields.
+
+    Found during a QA run on the live API, which accepted `9800r91879` — a
+    number with a letter in it. Two silent failures follow: the clinic cannot
+    ring the client, and migration 0010 matches a doctor-created patient to an
+    owner account *by phone string*, so an unnormalised number means the owner
+    never sees their own pet.
+    """
+
+    BAD = [
+        ("letters in the number", "9800r91879"),
+        ("all letters", "not-a-phone"),
+        ("too short", "12345"),
+        ("too long", "1234567890123456789"),
+        ("an email by mistake", "owner@example.com"),
+    ]
+    # Written by a human, all the same number.
+    MESSY = ["+91 98000 11122", "98000-11122", "(98000) 11122", "+919800011122"]
+
+    def _signup(self, phone, email="phone-check@owner.test", username=None):
+        body = {
+            "first_name": "Phone", "last_name": "Check", "email": email,
+            "password": "PhonePass2026", "phone": phone,
+        }
+        if username:
+            body["username"] = username
+        return self.anon().post(f"{API}/auth/signup", body, format="json")
+
+    def test_signup_rejects_an_uncallable_number(self):
+        for label, bad in self.BAD:
+            with self.subTest(label):
+                r = self._signup(bad, email=f"{label.replace(' ', '')}@owner.test")
+                self.assertEqual(r.status_code, 400, f"{label} was accepted: {r.content}")
+                self.assertIn("phone", r.data.get("errors", {}))
+
+    def test_signup_normalises_the_way_people_actually_type(self):
+        for i, messy in enumerate(self.MESSY):
+            with self.subTest(messy):
+                r = self._signup(messy, email=f"messy{i}@owner.test", username=f"messy{i}")
+                self.assertEqual(r.status_code, 201, r.content)
+                stored = UserProfile.objects.get(username=f"messy{i}").phone
+                self.assertNotIn(" ", stored)
+                self.assertNotIn("-", stored)
+                self.assertIn(stored, ("+919800011122", "9800011122"),
+                              f"{messy!r} stored as {stored!r}")
+
+    def test_a_doctor_created_patient_rejects_a_bad_owner_phone(self):
+        doctor = self.auth(self.doctor)
+        r = doctor.post(f"{API}/pets",
+                        {"name": "Rex", "owner_name": "Someone", "owner_phone": "98oo011122"},
+                        format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertIn("owner_phone", r.data.get("errors", {}))
+
+    def test_the_public_enquiry_form_rejects_a_bad_phone(self):
+        r = self.anon().post(f"{API}/enquiries", {
+            "firstName": "Lead", "lastName": "Person", "petName": "Bruno",
+            "email": "lead@example.com", "phone": "call-me-maybe",
+        }, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+
+
+class LastLoginTests(ApiTestCase):
+    """Django writes last_login from its session login() only, which a JWT API
+    never calls — so the column was null for every account regardless of how
+    often they signed in, and the admin's column was permanently blank."""
+
+    def test_signing_in_records_last_login(self):
+        user = UserProfile.objects.create_user(
+            username="stamped", password="StampPass2026", email="stamped@x.test", role="OWNER")
+        self.assertIsNone(user.last_login)
+
+        r = self.anon().post(f"{API}/auth/login",
+                             {"username": "stamped", "password": "StampPass2026"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+
+        user.refresh_from_db()
+        self.assertIsNotNone(user.last_login, "last_login is still null after a successful login")
+
+    def test_a_refused_login_does_not_stamp(self):
+        user = UserProfile.objects.create_user(
+            username="unstamped", password="StampPass2026", email="unstamped@x.test", role="OWNER")
+        r = self.anon().post(f"{API}/auth/login",
+                             {"username": "unstamped", "password": "wrong"}, format="json")
+        self.assertEqual(r.status_code, 401)
+        user.refresh_from_db()
+        self.assertIsNone(user.last_login, "a failed attempt stamped last_login")

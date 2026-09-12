@@ -6,6 +6,16 @@ const config: CapacitorConfig = {
   appName: 'Pet Physio Vet',
   webDir: 'dist',
   plugins: {
+    SplashScreen: {
+      // The web layer hides this once its own matching frame is painted
+      // (components/SplashScreen.tsx), so autoHide is off — otherwise the
+      // native image disappears before the WebView has drawn anything and the
+      // user sees a white flash between the two.
+      launchAutoHide: false,
+      backgroundColor: '#FAF6F1',
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: false,
+    },
     Keyboard: {
       // iOS only — the plugin says so, and calling setResizeMode() at runtime on
       // Android returns UNIMPLEMENTED. Android resizes the WebView on its own.

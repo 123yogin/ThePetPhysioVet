@@ -22,6 +22,28 @@ export const PlatformBridge: React.FC = () => {
     setNavigator(navigate);
   }, [navigate]);
 
+  // Hide the OS launch image once the web layer has painted. index.html draws a
+  // matching cream frame on parse, so this hands over without a flash of white.
+  // launchAutoHide is off in capacitor.config.ts precisely so we control this.
+  React.useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let cancelled = false;
+    const id = requestAnimationFrame(() => {
+      void (async () => {
+        try {
+          const { SplashScreen } = await import('@capacitor/splash-screen');
+          if (!cancelled) await SplashScreen.hide();
+        } catch {
+          // Optional plugin: without it the OS splash hides on its own.
+        }
+      })();
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
+  }, []);
+
   // Read through a ref so the listener is registered once instead of being torn
   // down and re-added on every navigation.
   const pathRef = React.useRef(location.pathname);

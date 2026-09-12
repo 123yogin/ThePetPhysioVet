@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Tokens are kept in the keychain (see src/lib/tokens.ts). Without an
+	     access group the keychain refuses every write with -34018
+	     (errSecMissingEntitlement), which surfaced as "An OS error occurred
+	     (-34018)" on the login screen: POST /auth/login returned 200 and the
+	     app then could not store the session, so nobody could sign in. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.thepetphysiovet.app</string>
+	</array>
+</dict>
+</plist>

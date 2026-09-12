@@ -61,7 +61,12 @@ class SecretKeyFailFastTests(SimpleTestCase):
 class SpaRouteSmokeTests(ApiTestCase):
     """Every `/api/v1/...` path the SPA references must resolve in the URLconf."""
 
-    PATH_RE = re.compile(r"http[^(]*\(\s*[`'\"](/[^`'\"?]*)")
+    # `(?<!['"])` so the literal in `endpoint.startsWith('http')` is not read
+    # as a call to the `http` helper, and `[^(\n]*` so a match cannot span
+    # lines and pair an `http` on one line with an unrelated call on the
+    # next — together those made this test report `/api`, a prefix test in
+    # http.ts, as an unroutable endpoint the SPA calls.
+    PATH_RE = re.compile(r"(?<!['\"])\bhttp[^(\n]*\(\s*[`'\"](/[^`'\"?]*)")
 
     def _spa_paths(self):
         paths = set()
@@ -146,7 +151,9 @@ class PiiLeakTests(ApiTestCase):
     def test_signup_validation_error_does_not_echo_password(self):
         r = self.anon().post(f"{API}/auth/signup", {
             "username": "drwho", "password": "SuperSecret123", "email": "x@e.com",
-            "first_name": "A", "last_name": "B", "role": "OWNER"}, format="json")
+            "first_name": "A", "last_name": "B", "role": "OWNER",
+            "phone": "9800000000",
+        }, format="json")
         self.assertEqual(r.status_code, 400)
         self.assertNotIn("SuperSecret123", str(r.data))
 
@@ -174,3 +181,120 @@ class MethodNotAllowedTests(ApiTestCase):
                 r = getattr(self.client, method)(f"{API}{path}", {}, format="json")
                 self.assertEqual(r.status_code, 405, f"{method} {path} -> "
                                                      f"{r.status_code}")
+
+
+class RequirementsParityTests(ApiTestCase):
+    """The two requirements lists must not drift.
+
+    Vercel's Python runtime installs the repo-root requirements.txt for
+    api/index.py (there is no api/requirements.txt); the Dockerfile installs
+    backend/requirements.txt, which it COPYs on its own. They were byte-identical
+    copies with nothing keeping them that way, so a version bump in one would
+    have given the serverless function and the container different dependencies
+    with no signal at all.
+
+    They cannot be collapsed into a single file: a `-r backend/requirements.txt`
+    include at the root fails the Vercel build ("could not parse
+    requirements.txt: Error parsing included file"), which was measured, and the
+    reverse include fails in Docker because only backend/requirements.txt is
+    copied into the image. So the duplication stays and this pins it.
+    """
+
+    @staticmethod
+    def _pins(path):
+        """Requirement lines only — comments and blank lines are free to differ."""
+        return [
+            line.strip()
+            for line in path.read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+    def test_root_and_backend_requirements_are_identical(self):
+        from pathlib import Path
+
+        backend_dir = Path(__file__).resolve().parents[2]
+        root = backend_dir.parent
+        root_pins = self._pins(root / "requirements.txt")
+        backend_pins = self._pins(backend_dir / "requirements.txt")
+
+        self.assertTrue(root_pins, "root requirements.txt has no pins")
+        self.assertEqual(
+            root_pins,
+            backend_pins,
+            "requirements.txt and backend/requirements.txt have drifted. Vercel "
+            "installs the root one and Docker installs the backend one, so they "
+            "must match exactly. Copy whichever you edited over the other.",
+        )
+
+
+class ModelPackageIntegrityTests(ApiTestCase):
+    """models/ is a package now; these pin what the split must never break.
+
+    The 583-line models.py became eight domain modules. Django keys a model by
+    app_label and class name rather than module path, so the 19 tables, 8
+    migrations and 17 content types were untouched — but nothing structural
+    stops a later edit from moving a model into a new app_label, renaming a
+    table, or dropping a name out of the package's re-exports, and any of those
+    would be a silent production break rather than a test failure.
+    """
+
+    EXPECTED_MODELS = {
+        "UserProfile", "PasswordResetToken",           # accounts
+        "Pet",                                         # pets
+        "Appointment",                                 # scheduling
+        "DiagnosticReport", "TreatmentPlan", "ProgressNote",   # clinical
+        "Invoice", "LineItem", "Payment", "Package",   # billing
+        "Notification", "NotificationPref",            # notifications
+        "QueryThread", "QueryMessage", "QueryAttachment",      # messaging
+        "Enquiry",                                     # enquiries
+    }
+
+    def test_no_pending_migrations(self):
+        """The split must not have changed the schema.
+
+        `makemigrations --check` exits non-zero the moment the models stop
+        matching the migration state, which is exactly what a stray db_table or
+        app_label change would do.
+        """
+        from io import StringIO
+        from django.core.management import call_command
+
+        out = StringIO()
+        try:
+            call_command("makemigrations", "appointments", check=True,
+                         dry_run=True, stdout=out, stderr=out)
+        except SystemExit as exc:  # non-zero means unapplied model changes
+            self.fail(
+                "The models no longer match the migrations. Splitting models.py "
+                "must not change the schema; run makemigrations to see what "
+                f"drifted.\n{out.getvalue()}"
+            )
+
+    def test_every_model_is_reexported_from_the_package(self):
+        """`from appointments.models import X` must keep working for all of them."""
+        from appointments import models as pkg
+
+        for name in sorted(self.EXPECTED_MODELS):
+            self.assertTrue(
+                hasattr(pkg, name),
+                f"{name} is no longer importable from appointments.models — add it "
+                "to the re-exports in models/__init__.py",
+            )
+
+    def test_all_models_keep_the_appointments_app_label(self):
+        """A model that drifts to another app_label renames its table."""
+        from django.apps import apps
+
+        registered = {m.__name__ for m in apps.get_app_config("appointments").get_models()}
+        self.assertEqual(registered, self.EXPECTED_MODELS)
+
+    def test_table_names_are_unchanged(self):
+        """Tables are appointments_<model>; production holds 19 of them."""
+        from django.apps import apps
+
+        for model in apps.get_app_config("appointments").get_models():
+            self.assertTrue(
+                model._meta.db_table.startswith("appointments_"),
+                f"{model.__name__} is mapped to {model._meta.db_table}, which would "
+                "orphan the live table",
+            )
