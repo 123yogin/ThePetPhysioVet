@@ -45,12 +45,28 @@ _INTERNAL_PHRASES = (
 )
 
 
+def _is_envelope_detail(key, value):
+    """True for DRF's own `{"detail": "..."}` wrapper rather than a form field.
+
+    `APIException` (NotFound, PermissionDenied, MethodNotAllowed, ...) always
+    reports as `{"detail": ErrorDetail("...")}` -- a string. A serializer field
+    genuinely called "detail" reports a *list* of messages, like every other
+    field. Keying on the value's shape keeps the wrapper unlabelled without
+    swallowing the label of a real field that happens to share the name.
+    """
+    return key == "detail" and not isinstance(value, (list, dict))
+
+
 def _flatten(detail, prefix=""):
     """Turn DRF's nested error structure into one readable sentence."""
     if isinstance(detail, dict):
         parts = []
         for key, value in detail.items():
-            label = key if key != "non_field_errors" else ""
+            # "non_field_errors" and DRF's "detail" wrapper are envelopes, not
+            # field names. Labelling the latter is what produced user-visible
+            # strings like "detail: This action requires a doctor account." and
+            # 'detail: Method "POST" not allowed.' on every DRF-raised error.
+            label = "" if key == "non_field_errors" or _is_envelope_detail(key, value) else key
             parts.append(_flatten(value, f"{label}: " if label else ""))
         return " ".join(p for p in parts if p)
     if isinstance(detail, list):
@@ -69,8 +85,24 @@ def rfc7807_exception_handler(exc, context):
     title = _TITLES.get(status_code, "Request failed")
     detail = _flatten(response.data) if response.data is not None else title
 
-    # Replace Django's internal phrasing rather than forwarding it to a user.
-    if any(phrase.replace("%s", "") in detail for phrase in _INTERNAL_PHRASES):
+    # Every 404 says the same thing, whatever raised it.
+    #
+    # This used to key off Django's phrasing only, so it rewrote the body of a
+    # `get_object_or_404` miss and left everything else alone. A view raising
+    # `NotFound` for an object that exists but belongs to someone else came back
+    # as "Not found." instead -- measured live against production:
+    #
+    #   GET /owner/pets/<another owner's pet>  -> "detail: Not found."
+    #   GET /owner/pets/<no such pet>          -> "That record does not exist, ..."
+    #
+    # Two distinguishable 404s are exactly the oracle the module docstring says
+    # must not exist: the short one means "this id is real, just not yours".
+    # UUID keys make walking the space impractical, which is why this is a leak
+    # rather than a breach -- but the invariant is the thing being defended, so
+    # it is enforced here for all 404s rather than for one library's wording.
+    if status_code == 404 or any(
+        phrase.replace("%s", "") in detail for phrase in _INTERNAL_PHRASES
+    ):
         detail = "That record does not exist, or you do not have access to it."
 
     body = {
