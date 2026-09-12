@@ -137,8 +137,13 @@ const out = await ev(`(async () => {
   ok('B1', 'the real patient roster is listed', /Coco/.test(document.body.innerText),
      (document.body.innerText.match(/Coco[^\\n]{0,40}/) || [''])[0]);
   await go('enquiries', 'enquiries2');
+  // Not a row count: this asserted ">= 3" and broke the day four test
+  // enquiries were cleaned out of production. A sweep must not depend on how
+  // much data happens to exist. Either rows render, or a real empty state does.
   const enq = document.querySelectorAll('table tbody tr, .enquiry-card, .glass-card').length;
-  ok('B2', 'the 5 production enquiries are visible', enq >= 3, enq + ' rows/cards');
+  const emptyState = /no enquir|nothing here|all caught up|no new/i.test(document.body.innerText);
+  ok('B2', 'the enquiry inbox shows rows or a proper empty state',
+     enq > 0 || emptyState, enq + ' rows/cards' + (emptyState ? ' + empty state' : ''));
 
   // ---------- sign out ----------
   await openDrawer();

@@ -281,6 +281,10 @@ See `PRODUCT_PLAN.md` for the phased roadmap and per-phase acceptance criteria.
 ## Non-negotiable rules for all agents
 1. **Security first.** Never commit secrets. The old `.env` leaked a live DB
    credential — secrets live in OCI Vault only. Fail-fast if a prod secret is missing.
+   **The Neon password was rotated on 2026-09-12** after the previous one was
+   exposed in a working session; the live value is in Vercel's `DATABASE_URL`
+   (production) and nowhere in this repo. Retrieve it with
+   `vercel env pull` — never paste a live credential into a chat or a file.
 2. **Traceability.** Every change maps to an SRS acceptance criterion (AC-xx) or a
    PRODUCT_PLAN phase. State which one in PR/commit descriptions.
 3. **Data ownership.** One service owns its schema. No cross-service DB joins —
