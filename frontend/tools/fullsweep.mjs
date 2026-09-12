@@ -45,10 +45,12 @@ const out = await ev(`(async () => {
     if (len === _lastLen) { _stable++; } else { _stable = 0; _lastLen = len; }
     return _stable >= 2;          // unchanged across three consecutive polls
   };
-  // innerText returns CSS-transformed text, so a badge styled
-  // `text-transform: uppercase` reads as PENDING even though the DOM says
+  // innerText returns CSS-transformed text, so a badge styled with
+  // text-transform uppercase reads as PENDING even though the DOM says
   // "Pending". Enum-leak checks must use textContent or they false-positive.
-  const rawText = () => (document.body.textContent || '').replace(/\s+/g, ' ');
+  // NOTE: this whole body is a JS template literal -- no backticks in here, and
+  // backslashes need doubling to survive into the evaluated string.
+  const rawText = () => (document.body.textContent || '').replace(/\\s+/g, ' ');
 
   const census = { tables: 0, rows: 0, where: [] };
   function geometry(label) {
