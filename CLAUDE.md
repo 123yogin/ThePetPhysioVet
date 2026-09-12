@@ -276,6 +276,28 @@ input-dispatch timeouts. Check *which process* the `/data/anr` dump names
 before chasing a phantom deadlock; the swallowed touch also meant the action
 never reached the server.
 
+**The owner side was walked the same way**, by registering a real owner through
+the app. Signup, phone normalisation (`98765 43210` stored as `9876543210`),
+first pet, and owner booking all work -- owner booking in particular, which once
+returned 400 for *every* option, now serves the same five types as the doctor
+form from `/appointment-options`. Two things worth keeping:
+
+- **A brand-new owner's first pet still has `doctor = NULL`** (open debt items
+  2-3, reproduced live). The documented mitigation does hold: the pet *and* the
+  appointment booked against it are both visible to the doctor as a claimable
+  pool, so the booking is not stranded. Confirm that pool still works before
+  changing anything here -- it is the only thing standing between a new owner
+  and a booking nobody ever sees.
+- **404s were distinguishable and are now not.** `petphysio/exceptions.py`
+  rewrote only Django's `get_object_or_404` phrasing, so a view raising
+  `NotFound` for a row that exists but is not yours answered "Not found." while
+  a row that never existed answered "That record does not exist, ...". The short
+  message meant "this id is real, just not yours" -- precisely the oracle that
+  module's docstring, and rule 4's choice of 404-over-403, exist to prevent. All
+  404s now share one wording, pinned by `test_error_shape.py`. Relatedly, DRF's
+  `{"detail": ...}` envelope was being labelled like a form field, so users read
+  "detail: This action requires a doctor account."
+
 **This was again caught out-of-tree** -- see open debt item 5. Both fixes were
 verified by counting requests in the Django log against a local stack and by
 diffing device screenshots pixel-wise (2280 rows, 0 bytes differing after a
