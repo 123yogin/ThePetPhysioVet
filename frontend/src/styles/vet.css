@@ -1043,3 +1043,75 @@ tr:hover td {
   .splash-in .splash-word { animation: none; }
   .splash-out { transition: none; }
 }
+
+/* ------------------------------------------------------------------------
+   Appointment calendar (screens/AppointmentsScreen.tsx)
+
+   The month grid was `repeat(7, minmax(110px, 1fr))` with `min-width: 800px`
+   inside an `overflow-x: auto` wrapper. On a 412px phone that is a 2x
+   horizontal scroll: four of the seven weekdays sit off-screen and the doctor
+   has to swipe sideways to find a date. It passed an overflow sweep because the
+   scrolling element is the wrapper, not the document.
+
+   On a phone the seven columns fit instead, and the per-day appointment chips
+   -- "09:30 Coco" -- are dropped, because ~47px of column cannot show them.
+   Nothing is lost: tapping a day already opens the full list underneath, and a
+   dot per visit keeps the at-a-glance density the month view is for.
+
+   Colours below are existing tokens only; the palette count is unchanged.
+   ------------------------------------------------------------------------ */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 8px;
+  min-width: 800px;
+}
+
+.cal-cell {
+  min-height: 100px;
+}
+
+.cal-dots { display: none; }
+
+@media (max-width: 768px) {
+  .cal-grid {
+    /* minmax(0, 1fr) not (110px, 1fr): a 110px floor is what forced the scroll. */
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .cal-cell {
+    min-height: 54px;
+    padding: 4px 2px !important;
+    border-radius: 8px !important;
+  }
+
+  /* The time-and-name chips cannot render legibly this narrow. */
+  .cal-chips { display: none; }
+
+  /* One dot per visit, up to four, then a count. */
+  .cal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    margin-top: 2px;
+  }
+  .cal-dots i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary);
+    display: block;
+  }
+  .cal-dots span {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--brown-700);
+    line-height: 1;
+  }
+
+  /* The "N visits" badge does not fit beside the date at this width. */
+  .cal-badge { display: none; }
+}

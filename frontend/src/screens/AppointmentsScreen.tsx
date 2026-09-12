@@ -362,7 +362,7 @@ export const AppointmentsScreen: React.FC = () => {
 
           {/* Calendar Month Grid */}
           <div className="glass-card" style={{ padding: '16px', overflowX: 'auto', marginBottom: '24px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(110px, 1fr))', gap: '8px', minWidth: '800px' }}>
+            <div className="cal-grid">
               {/* Day Name Headers */}
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                 <div
@@ -402,8 +402,8 @@ export const AppointmentsScreen: React.FC = () => {
                   <div
                     key={formattedDate}
                     onClick={() => setSelectedCalendarDate(formattedDate)}
+                    className="cal-cell"
                     style={{
-                      minHeight: '100px',
                       padding: '8px',
                       borderRadius: '10px',
                       background: isSelected
@@ -436,14 +436,24 @@ export const AppointmentsScreen: React.FC = () => {
                         {dayNum}
                       </span>
                       {dayAppts.length > 0 && (
-                        <span className="badge badge-primary" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        <span className="badge badge-primary cal-badge" style={{ fontSize: '10px', padding: '1px 5px' }}>
                           {dayAppts.length} {dayAppts.length === 1 ? 'visit' : 'visits'}
                         </span>
                       )}
                     </div>
 
+                    {/* Phone: the chips below cannot render legibly in a 7-column
+                        grid this narrow, so a dot per visit carries the density
+                        and tapping the day opens the full list underneath. */}
+                    {dayAppts.length > 0 && (
+                      <div className="cal-dots" aria-hidden="true">
+                        {dayAppts.slice(0, 4).map((a) => <i key={a.id} />)}
+                        {dayAppts.length > 4 && <span>+{dayAppts.length - 4}</span>}
+                      </div>
+                    )}
+
                     {/* Appointment Cards inside Cell */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', flex: 1, overflowY: 'hidden' }}>
+                    <div className="cal-chips" style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', flex: 1, overflowY: 'hidden' }}>
                       {dayAppts.slice(0, 2).map((a) => (
                         <div
                           key={a.id}
