@@ -453,7 +453,7 @@ export const AppointmentsScreen: React.FC = () => {
                     )}
 
                     {/* Appointment Cards inside Cell */}
-                    <div className="cal-chips" style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', flex: 1, overflowY: 'hidden' }}>
+                    <div className="cal-chips" style={{ flexDirection: 'column', gap: '3px', marginTop: '2px', flex: 1, overflowY: 'hidden' }}>
                       {dayAppts.slice(0, 2).map((a) => (
                         <div
                           key={a.id}
