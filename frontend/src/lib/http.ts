@@ -136,7 +136,15 @@ export async function http<T = any>(
 
   const url = apiUrl(endpoint);
 
-  const token = getAccessToken();
+  // Never send a bearer token to a route that exists for people who do not have
+  // a usable one. DRF applies JWTAuthentication globally and SimpleJWT *raises*
+  // on an expired token, so the 401 lands before AllowAny is consulted: sending
+  // a stale token to /auth/login made correct credentials fail, and the user
+  // stayed locked out because the dead token was still in storage on the next
+  // attempt. The server-side fix is `authentication_classes([])` on those views;
+  // this is the other half, and it is what the request should have looked like
+  // regardless — a login is not an authenticated call.
+  const token = isAuthExemptPath(endpoint) ? null : getAccessToken();
   const headers: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(customHeaders as Record<string, string>),

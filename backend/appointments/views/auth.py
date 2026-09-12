@@ -54,6 +54,18 @@ def current_user_view(request):
 
 
 @api_view(["POST"])
+# authentication_classes([]) is load-bearing here for the same reason it is on
+# the password-reset views, and its absence was worse: DRF applies
+# JWTAuthentication globally and SimpleJWT *raises* on a bad bearer token, so a
+# 401 is produced before AllowAny is ever consulted. The SPA attaches whatever
+# access token it still has to every request, expired or not, so a returning
+# user whose token had lapsed submitted correct credentials and got
+# "Given token not valid for any token type" instead of a session.
+#
+# They were then locked out for good: password reset does not help, because the
+# dead token stays in localStorage and the next sign-in fails identically. Only
+# clearing site data recovered the account. Measured against production.
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_view(request):
     username = request.data.get("username")
@@ -83,6 +95,10 @@ def login_view(request):
 
 
 @api_view(["POST"])
+# See login_view: a stale bearer token 401s an AllowAny route before the
+# permission is consulted. Someone registering a second account from a browser
+# that still holds an old session hits exactly that.
+@authentication_classes([])
 @permission_classes([AllowAny])
 def signup_view(request):
     serializer = SignupSerializer(data=request.data)
@@ -116,6 +132,11 @@ def logout_view(request):
 
 
 @api_view(["POST"])
+# The worst placement of all: this route exists precisely to be called when the
+# access token has expired, and the SPA sends that expired token with it. The
+# route would 401 exactly when it was needed, the interceptor would give up, and
+# a session that could have been refreshed was thrown away instead.
+@authentication_classes([])
 @permission_classes([AllowAny])
 def refresh_view(request):
     """POST /auth/refresh — {refresh} -> {access, refresh} (API_CONTRACT.md
