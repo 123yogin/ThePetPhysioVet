@@ -65,6 +65,21 @@ const out = await ev(`(async () => {
       .filter(e => e.getBoundingClientRect().right > innerWidth + 1);
     ok(label + ':edge', label + ' — nothing past the right edge', wide.length === 0,
        wide.length ? wide[0].tagName + '.' + String(wide[0].className).slice(0, 20) : '');
+    // The document-level check above misses an element that scrolls INSIDE its
+    // own container: the appointments calendar was a 800px-wide grid in an
+    // overflow-x wrapper, so four weekdays sat off-screen while the page itself
+    // reported no overflow and this sweep passed it. Catch inner scrollers too.
+    const scrollers = [...document.querySelectorAll('*')].filter(e => {
+      if (e.scrollWidth <= e.clientWidth + 2) return false;
+      const ov = getComputedStyle(e).overflowX;
+      return ov === 'auto' || ov === 'scroll';
+    });
+    ok(label + ':inner', label + ' — nothing scrolls sideways inside the page',
+       scrollers.length === 0,
+       scrollers.length
+         ? scrollers[0].tagName + '.' + String(scrollers[0].className).slice(0, 24)
+           + ' ' + scrollers[0].scrollWidth + '>' + scrollers[0].clientWidth
+         : '');
     const small = [...document.querySelectorAll('button,a.btn,[role=button]')]
       .filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 44; });
     ok(label + ':tap', label + ' — tap targets >= 44px', small.length === 0,
