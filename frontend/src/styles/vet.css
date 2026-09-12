@@ -1069,7 +1069,17 @@ tr:hover td {
 
 .cal-cell {
   min-height: 100px;
+  /* Grid items default to min-width:auto, so a `white-space: nowrap` chip can
+     force its track wider than 1fr and push the row past the card edge. */
+  min-width: 0;
 }
+
+/* `display` lives here, not in the inline style on the element. An inline
+   `display: flex` outranks every stylesheet selector, so the phone rule below
+   silently did nothing and the chips escaped the 54px cell and ran off the
+   right edge of the screen. Keep layout that a media query needs to override
+   out of the style attribute. */
+.cal-chips { display: flex; }
 
 .cal-dots { display: none; }
 

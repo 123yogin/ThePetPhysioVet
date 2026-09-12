@@ -228,6 +228,59 @@ frontend test suite, and `Notification`/`Package` still dead.
 `(pet, date, time)`, so running it on a different day adds a fresh generation of
 appointments rather than updating the existing ones.
 
+## Real-device pass — 2026-09-12 (release APK, real touch events)
+
+The **signed release APK** was driven on an Android emulator with `adb shell
+input tap/text/swipe` -- OS-level touch events, not CDP or a scripted DOM. Two
+defects came out of it that every prior sweep had missed, both because they
+only appear once real data is on screen.
+
+**An inline style silently killed a media query.** The phone rule
+`.cal-chips { display: none }` never applied: the element carried
+`style={{ display: 'flex', ... }}`, and an inline declaration outranks every
+stylesheet selector. A day with an appointment rendered its "10:00 Coco" chip
+at full height inside a 54px cell, and in the Saturday column the chip ran past
+the card and off the right edge. **Keep any layout property a media query needs
+to override out of the `style` attribute** -- `.cal-cell` also carries
+`min-width: 0`, because grid items default to `min-width: auto` and a
+`white-space: nowrap` child can otherwise force its track wider than `1fr`.
+Note the empty calendar looked perfect; the bug needed a booked day to show.
+
+**A GET wrote rows, once per keystroke.** `notification_prefs_view` used
+`get_or_create` on the lookup branch, and `NotificationsSettingsScreen` keyed
+its TanStack query on the live input (`queryKey: ['notifPrefs', phone]`), so
+the key changed on every character and refetched -- the "Look Up" button was
+decorative. One test lookup left **ten rows in production**, keyed on `9`,
+`98`, `980` ... `9800r91879`. The view also read `owner_phone` straight off the
+request, so it never passed a serializer and no `validators.normalise_phone`
+check ran, which additionally let one owner hold two rows under
+`+91 98000 11122` and `9800011122` -- on the field whose whole job is to stop
+the clinic texting someone. Both halves fixed; `test_notification_prefs.py`
+pins them. **Any view reading a phone off `request.data`/`query_params`
+directly must call `normalise_phone`** -- the serializers are not a chokepoint
+these routes pass through.
+
+**Two release keystores exist and they are not interchangeable.**
+`~/.petphysio-signing/` (with a recorded `signing.env`) and `~/.petphysio/`
+(without one) hold *different* keys. The APK handed to the client was signed by
+the latter. An APK signed with a different key **cannot update an installed
+one** -- Android refuses it -- so every future build must use whichever key the
+client already has, or users must uninstall and lose local state. Settle this
+before shipping another build.
+
+**Do not read an emulator ANR as an app bug.** A "Pet Physio Vet isn't
+responding" dialog during this pass was `ANR in system`: `system_server`'s main
+thread was parked in `do_epoll_wait` (idle, not deadlocked) and simply was not
+being scheduled -- host CPU starvation. The app ANRs were downstream
+input-dispatch timeouts. Check *which process* the `/data/anr` dump names
+before chasing a phantom deadlock; the swallowed touch also meant the action
+never reached the server.
+
+**This was again caught out-of-tree** -- see open debt item 5. Both fixes were
+verified by counting requests in the Django log against a local stack and by
+diffing device screenshots pixel-wise (2280 rows, 0 bytes differing after a
+sideways swipe), because there is still no frontend test suite to hold them.
+
 ## Remediation sprint — still open
 
 **Still open — do not assume these are done:**
