@@ -7,8 +7,12 @@ android {
         applicationId "com.thepetphysiovet.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Android orders updates by versionCode, not versionName, and refuses an
+        // install whose code is lower than what is on the device. Two builds
+        // sharing a code are "the same version" as far as the system is
+        // concerned, so bump this on every build handed to anyone.
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -41,6 +45,80 @@ android {
             }
         }
     }
+}
+
+// The certificate the published app is signed with. Public information -- a
+// fingerprint, not a secret -- so it belongs in the repo.
+//
+// Android refuses to install an update signed by a different key, so a release
+// built with the wrong keystore is not a slightly-wrong artifact: it is one the
+// existing users cannot install at all, and the only remedy is for every one of
+// them to uninstall and lose their local state. That has already nearly happened
+// here once -- two release keystores exist on the build machine, only one of
+// which matches what shipped, and nothing in the build could tell them apart.
+// So the build now checks, and refuses rather than producing the bad artifact.
+ext.EXPECTED_SIGNING_SHA256 =
+        '4A:7A:AC:F9:80:CC:AB:7F:15:1F:6C:B0:43:78:A9:95:AD:10:5B:B9:8A:21:F2:D3:B3:F7:23:B0:8D:65:FE:09'
+
+/** SHA-256 of the alias's certificate, formatted like keytool prints it. */
+def signingCertSha256(String path, String storePass, String alias) {
+    def store = null
+    // keytool has defaulted to PKCS12 for years, but a keystore made by an older
+    // JDK is JKS, and loading with the wrong type throws rather than returning null.
+    for (String type : ['PKCS12', 'JKS']) {
+        try {
+            def candidate = java.security.KeyStore.getInstance(type)
+            new File(path).withInputStream { candidate.load(it, storePass.toCharArray()) }
+            store = candidate
+            break
+        } catch (ignored) {
+        }
+    }
+    if (store == null) {
+        throw new GradleException("Could not open keystore ${path} -- wrong password, or not a keystore.")
+    }
+    def cert = store.getCertificate(alias)
+    if (cert == null) {
+        throw new GradleException(
+                "Keystore ${path} has no alias '${alias}'. It holds: ${store.aliases().toList()}")
+    }
+    return java.security.MessageDigest.getInstance('SHA-256')
+            .digest(cert.encoded)
+            .collect { String.format('%02X', it) }
+            .join(':')
+}
+
+tasks.register('verifyReleaseSigningKey') {
+    description = 'Refuses to build a release signed with anything but the published certificate.'
+    doLast {
+        def path = System.getenv('KEYSTORE_PATH')
+        if (!path) {
+            // Unsigned release: already loud at install time, and deliberately
+            // allowed above, so this is not the place to start failing.
+            logger.lifecycle('verifyReleaseSigningKey: KEYSTORE_PATH unset, release will be unsigned.')
+            return
+        }
+        def actual = signingCertSha256(
+                path, System.getenv('KEYSTORE_PASSWORD'), System.getenv('KEY_ALIAS'))
+        if (actual != project.ext.EXPECTED_SIGNING_SHA256) {
+            throw new GradleException(
+                    "Release signing key does not match the published app.\n" +
+                    "  expected: ${project.ext.EXPECTED_SIGNING_SHA256}\n" +
+                    "  actual:   ${actual}\n" +
+                    "  keystore: ${path}\n" +
+                    "An APK signed with this key CANNOT update an installed one -- every\n" +
+                    "existing user would have to uninstall first and lose local state.\n" +
+                    "Point KEYSTORE_PATH/KEY_ALIAS at the published key, or, if you really\n" +
+                    "are rotating the signing key on purpose, update EXPECTED_SIGNING_SHA256.")
+        }
+        logger.lifecycle("verifyReleaseSigningKey: OK (${actual})")
+    }
+}
+
+// Run the check before anything is packaged, so a mismatch costs a second
+// rather than a full build plus a wasted upload.
+tasks.matching { it.name == 'preReleaseBuild' }.configureEach {
+    dependsOn 'verifyReleaseSigningKey'
 }
 
 repositories {
