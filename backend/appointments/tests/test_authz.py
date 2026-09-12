@@ -176,7 +176,9 @@ class OwnerMassAssignmentTests(ApiTestCase):
         self.auth(self.doctor)
         r = self.client.post(f"{API}/pets", {
             "name": "DocPet", "species": "Dog", "owner": self.owner_b.id,
-            "owner_name": "X", "owner_phone": "1"}, format="multipart")
+            # A real number: owner_phone is validated now, and this test is
+            # about `owner` being ignored, not about phone format.
+            "owner_name": "X", "owner_phone": "9800000123"}, format="multipart")
         self.assertEqual(r.status_code, 201, r.content)
         pet = Pet.objects.get(name="DocPet")
         self.assertIsNone(pet.owner_id)

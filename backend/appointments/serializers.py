@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
+from .validators import normalise_phone
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
@@ -106,6 +107,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "username", "role"]
 
+    def validate_phone(self, value):
+        return normalise_phone(value)
+
+    def validate_clinic_phone(self, value):
+        return normalise_phone(value)
+
 
 class SignupSerializer(serializers.ModelSerializer):
     """Used by POST /auth/signup. Hashes the password (bcrypt via
@@ -154,6 +161,12 @@ class SignupSerializer(serializers.ModelSerializer):
             "required": "Please enter a phone number so the clinic can reach you.",
         },
     )
+
+    def validate_phone(self, value):
+        # Normalised, not just checked: a doctor-created patient is matched to
+        # this account by phone string (migration 0010), so "+91 98000 11122"
+        # and "9800011122" must not be two different owners.
+        return normalise_phone(value)
     # Known-issue #8: email uniqueness was not enforced, so two accounts
     # could share an email and break password-reset / account recovery.
     email = serializers.EmailField(
@@ -262,6 +275,11 @@ class PetSerializer(serializers.ModelSerializer):
         full_name = f"{doctor.first_name} {doctor.last_name}".strip()
         return full_name or doctor.username
 
+    def validate_owner_phone(self, value):
+        # The clinic rings this to confirm a visit, and migration 0010 matches
+        # a doctor-created patient to an owner account on it.
+        return normalise_phone(value)
+
 
 class OwnerPetHistorySerializer(serializers.ModelSerializer):
     """POST /owner/pets/:id/history (API_CONTRACT.md §3 Owner portal).
@@ -277,7 +295,6 @@ class OwnerPetHistorySerializer(serializers.ModelSerializer):
         model = Pet
         fields = ["medical_history", "complaint", "notes", "age", "weight"]
         extra_kwargs = {field: {"required": False} for field in fields}
-
 
 class AppointmentSerializer(serializers.ModelSerializer):
     pet = serializers.PrimaryKeyRelatedField(queryset=Pet.objects.all(), write_only=True)
@@ -727,6 +744,10 @@ class EnquiryCreateSerializer(serializers.ModelSerializer):
         # call downstream must not accidentally honour a stray key either.
         validated_data.pop("status", None)
         return Enquiry.objects.create(status="NEW", **validated_data)
+
+    def validate_phone(self, value):
+        # A lead the clinic cannot ring is not a lead.
+        return normalise_phone(value)
 
 
 class EnquirySerializer(serializers.ModelSerializer):

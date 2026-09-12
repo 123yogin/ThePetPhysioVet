@@ -408,3 +408,93 @@ class OwnerFirstPetContactNumberTests(ApiTestCase):
         user.refresh_from_db()
         self.assertEqual(user.phone, "9700000001",
                          "the number was not adopted, so the owner is asked again")
+
+
+class PhoneValidationTests(ApiTestCase):
+    """Phone had no validation anywhere across six fields.
+
+    Found during a QA run on the live API, which accepted `9800r91879` — a
+    number with a letter in it. Two silent failures follow: the clinic cannot
+    ring the client, and migration 0010 matches a doctor-created patient to an
+    owner account *by phone string*, so an unnormalised number means the owner
+    never sees their own pet.
+    """
+
+    BAD = [
+        ("letters in the number", "9800r91879"),
+        ("all letters", "not-a-phone"),
+        ("too short", "12345"),
+        ("too long", "1234567890123456789"),
+        ("an email by mistake", "owner@example.com"),
+    ]
+    # Written by a human, all the same number.
+    MESSY = ["+91 98000 11122", "98000-11122", "(98000) 11122", "+919800011122"]
+
+    def _signup(self, phone, email="phone-check@owner.test", username=None):
+        body = {
+            "first_name": "Phone", "last_name": "Check", "email": email,
+            "password": "PhonePass2026", "phone": phone,
+        }
+        if username:
+            body["username"] = username
+        return self.anon().post(f"{API}/auth/signup", body, format="json")
+
+    def test_signup_rejects_an_uncallable_number(self):
+        for label, bad in self.BAD:
+            with self.subTest(label):
+                r = self._signup(bad, email=f"{label.replace(' ', '')}@owner.test")
+                self.assertEqual(r.status_code, 400, f"{label} was accepted: {r.content}")
+                self.assertIn("phone", r.data.get("errors", {}))
+
+    def test_signup_normalises_the_way_people_actually_type(self):
+        for i, messy in enumerate(self.MESSY):
+            with self.subTest(messy):
+                r = self._signup(messy, email=f"messy{i}@owner.test", username=f"messy{i}")
+                self.assertEqual(r.status_code, 201, r.content)
+                stored = UserProfile.objects.get(username=f"messy{i}").phone
+                self.assertNotIn(" ", stored)
+                self.assertNotIn("-", stored)
+                self.assertIn(stored, ("+919800011122", "9800011122"),
+                              f"{messy!r} stored as {stored!r}")
+
+    def test_a_doctor_created_patient_rejects_a_bad_owner_phone(self):
+        doctor = self.auth(self.doctor)
+        r = doctor.post(f"{API}/pets",
+                        {"name": "Rex", "owner_name": "Someone", "owner_phone": "98oo011122"},
+                        format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertIn("owner_phone", r.data.get("errors", {}))
+
+    def test_the_public_enquiry_form_rejects_a_bad_phone(self):
+        r = self.anon().post(f"{API}/enquiries", {
+            "firstName": "Lead", "lastName": "Person", "petName": "Bruno",
+            "email": "lead@example.com", "phone": "call-me-maybe",
+        }, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+
+
+class LastLoginTests(ApiTestCase):
+    """Django writes last_login from its session login() only, which a JWT API
+    never calls — so the column was null for every account regardless of how
+    often they signed in, and the admin's column was permanently blank."""
+
+    def test_signing_in_records_last_login(self):
+        user = UserProfile.objects.create_user(
+            username="stamped", password="StampPass2026", email="stamped@x.test", role="OWNER")
+        self.assertIsNone(user.last_login)
+
+        r = self.anon().post(f"{API}/auth/login",
+                             {"username": "stamped", "password": "StampPass2026"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+
+        user.refresh_from_db()
+        self.assertIsNotNone(user.last_login, "last_login is still null after a successful login")
+
+    def test_a_refused_login_does_not_stamp(self):
+        user = UserProfile.objects.create_user(
+            username="unstamped", password="StampPass2026", email="unstamped@x.test", role="OWNER")
+        r = self.anon().post(f"{API}/auth/login",
+                             {"username": "unstamped", "password": "wrong"}, format="json")
+        self.assertEqual(r.status_code, 401)
+        user.refresh_from_db()
+        self.assertIsNone(user.last_login, "a failed attempt stamped last_login")

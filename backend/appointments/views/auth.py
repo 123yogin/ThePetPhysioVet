@@ -68,6 +68,13 @@ def login_view(request):
     if user is None:
         return problem(401, "Invalid credentials", "Incorrect username or password.")
 
+    # Django writes last_login from its session login() only, which a JWT API
+    # never calls — so the column stayed null for every account no matter how
+    # often they signed in, and the admin's "last login" was permanently blank.
+    # update_fields keeps this to a one-column write on the hot login path.
+    user.last_login = timezone.now()
+    user.save(update_fields=["last_login"])
+
     access, refresh = _issue_tokens(user)
     data = UserProfileSerializer(user).data
     data["access"] = access
