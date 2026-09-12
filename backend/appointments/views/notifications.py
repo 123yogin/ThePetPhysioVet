@@ -27,6 +27,9 @@ from ..serializers import (
     EnquiryCreateSerializer, EnquirySerializer,
 )
 
+from rest_framework import serializers
+
+from ..validators import normalise_phone, MESSAGE as PHONE_MESSAGE
 from ._shared import problem
 
 @api_view(["GET"])
@@ -64,8 +67,25 @@ def notification_prefs_view(request):
     if not phone:
         return problem(400, "owner_phone is required.")
 
+    # This view reads `owner_phone` straight off the request, so it never passed
+    # through a serializer and nothing checked it. `9800r91879` -- a number with
+    # a letter in it -- was accepted by the live API and stored as the unique key
+    # of a NotificationPref row. Normalise here, the same way the serializers do,
+    # so one owner cannot end up with two rows under "+91 98000 11122" and
+    # "9800011122" and a real opt-out gets silently ignored.
+    try:
+        phone = normalise_phone(phone)
+    except serializers.ValidationError:
+        return problem(400, PHONE_MESSAGE)
+
     if request.method == "GET":
-        pref, _ = NotificationPref.objects.get_or_create(owner_phone=phone)
+        # A read must not write. This was `get_or_create`, so merely *looking up*
+        # a number -- including a typo, which is exactly what a lookup box
+        # invites -- permanently created a row keyed on it. Absent means "no
+        # preference recorded", which is the default, not a reason to persist.
+        pref = NotificationPref.objects.filter(owner_phone=phone).first()
+        if pref is None:
+            return Response({"id": None, "owner_phone": phone, "sms_opt_out": False})
         return Response(NotificationPrefSerializer(pref).data)
 
     opt_out = request.data.get("sms_opt_out", False)
