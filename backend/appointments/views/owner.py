@@ -103,11 +103,30 @@ def owner_pet_detail_view(request, pk):
     return Response(data)
 
 
-@api_view(["POST"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsOwner])
 def owner_pet_diagnoses_view(request, pk):
+    """The owner's scans and reports for one of their pets.
+
+    GET was missing, so the route 405'd on the only method anyone would try
+    first. Owners could still *see* their reports, but solely as a side effect
+    of `owner_pet_detail_view` embedding them in the pet payload -- fetching
+    the collection on its own was impossible, and any screen wanting just the
+    reports had to pull the whole pet record to get at them.
+
+    POST stays: an owner uploading a scan from another clinic is the point of
+    this route. Deleting is deliberately not offered -- `diagnosis-detail` is
+    doctor-only, so a record cannot be removed by the person it is about.
+    """
     pet = get_object_or_404(Pet, pk=pk)
     IsObjectOwner().has_object_permission(request, None, pet)
+
+    if request.method == "GET":
+        return Response(
+            DiagnosticReportSerializer(
+                pet.diagnostic_reports.all(), many=True, context={"request": request},
+            ).data
+        )
 
     serializer = DiagnosticReportSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
