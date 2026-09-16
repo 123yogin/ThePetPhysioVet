@@ -104,9 +104,20 @@ class VisitTypeOptionsTests(ApiTestCase):
         r = self.client.get(f"{API}/appointment-options")
         self.assertEqual(r.status_code, 200, r.content)
 
-    def test_appointment_options_requires_auth(self):
+    def test_appointment_options_is_public(self):
+        """Reversed 2026-09-16, deliberately.
+
+        This asserted 401 for an anonymous caller. The endpoint is now public,
+        because the clinic's marketing site needs the service list to offer a
+        therapy dropdown and the alternative is that site hardcoding the
+        vocabulary -- the duplication this very endpoint exists to prevent.
+        The payload is service names only; see
+        test_appointment_options_public.py, which pins that it stays that way
+        and that a stale token cannot break it.
+        """
         r = self.anon().get(f"{API}/appointment-options")
-        self.assertEqual(r.status_code, 401, r.content)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(r.data["visit_types"])
 
 
 # ---------------------------------------------------------------------------
