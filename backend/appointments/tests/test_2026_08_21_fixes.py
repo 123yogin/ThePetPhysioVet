@@ -91,9 +91,20 @@ class VisitTypeOptionsTests(ApiTestCase):
         r = self.client.get(f"{API}/appointment-options")
         self.assertEqual(r.status_code, 200, r.content)
         values = {item["value"] for item in r.data["visit_types"]}
+
+        # The five the clinic started with. This set may GROW -- four services
+        # were added 2026-09-18 -- but none of these may ever disappear: every
+        # one is stored on booked appointments, and dropping a code silently
+        # invalidates real rows and breaks the forms that offer it.
+        self.assertTrue(
+            {"Initial", "Followup", "Reassessment", "Hydrotherapy", "LaserTherapy"}
+            <= values,
+            f"a canonical visit type was removed: {values}",
+        )
+        # And the endpoint must serve exactly what the model declares, since
+        # every booking form trusts it as the single source of truth.
         self.assertEqual(
-            values,
-            {"Initial", "Followup", "Reassessment", "Hydrotherapy", "LaserTherapy"},
+            values, {value for value, _label in Appointment.VISIT_TYPES}
         )
         for item in r.data["visit_types"]:
             self.assertIn("value", item)

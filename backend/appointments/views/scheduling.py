@@ -219,6 +219,15 @@ def appointment_options_view(request):
     """
     return Response({
         "visit_types": [
-            {"value": value, "label": label} for value, label in Appointment.VISIT_TYPES
+            {
+                "value": value,
+                "label": label,
+                # Whether the public marketing site may offer this one. Sent as
+                # a flag rather than by filtering the list, because the same
+                # endpoint serves the clinic's own booking forms, which need
+                # every type.
+                "public": value in Appointment.PUBLIC_VISIT_TYPES,
+            }
+            for value, label in Appointment.VISIT_TYPES
         ],
     })

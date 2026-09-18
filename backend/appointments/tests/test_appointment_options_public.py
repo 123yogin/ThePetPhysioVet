@@ -59,8 +59,32 @@ class AppointmentOptionsArePublicTests(ApiTestCase):
                 self.assertEqual(self.auth(user).get(URL).status_code, 200)
 
     def test_it_exposes_nothing_but_the_vocabulary(self):
-        """A public endpoint must not grow a field that leaks clinic data."""
+        """A public endpoint must not grow a field that leaks clinic data.
+
+        The allowed set is written out rather than inferred, so adding a field
+        here is a decision someone has to make on purpose. It has been widened
+        once, on 2026-09-18, for `public`: a boolean saying whether the
+        marketing site may offer that service. It reveals nothing a visitor
+        could not already infer -- the labels either side of it were public
+        before -- and it exists so the website cannot drift from the bookable
+        list. Anything carrying patient, pricing or availability data does not
+        belong in this response at all.
+        """
         res = self.anon().get(URL)
         self.assertEqual(set(res.data.keys()), {"visit_types"})
         for entry in res.data["visit_types"]:
-            self.assertEqual(set(entry.keys()), {"value", "label"})
+            self.assertEqual(set(entry.keys()), {"value", "label", "public"})
+            self.assertIsInstance(entry["public"], bool)
+
+    def test_the_public_subset_excludes_the_clinical_stages(self):
+        """Initial / Follow-up / Re-assessment are stages of a course of care.
+
+        A first-time visitor cannot sensibly request a re-assessment, so the
+        public site does not offer them -- but the clinic still books them.
+        """
+        res = self.anon().get(URL)
+        public = {v["value"] for v in res.data["visit_types"] if v["public"]}
+        for stage in ("Initial", "Followup", "Reassessment"):
+            self.assertNotIn(stage, public)
+        for service in ("Hydrotherapy", "Physiotherapy", "Grooming", "Walking"):
+            self.assertIn(service, public)
