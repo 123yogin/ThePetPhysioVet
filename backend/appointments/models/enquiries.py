@@ -37,6 +37,12 @@ class Enquiry(models.Model):
     species_breed = models.CharField(max_length=200, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=50)
+    # Which service the visitor asked for, stored as an `Appointment.VISIT_TYPES`
+    # *code* rather than a label, so converting an enquiry can pre-fill the
+    # booking instead of making the clinician re-read the free text and guess.
+    # Blank is allowed and normal: the field is optional on the public form,
+    # and an enquiry is never worth rejecting over it.
+    service = models.CharField(max_length=50, blank=True, default="")
     reason = models.TextField(max_length=2000, blank=True)
     preferred_date = models.DateField(null=True, blank=True)
     preferred_specialist = models.CharField(max_length=150, blank=True, default="")

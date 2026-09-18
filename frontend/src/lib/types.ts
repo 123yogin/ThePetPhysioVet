@@ -209,6 +209,9 @@ export interface Enquiry {
   email?: string;
   phone?: string;
   reason?: string;
+  /** An Appointment.VISIT_TYPES code the visitor picked on the public site.
+   *  Blank when they chose "not sure", which is a normal answer. */
+  service?: string;
   preferred_date?: string | null;
   preferred_specialist?: string;
   status: 'NEW' | 'CONVERTED' | 'DISMISSED' | string;

@@ -21,13 +21,46 @@ class Appointment(models.Model):
     # codes were added for the two missing service types. The canonical list
     # is also exposed at GET /appointment-options so the frontend never has
     # to hardcode (or drift from) this vocabulary again.
+    #
+    # 2026-09-18: four services the clinic offers but could not be booked --
+    # physiotherapy as a session in its own right, 24x7 day care, grooming and
+    # dog walking. Nothing was removed: every existing code stays valid, so no
+    # booked appointment changes meaning. "Swimming" from the clinic's list is
+    # not added here because it is what `Hydrotherapy` already means -- the
+    # public site labels that service "Hydrotherapy — Indoor Swimming Pool".
+    #
+    # NOTE for whoever books day care: `IndoorFacility` is a 24x7 stay, but an
+    # Appointment is a single `date` + `time`. A stay therefore records only its
+    # start, and "which pets are in the facility today" cannot be answered from
+    # this model. Giving it a real check-in/check-out range is deliberately NOT
+    # done here -- see the plan; it needs its own field work.
     VISIT_TYPES = (
         ("Initial", "Initial Consultation"),
         ("Followup", "Follow-up Session"),
         ("Reassessment", "Re-assessment"),
         ("Hydrotherapy", "Hydrotherapy"),
         ("LaserTherapy", "Laser Therapy"),
+        ("Physiotherapy", "Physiotherapy"),
+        ("IndoorFacility", "Indoor Facility (24x7 Day Care)"),
+        ("Grooming", "Grooming"),
+        ("Walking", "Walking"),
     )
+
+    # Which of those a member of the public may pick on the marketing site.
+    #
+    # The three excluded -- Initial, Followup, Reassessment -- are stages of a
+    # course of care, not things to buy: a visitor who has never been here
+    # cannot sensibly choose "Re-assessment", and offering it invites an
+    # enquiry the clinic then has to correct. They stay bookable by the clinic,
+    # which is where that judgement belongs.
+    #
+    # Kept here rather than as a filter in the website, so the public list and
+    # the bookable list cannot drift apart -- the drift between three separate
+    # hardcoded vocabularies is what made every booking form return 400.
+    PUBLIC_VISIT_TYPES = frozenset({
+        "Hydrotherapy", "LaserTherapy", "Physiotherapy",
+        "IndoorFacility", "Grooming", "Walking",
+    })
     STATUS_CHOICES = (
         ("Confirmed", "Confirmed"),
         ("Completed", "Completed"),

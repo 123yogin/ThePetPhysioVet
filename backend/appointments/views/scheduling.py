@@ -195,16 +195,39 @@ def appointment_share_view(request, pk):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+# Public. The response is a list of service names -- the same words the clinic
+# advertises -- and contains nothing about any patient, appointment or user.
+# The public marketing site needs them to offer a therapy dropdown, and the
+# alternative is that site hardcoding the vocabulary, which is exactly the
+# duplication that once made every booking form return 400.
+#
+# `authentication_classes([])` carries as much weight as AllowAny here. DRF
+# applies JWTAuthentication globally and SimpleJWT *raises* on an expired
+# token, so the 401 would land before AllowAny was consulted -- a visitor
+# carrying a stale token from an old session would be refused on a page that
+# never asked them to sign in. That is the same trap that locked users out of
+# /auth/login. The view reads nothing off request.user, so opting out of
+# authentication costs it nothing.
+@authentication_classes([])
+@permission_classes([AllowAny])
 def appointment_options_view(request):
     """B1/B2 fix: the actual root cause of every 400 on booking was three
     frontend forms each hardcoding their own vocabulary for `visit_type`.
     Exposing the canonical list here means the frontend never has to
-    hardcode (or drift from) it again. Open to both roles — doctors and
-    owners both book appointments.
+    hardcode (or drift from) it again. Open to every caller — doctors and
+    owners both book appointments, and the public site advertises the same list.
     """
     return Response({
         "visit_types": [
-            {"value": value, "label": label} for value, label in Appointment.VISIT_TYPES
+            {
+                "value": value,
+                "label": label,
+                # Whether the public marketing site may offer this one. Sent as
+                # a flag rather than by filtering the list, because the same
+                # endpoint serves the clinic's own booking forms, which need
+                # every type.
+                "public": value in Appointment.PUBLIC_VISIT_TYPES,
+            }
+            for value, label in Appointment.VISIT_TYPES
         ],
     })

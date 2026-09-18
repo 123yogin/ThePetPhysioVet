@@ -67,6 +67,24 @@ def _enquiry_create(request):
     if _rate_limited(f"enquiry:ip:{ip}", ENQUIRY_IP_LIMIT, ENQUIRY_WINDOW_SECONDS):
         return problem(429, "Too many requests", "Too many enquiries submitted. Please try again later.")
 
+    # Honeypot. `website` is rendered as a visually hidden, aria-hidden,
+    # tabindex=-1 input that no person reaches -- a bot filling every field it
+    # finds will complete it.
+    #
+    # The response is a normal-looking 201 rather than a rejection, on purpose:
+    # telling a bot it was detected is telling it what to change. Nothing is
+    # written, and the reference is not a real enquiry id, so the clinic's inbox
+    # stays clean while the submitter sees what it expects.
+    if str(request.data.get("website", "")).strip():
+        return Response(
+            {
+                "id": None,
+                "reference": "ENQ-RECEIVED",
+                "detail": "Thanks! We've received your enquiry and will be in touch shortly.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     serializer = EnquiryCreateSerializer(data=request.data)
     if not serializer.is_valid():
         return problem(400, "Invalid input", _first_error_detail(serializer.errors))

@@ -727,12 +727,20 @@ class EnquiryCreateSerializer(serializers.ModelSerializer):
         source="preferred_specialist", max_length=150, required=False,
         allow_blank=True, trim_whitespace=True,
     )
+    # Validated against Appointment.VISIT_TYPES rather than taken as free text:
+    # this value is meant to pre-fill a booking later, so a code the booking
+    # form would reject is worse than no code at all.
+    service = serializers.ChoiceField(
+        choices=[value for value, _label in Appointment.VISIT_TYPES],
+        required=False, allow_blank=True, default="",
+    )
 
     class Meta:
         model = Enquiry
         fields = [
             "firstName", "lastName", "petName", "speciesBreed", "email",
             "phone", "reason", "preferredDate", "preferredSpecialist",
+            "service",
         ]
 
     def validate_email(self, value):
@@ -766,8 +774,9 @@ class EnquirySerializer(serializers.ModelSerializer):
         model = Enquiry
         fields = [
             "id", "first_name", "last_name", "pet_name", "species_breed",
-            "email", "phone", "reason", "preferred_date", "preferred_specialist",
-            "status", "created_at", "converted_appointment_id", "appointment",
+            "email", "phone", "service", "reason", "preferred_date",
+            "preferred_specialist", "status", "created_at",
+            "converted_appointment_id", "appointment",
         ]
         read_only_fields = fields
 

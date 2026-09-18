@@ -323,9 +323,26 @@ class PermissionConfigTests(ApiTestCase):
     # AllowAny/authentication_classes([]) pair only ever governs the POST
     # half, because the GET half authenticates and enforces IsDoctor itself,
     # by hand, before doing anything. Widened to exactly six, and no wider.
+    #
+    # AMENDED 2026-09-16 for `appointment_options_view`, and note this one is
+    # a DIFFERENT KIND of exception from the six above. Those are all "the
+    # caller cannot be expected to hold a valid token". This one is "there is
+    # nothing here to protect": the response is the clinic's list of service
+    # names, the same words it advertises, with no patient, appointment or
+    # user data in it — `test_it_exposes_nothing_but_the_vocabulary` in
+    # test_appointment_options_public.py pins that the payload stays that
+    # shape. The marketing site needs the list to offer a therapy dropdown,
+    # and the alternative is that site hardcoding the vocabulary, which is the
+    # documented root cause of every booking form once returning 400.
+    #
+    # Because it is a new category, it is the one to scrutinise hardest if
+    # this list grows again: "it is not sensitive" is a far easier argument to
+    # make carelessly than "the caller has no token". Widened to exactly
+    # seven, and no wider.
     ALLOWANY_ALLOWLIST = [
-        "enquiries_view", "login_view", "password_reset_confirm_view",
-        "password_reset_request_view", "refresh_view", "signup_view",
+        "appointment_options_view", "enquiries_view", "login_view",
+        "password_reset_confirm_view", "password_reset_request_view",
+        "refresh_view", "signup_view",
     ]
 
     def test_allowany_only_on_login_signup_refresh_password_reset_and_enquiries(self):

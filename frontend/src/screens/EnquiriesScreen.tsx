@@ -153,7 +153,20 @@ export const EnquiriesScreen: React.FC = () => {
     setExpandedIds((prev) => new Set(prev).add(enq.id));
     setConvertDate(enq.preferred_date || new Date().toISOString().slice(0, 10));
     setConvertTime('10:00');
-    setConvertVisitType(visitTypes[0]?.value || '');
+    // Start from what the owner actually asked for on the website. This used
+    // to default to the first option -- Initial Consultation -- for every
+    // enquiry, so a request for Grooming or Hydrotherapy silently became a
+    // consultation unless the clinician noticed and changed it, and nothing
+    // about the booking looked wrong afterwards.
+    //
+    // `service` is blank when the visitor picked "not sure", and a code the
+    // clinic has since retired would not be in `visitTypes`; both fall back to
+    // the previous default rather than leaving the field empty.
+    const requested =
+      enq.service && visitTypes.some((v) => v.value === enq.service)
+        ? enq.service
+        : visitTypes[0]?.value || '';
+    setConvertVisitType(requested);
   };
 
   const openDismissConfirm = (enq: Enquiry) => {
