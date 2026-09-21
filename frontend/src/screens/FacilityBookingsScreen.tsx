@@ -64,7 +64,7 @@ export const FacilityBookingsScreen: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">Day Care</h1>
+      <h1 className="page-title">Indoor Facility</h1>
       <p className="page-sub">
         Indoor-facility slot bookings from the website — six beds per hour, 9:30 AM to 1:30 PM
       </p>
@@ -104,7 +104,7 @@ export const FacilityBookingsScreen: React.FC = () => {
           <Icon name="clock" size={28} />
           <p className="page-sub" style={{ marginTop: '10px' }}>
             {tab === 'PENDING'
-              ? 'No day-care bookings waiting. New requests from the website will appear here.'
+              ? 'No bookings waiting. New requests from the website will appear here.'
               : 'Nothing here.'}
           </p>
         </div>
