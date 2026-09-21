@@ -110,83 +110,106 @@ export const FacilityBookingsScreen: React.FC = () => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gap: '14px' }}>
+      {/* A responsive grid rather than one full-width row per booking. A single
+          booking on a wide desktop looked like a stretched banner -- content on
+          the far left, the date stranded on the far right, empty in between.
+          Cards ~360-460px wide read as cards and tile neatly as more come in. */}
+      <div
+        style={{
+          display: 'grid',
+          gap: '16px',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 460px))',
+        }}
+      >
         {groups.map((g) => {
           const busy = mutation.isPending && mutation.variables?.reference === g.reference;
+          const actionable = g.status === 'PENDING' || g.status === 'CONFIRMED';
           return (
             <div
               key={g.reference}
               className="glass-card"
-              style={{ padding: '18px', borderLeft: '4px solid var(--primary)' }}
+              style={{
+                padding: '18px',
+                borderLeft: '4px solid var(--primary)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Header: pet + status on the left, date + reference stacked on
+                  the right, so the two meta items sit together instead of the
+                  reference floating loose next to the badge. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <strong style={{ fontSize: '1.05rem' }}>{g.pet_name}</strong>
-                    <span className={`badge ${BADGE_CLASS[g.status] ?? 'badge-pending'}`}>
-                      {g.status}
-                    </span>
-                    <span className="page-sub" style={{ fontSize: '0.8rem' }}>
-                      {g.reference}
-                    </span>
+                    <span className={`badge ${BADGE_CLASS[g.status] ?? 'badge-pending'}`}>{g.status}</span>
                   </div>
-                  <p className="page-sub" style={{ margin: '4px 0 0' }}>
-                    {g.owner_name} · <a href={`tel:${g.owner_phone}`}>{g.owner_phone}</a>
-                    {g.owner_email ? ` · ${g.owner_email}` : ''}
+                  <p className="page-sub" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+                    {g.owner_name}
+                    <br />
+                    <a href={`tel:${g.owner_phone}`}>{g.owner_phone}</a>
                   </p>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 600 }}>{friendlyDate(g.date)}</div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{friendlyDate(g.date)}</div>
+                  <div className="page-sub" style={{ fontSize: '0.72rem', letterSpacing: '0.04em', marginTop: '2px' }}>
+                    {g.reference}
+                  </div>
                 </div>
               </div>
 
-              {/* The slots this booking holds, led by a count so the card
-                  says at a glance how many of the (max three) slots were taken
-                  without the reader tallying the chips. */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '12px 0', alignItems: 'center' }}>
-                <span className="page-sub" style={{ fontSize: '0.8rem', fontWeight: 600, marginRight: '2px' }}>
-                  {g.slots.length} slot{g.slots.length > 1 ? 's' : ''}
-                </span>
-                {g.slots.map((s) => (
-                  <span
-                    key={s.slot}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '4px 10px',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: '6px',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <Icon name="clock" size={13} /> {s.label}
-                  </span>
-                ))}
+              {/* The slots this booking holds, led by a count so the card says
+                  at a glance how many of the (max three) slots were taken. */}
+              <div>
+                <div className="page-sub" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: '6px' }}>
+                  {g.slots.length} slot{g.slots.length > 1 ? 's' : ''} held
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {g.slots.map((s) => (
+                    <span
+                      key={s.slot}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '3px 9px',
+                        background: 'var(--glass-bg, rgba(0,0,0,0.03))',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '999px',
+                        fontSize: '0.8rem',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <Icon name="clock" size={12} /> {s.label}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {g.note && (
-                <p className="page-sub" style={{ margin: '0 0 12px', fontStyle: 'italic' }}>
+                <p className="page-sub" style={{ margin: 0, fontStyle: 'italic', fontSize: '0.85rem' }}>
                   “{g.note}”
                 </p>
               )}
 
-              {(g.status === 'PENDING' || g.status === 'CONFIRMED') && (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {actionable && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    marginTop: 'auto',
+                    paddingTop: '4px',
+                    borderTop: '1px solid var(--glass-border)',
+                  }}
+                >
                   {g.status === 'PENDING' && (
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
                       disabled={busy}
                       onClick={() => mutation.mutate({ reference: g.reference, status: 'CONFIRMED' })}
+                      style={{ marginTop: '10px' }}
                     >
                       <Icon name="check" size={14} /> Confirm
                     </button>
@@ -196,6 +219,7 @@ export const FacilityBookingsScreen: React.FC = () => {
                     className="btn btn-ghost btn-sm"
                     disabled={busy}
                     onClick={() => mutation.mutate({ reference: g.reference, status: 'CANCELLED' })}
+                    style={{ marginTop: '10px' }}
                   >
                     Cancel
                   </button>
