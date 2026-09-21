@@ -30,6 +30,7 @@ from .views import (
     owner_pet_queries_view,
     # Enquiries
     enquiries_view, enquiry_convert_view, enquiry_dismiss_view,
+    facility_availability_view, facility_bookings_view, facility_booking_status_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -130,4 +131,7 @@ urlpatterns = [
     path("enquiries", enquiries_view, name="enquiries"),
     path("enquiries/<uuid:pk>/convert", enquiry_convert_view, name="enquiry-convert"),
     path("enquiries/<uuid:pk>/dismiss", enquiry_dismiss_view, name="enquiry-dismiss"),
+    path("facility/availability", facility_availability_view, name="facility-availability"),
+    path("facility/bookings", facility_bookings_view, name="facility-bookings"),
+    path("facility/bookings/<str:reference>/status", facility_booking_status_view, name="facility-booking-status"),
 ]

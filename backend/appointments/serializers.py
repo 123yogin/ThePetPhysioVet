@@ -11,7 +11,7 @@ from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    Enquiry,
+    Enquiry, FacilityBooking,
 )
 
 # Upload validation constants (API_CONTRACT.md §3 "Diagnostic reports").
@@ -784,3 +784,57 @@ class EnquirySerializer(serializers.ModelSerializer):
         if obj.converted_appointment_id is None:
             return None
         return AppointmentSerializer(obj.converted_appointment).data
+
+
+class FacilityBookingCreateSerializer(serializers.Serializer):
+    """Backs the PUBLIC ``POST /api/v1/facility/bookings``.
+
+    Not a ModelSerializer: one request creates 1-3 rows (one per slot chosen),
+    so ``slots`` is a list here and the view fans it out. Every text field is
+    capped for the same reason the enquiry serializer caps its fields -- this
+    is an unauthenticated write.
+
+    ``status`` is intentionally absent so a caller cannot mint a CONFIRMED
+    booking; the view always writes PENDING and a doctor confirms.
+    """
+
+    petName = serializers.CharField(source="pet_name", max_length=100, trim_whitespace=True)
+    ownerName = serializers.CharField(source="owner_name", max_length=150, trim_whitespace=True)
+    ownerPhone = serializers.CharField(source="owner_phone", max_length=50, trim_whitespace=True)
+    ownerEmail = serializers.EmailField(
+        source="owner_email", max_length=254, required=False, allow_blank=True, default="",
+    )
+    note = serializers.CharField(
+        max_length=1000, required=False, allow_blank=True, default="", trim_whitespace=True,
+    )
+    date = serializers.DateField()
+    slots = serializers.ListField(
+        child=serializers.IntegerField(min_value=0),
+        allow_empty=False,
+    )
+    # Honeypot, same contract as the enquiry form: a hidden field no person
+    # reaches. Optional; the view treats any non-empty value as a bot.
+    website = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class FacilityBookingSerializer(serializers.ModelSerializer):
+    """Doctor-facing read of one held bed-slot.
+
+    ``slot_label`` is derived, never stored, so the human time range cannot
+    drift from the stored index.
+    """
+
+    slot_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FacilityBooking
+        fields = [
+            "id", "reference", "date", "slot", "slot_label",
+            "pet_name", "owner_name", "owner_phone", "owner_email", "note",
+            "status", "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_slot_label(self, obj):
+        from .models import slot_label
+        return slot_label(obj.slot)

@@ -21,6 +21,10 @@ from .billing import Invoice, LineItem, Payment, Package  # noqa: F401
 from .notifications import Notification, NotificationPref  # noqa: F401
 from .messaging import QueryThread, QueryMessage, QueryAttachment  # noqa: F401
 from .enquiries import Enquiry  # noqa: F401
+from .facility import (  # noqa: F401
+    FacilityBooking, FACILITY_BEDS, FACILITY_MAX_SLOTS_PER_BOOKING,
+    FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label,
+)
 
 __all__ = [
     "UserProfile",
@@ -40,4 +44,5 @@ __all__ = [
     "QueryMessage",
     "QueryAttachment",
     "Enquiry",
+    "FacilityBooking",
 ]

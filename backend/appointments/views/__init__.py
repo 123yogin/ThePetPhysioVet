@@ -111,6 +111,11 @@ from .enquiries import (  # noqa: F401
     enquiry_convert_view,
     enquiry_dismiss_view,
 )
+from .facility import (  # noqa: F401
+    facility_availability_view,
+    facility_bookings_view,
+    facility_booking_status_view,
+)
 
 __all__ = [
     "problem",
@@ -169,4 +174,7 @@ __all__ = [
     "enquiries_view",
     "enquiry_convert_view",
     "enquiry_dismiss_view",
+    "facility_availability_view",
+    "facility_bookings_view",
+    "facility_booking_status_view",
 ]

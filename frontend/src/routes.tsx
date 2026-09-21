@@ -28,6 +28,7 @@ import { InvoiceFormScreen } from './screens/InvoiceFormScreen';
 import { RevenueScreen } from './screens/RevenueScreen';
 import { QueryInboxScreen } from './screens/QueryInboxScreen';
 import { EnquiriesScreen } from './screens/EnquiriesScreen';
+import { FacilityBookingsScreen } from './screens/FacilityBookingsScreen';
 import { NotificationsSettingsScreen } from './screens/NotificationsSettingsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 
@@ -76,6 +77,7 @@ export const AppRoutes: React.FC = () => {
               <Route path="/invoices/:id" element={<InvoiceDetailScreen />} />
               <Route path="/revenue" element={<RevenueScreen />} />
               <Route path="/enquiries" element={<EnquiriesScreen />} />
+              <Route path="/facility" element={<FacilityBookingsScreen />} />
               <Route path="/queries" element={<QueryInboxScreen />} />
               <Route path="/notifications-settings" element={<NotificationsSettingsScreen />} />
               <Route path="/profile" element={<ProfileScreen />} />

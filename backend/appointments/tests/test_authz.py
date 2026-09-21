@@ -339,8 +339,24 @@ class PermissionConfigTests(ApiTestCase):
     # this list grows again: "it is not sensitive" is a far easier argument to
     # make carelessly than "the caller has no token". Widened to exactly
     # seven, and no wider.
+    #
+    # AMENDED 2026-09-21 for the indoor-facility slot booking (three views).
+    # `facility_availability_view` is the "nothing to protect" category, like
+    # appointment_options: it returns bed counts per time slot, no patient or
+    # user data. `facility_bookings_view` is the enquiries category exactly:
+    # one view backing a PUBLIC `POST /facility/bookings` (a visitor holding a
+    # bed cannot be expected to hold a token) and a DOCTOR-only `GET`, the GET
+    # half authenticating and enforcing IsDoctor by hand before doing anything.
+    # `facility_booking_status_view` is DECORATED AllowAny for the same
+    # split-posture reason but is doctor-only in practice: it authenticates and
+    # requires role == DOCTOR by hand before any mutation, so a public caller
+    # reaches nothing. Its authZ is pinned by
+    # test_facility_booking.FacilityDoctorTests.test_the_list_is_doctor_only
+    # and test_cancelling_frees_the_beds. Widened to exactly ten, and no wider.
     ALLOWANY_ALLOWLIST = [
-        "appointment_options_view", "enquiries_view", "login_view",
+        "appointment_options_view", "enquiries_view",
+        "facility_availability_view", "facility_booking_status_view",
+        "facility_bookings_view", "login_view",
         "password_reset_confirm_view", "password_reset_request_view",
         "refresh_view", "signup_view",
     ]

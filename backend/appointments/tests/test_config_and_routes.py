@@ -247,6 +247,7 @@ class ModelPackageIntegrityTests(ApiTestCase):
         "Notification", "NotificationPref",            # notifications
         "QueryThread", "QueryMessage", "QueryAttachment",      # messaging
         "Enquiry",                                     # enquiries
+        "FacilityBooking",                             # facility (2026-09-21)
     }
 
     def test_no_pending_migrations(self):
