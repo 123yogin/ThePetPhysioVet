@@ -20,7 +20,7 @@ const NAV_BY_ROLE: Record<'DOCTOR' | 'OWNER', NavItem[]> = {
     { to: '/invoices', label: 'Invoices & Billing', icon: 'invoice' },
     { to: '/revenue', label: 'Revenue', icon: 'chart' },
     { to: '/enquiries', label: 'Enquiries', icon: 'mail' },
-    { to: '/facility', label: 'Indoor Facility', icon: 'clock' },
+    { to: '/facility', label: 'Facility Bookings', icon: 'clock' },
     { to: '/queries', label: 'Messages', icon: 'chat' },
     // Named for what it actually is. The screen looks up one owner by phone and
     // toggles an SMS opt-out flag; there is no notification inbox behind it, and

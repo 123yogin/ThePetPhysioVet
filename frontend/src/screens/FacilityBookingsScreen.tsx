@@ -64,7 +64,7 @@ export const FacilityBookingsScreen: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">Indoor Facility</h1>
+      <h1 className="page-title">Facility Bookings</h1>
       <p className="page-sub">
         Indoor-facility slot bookings from the website — six beds per hour, 9:30 AM to 1:30 PM
       </p>
@@ -148,8 +148,13 @@ export const FacilityBookingsScreen: React.FC = () => {
                 </div>
               </div>
 
-              {/* The slots this booking holds. */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '12px 0' }}>
+              {/* The slots this booking holds, led by a count so the card
+                  says at a glance how many of the (max three) slots were taken
+                  without the reader tallying the chips. */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '12px 0', alignItems: 'center' }}>
+                <span className="page-sub" style={{ fontSize: '0.8rem', fontWeight: 600, marginRight: '2px' }}>
+                  {g.slots.length} slot{g.slots.length > 1 ? 's' : ''}
+                </span>
                 {g.slots.map((s) => (
                   <span
                     key={s.slot}
