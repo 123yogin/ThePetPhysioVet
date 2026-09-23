@@ -8,7 +8,7 @@ from django.utils import timezone
 from appointments.models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
-    Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
+    Notification, QueryThread, QueryMessage,
 )
 
 

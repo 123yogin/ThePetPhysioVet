@@ -12,7 +12,7 @@ from django.core import mail
 from django.core.cache import cache
 from django.utils import timezone
 
-from appointments.models import PasswordResetToken, UserProfile
+from appointments.models import PasswordResetToken
 
 from .base import API, ApiTestCase
 

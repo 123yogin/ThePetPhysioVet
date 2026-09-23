@@ -4,10 +4,8 @@ Traceability: docs/API_CONTRACT.md §3 (endpoints), §4 (authZ), §5 (config);
 CLAUDE.md rules 1, 4, 6, 7.
 """
 
-import io
 import shutil
 import tempfile
-from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -17,8 +15,8 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from appointments.models import (
-    UserProfile, Pet, Appointment, DiagnosticReport, TreatmentPlan,
-    Invoice, LineItem, Payment, QueryThread, QueryMessage,
+    UserProfile, Pet, Appointment, TreatmentPlan, Invoice,
+    LineItem, QueryThread,
 )
 
 API = "/api/v1"

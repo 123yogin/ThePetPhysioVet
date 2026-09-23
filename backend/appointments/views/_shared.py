@@ -12,13 +12,10 @@ as before -- every public name is re-exported by the package.
 
 import re
 from django.core.cache import cache
-from django.db.models import Max, Q
+from django.db.models import Q
 from rest_framework.response import Response
 from ..models import (
-    UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
-    Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    PasswordResetToken, Enquiry,
+    UserProfile,
 )
 
 def problem(status_code, title, detail=None):

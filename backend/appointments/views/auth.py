@@ -24,19 +24,10 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from ..models import (
-    UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
-    Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    PasswordResetToken, Enquiry,
+    UserProfile, PasswordResetToken,
 )
 from ..serializers import (
-    UserProfileSerializer, SignupSerializer, PetSerializer, AppointmentSerializer,
-    DiagnosticReportSerializer, TreatmentPlanSerializer, ProgressNoteSerializer,
-    InvoiceSerializer, LineItemSerializer, PaymentSerializer, PackageSerializer,
-    NotificationSerializer, NotificationPrefSerializer,
-    QueryThreadSerializer, QueryMessageSerializer, QueryAttachmentSerializer,
-    OwnerPetHistorySerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    EnquiryCreateSerializer, EnquirySerializer,
+    UserProfileSerializer, SignupSerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
 )
 from django.contrib.auth import authenticate
 

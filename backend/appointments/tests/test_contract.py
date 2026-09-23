@@ -5,9 +5,8 @@ The expected key sets below are transcribed from types.ts. Optional TS fields
 (`foo?:`) are allowed to be absent; required fields must be present.
 """
 
-from decimal import Decimal
 
-from appointments.models import Notification, Pet, ProgressNote, QueryMessage, UserProfile
+from appointments.models import Notification, Pet, UserProfile
 
 from .base import API, ApiTestCase, upload
 

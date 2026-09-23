@@ -10,27 +10,18 @@ as before -- every public name is re-exported by the package.
 
 import re
 from urllib.parse import quote
-from django.db.models import Max, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from ..models import (
-    UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
-    Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    PasswordResetToken, Enquiry,
+    Appointment,
 )
-from ..permissions import IsDoctor, IsOwner, IsObjectOwner
+from ..permissions import IsDoctor
 from ..serializers import (
-    UserProfileSerializer, SignupSerializer, PetSerializer, AppointmentSerializer,
-    DiagnosticReportSerializer, TreatmentPlanSerializer, ProgressNoteSerializer,
-    InvoiceSerializer, LineItemSerializer, PaymentSerializer, PackageSerializer,
-    NotificationSerializer, NotificationPrefSerializer,
-    QueryThreadSerializer, QueryMessageSerializer, QueryAttachmentSerializer,
-    OwnerPetHistorySerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    EnquiryCreateSerializer, EnquirySerializer,
+    AppointmentSerializer,
 )
 
 from ._shared import _doctor_scoped, problem

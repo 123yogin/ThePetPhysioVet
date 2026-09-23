@@ -4,18 +4,15 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from django.utils import timezone
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from ..models import (
-    UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
-    Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    PasswordResetToken, Enquiry,
+    Appointment, TreatmentPlan, Invoice, Payment,
 )
-from ..permissions import IsDoctor, IsOwner, IsObjectOwner
+from ..permissions import IsDoctor
 
 from ._shared import _doctor_scoped
 

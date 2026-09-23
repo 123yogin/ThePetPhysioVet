@@ -21,7 +21,6 @@ Both found by probing the live API as a freshly registered owner.
 Traceability: CLAUDE.md rule 4 and rule 7; docs/API_CONTRACT.md (error shape).
 """
 
-from appointments.models import Pet
 
 from .base import API, ApiTestCase
 

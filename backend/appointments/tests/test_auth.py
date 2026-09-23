@@ -9,7 +9,7 @@ from django.test import override_settings
 
 from appointments.models import UserProfile
 
-from .base import API, FAST_HASHERS, ApiTestCase
+from .base import API, ApiTestCase
 
 
 class LoginTests(ApiTestCase):

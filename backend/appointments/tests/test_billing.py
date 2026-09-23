@@ -264,7 +264,7 @@ class RevenueRealSumsTests(ApiTestCase):
         self.assertEqual(float(r.data["pending_payments"]), 3000.0)
 
     def test_dashboard_today_appointments_scoped_to_requesting_doctor(self):
-        from appointments.models import UserProfile, Appointment
+        from appointments.models import UserProfile
         other_doc = UserProfile.objects.create_user(
             username="dr2", password="x", role="DOCTOR")
         self.auth(other_doc)

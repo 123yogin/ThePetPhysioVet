@@ -8,7 +8,6 @@ API_CONTRACT.md §3 Auth (AMENDED 2026-08-20), §4, §5, §6.7:
   - `manage.py create_doctor` as the only doctor-provisioning path
 """
 
-from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 
