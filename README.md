@@ -31,8 +31,10 @@ a Django REST API backend and a React SPA frontend that communicate over HTTP.
 
 - **Backend:** Python 3.12, Django 6, Django REST Framework, SimpleJWT, SQLite (dev).
 - **Frontend:** React 18, Vite 5, TypeScript, React Router, TanStack Query.
-- **Integrations:** Razorpay (payments), FCM (push), Twilio / MSG91 (SMS) — all
-  behind mock providers by default so the app runs offline with no real keys.
+- **Integrations:** SMTP (outbound email, password-reset only). No payment,
+  SMS or push integration is wired yet — Razorpay, FCM and Twilio/MSG91 are
+  planned (see `PRODUCT_PLAN.md`) but not present in the code. "Record payment"
+  is manual entry.
 
 ## Getting started
 
@@ -70,5 +72,6 @@ cd frontend && npm run build
 ## Configuration
 
 Backend configuration is read from environment variables (see
-[`backend/.env.example`](backend/.env.example) for the full list). Secrets are
-never committed — payment/notification providers default to in-process mocks.
+[`.env.example`](.env.example) for the full list). Secrets are
+never committed. There are no payment or notification providers to configure —
+none are wired yet.
