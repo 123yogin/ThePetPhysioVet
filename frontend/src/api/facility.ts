@@ -45,8 +45,14 @@ export async function fetchFacilityBookings(
   const params = new URLSearchParams();
   if (date) params.set('date', date);
   if (status) params.set('status', status);
-  const query = params.toString();
-  return http<FacilityBookingsResponse>(`/facility/bookings${query ? `?${query}` : ''}`);
+  // Query built into a single variable (the `?` included) rather than inlined
+  // as a ternary in the template literal — matches api/enquiries.ts, and keeps
+  // the base path statically extractable by the SPA-route-resolution guard
+  // (test_every_spa_path_resolves), which reads the literal up to the first
+  // interpolation or space.
+  const qs = params.toString();
+  const query = qs ? `?${qs}` : '';
+  return http<FacilityBookingsResponse>(`/facility/bookings${query}`);
 }
 
 export async function updateFacilityBookingStatus(
