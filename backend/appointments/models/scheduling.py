@@ -23,17 +23,19 @@ class Appointment(models.Model):
     # to hardcode (or drift from) this vocabulary again.
     #
     # 2026-09-18: four services the clinic offers but could not be booked --
-    # physiotherapy as a session in its own right, 24x7 day care, grooming and
-    # dog walking. Nothing was removed: every existing code stays valid, so no
-    # booked appointment changes meaning. "Swimming" from the clinic's list is
-    # not added here because it is what `Hydrotherapy` already means -- the
-    # public site labels that service "Hydrotherapy — Indoor Swimming Pool".
+    # physiotherapy as a session in its own right, indoor-facility day care,
+    # grooming and dog walking. Nothing was removed: every existing code stays
+    # valid, so no booked appointment changes meaning. "Swimming" from the
+    # clinic's list is not added here because it is what `Hydrotherapy` already
+    # means -- the public site labels that service "Hydrotherapy — Indoor
+    # Swimming Pool".
     #
-    # NOTE for whoever books day care: `IndoorFacility` is a 24x7 stay, but an
-    # Appointment is a single `date` + `time`. A stay therefore records only its
-    # start, and "which pets are in the facility today" cannot be answered from
-    # this model. Giving it a real check-in/check-out range is deliberately NOT
-    # done here -- see the plan; it needs its own field work.
+    # NOTE: the Indoor Facility is NOT 24x7. It is booked as fixed one-hour
+    # slots, 09:30-13:30, and has its own inventory model (FacilityBooking) with
+    # the real bed-and-slot booking flow. This `IndoorFacility` visit type is
+    # only the general "I'm interested in day care" route through the ordinary
+    # appointment/enquiry form; the label must not imply round-the-clock care
+    # the clinic does not offer.
     VISIT_TYPES = (
         ("Initial", "Initial Consultation"),
         ("Followup", "Follow-up Session"),
@@ -41,7 +43,7 @@ class Appointment(models.Model):
         ("Hydrotherapy", "Hydrotherapy"),
         ("LaserTherapy", "Laser Therapy"),
         ("Physiotherapy", "Physiotherapy"),
-        ("IndoorFacility", "Indoor Facility (24x7 Day Care)"),
+        ("IndoorFacility", "Indoor Facility (Day Care)"),
         ("Grooming", "Grooming"),
         ("Walking", "Walking"),
     )
