@@ -281,3 +281,32 @@ class FacilityBedConstraintTests(ApiTestCase):
         )
         self.assertEqual(live.count(), 1)
         self.assertEqual(live.first().bed_index, 0)
+
+    def test_a_bed_collision_is_retried_not_refused(self):
+        # A concurrent request grabbing our chosen bed makes the insert raise
+        # IntegrityError. The reservation must re-read and take the next free
+        # bed rather than refuse the visitor while beds are still free -- the
+        # under-booking observed in a 7-way race on production (5 booked, 1 free,
+        # 2 wrongly refused). Simulate a single collision on the first insert.
+        from unittest import mock
+        from django.db import IntegrityError
+
+        real_bulk_create = FacilityBooking.objects.bulk_create
+        state = {"calls": 0}
+
+        def flaky(objs, *args, **kwargs):
+            state["calls"] += 1
+            if state["calls"] == 1:
+                raise IntegrityError("simulated concurrent bed grab")
+            return real_bulk_create(objs, *args, **kwargs)
+
+        with mock.patch.object(FacilityBooking.objects, "bulk_create", side_effect=flaky):
+            res = self.anon().post(
+                self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json"
+            )
+
+        self.assertEqual(res.status_code, 201)  # retried to success, not 409
+        self.assertGreaterEqual(state["calls"], 2)  # proof it retried
+        self.assertEqual(
+            FacilityBooking.objects.filter(date=self._tomorrow(), slot=0).count(), 1
+        )

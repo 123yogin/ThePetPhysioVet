@@ -18,6 +18,10 @@ sys.path.insert(0, str(BACKEND))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "petphysio.settings")
 
+# This is the serving function: use Neon's pooled endpoint (see settings.py).
+# Migrations run in the build with this unset, so DDL uses the direct connection.
+os.environ.setdefault("DB_POOLED", "1")
+
 from django.core.wsgi import get_wsgi_application  # noqa: E402
 
 app = get_wsgi_application()

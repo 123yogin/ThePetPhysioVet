@@ -299,3 +299,31 @@ class ModelPackageIntegrityTests(ApiTestCase):
                 f"{model.__name__} is mapped to {model._meta.db_table}, which would "
                 "orphan the live table",
             )
+
+
+class NeonPooledHostTests(SimpleTestCase):
+    """The Neon pooled-endpoint host derivation used for serverless connection
+    pooling (settings._neon_pooled_host). Pure string logic, so it is tested
+    directly rather than by opening a connection."""
+
+    def _fn(self):
+        from petphysio.settings import _neon_pooled_host
+        return _neon_pooled_host
+
+    def test_direct_neon_host_gets_pooler_inserted(self):
+        fn = self._fn()
+        self.assertEqual(
+            fn("ep-cool-name-123456.us-east-2.aws.neon.tech"),
+            "ep-cool-name-123456-pooler.us-east-2.aws.neon.tech",
+        )
+
+    def test_already_pooled_host_is_unchanged(self):
+        fn = self._fn()
+        host = "ep-cool-name-123456-pooler.us-east-2.aws.neon.tech"
+        self.assertEqual(fn(host), host)
+
+    def test_non_neon_host_is_unchanged(self):
+        fn = self._fn()
+        self.assertEqual(fn("db.example.com"), "db.example.com")
+        self.assertEqual(fn(""), "")
+        self.assertEqual(fn(None), None)

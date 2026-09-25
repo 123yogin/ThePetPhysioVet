@@ -133,57 +133,73 @@ def _reserve_slots(date_value, slots, make_row):
     the `uniq_active_bed_per_date_slot` constraint means two bookings can never
     hold the same (date, slot, bed_index). We pick the lowest free bed and
     insert; if a concurrent request took that same bed between our read and our
-    write, the insert raises IntegrityError and we return a clean "slot full".
-    This is correct on Postgres (the production DB) as well as SQLite -- it does
-    not depend on select_for_update seeing a not-yet-inserted row.
+    write, the insert raises IntegrityError and we retry with the next free bed
+    (see the retry note below). This is correct on Postgres (the production DB)
+    as well as SQLite -- it does not depend on select_for_update seeing a
+    not-yet-inserted row.
 
     Expired holds are reaped to CANCELLED first, inside the same transaction, so
     their bed frees up and the static partial-unique condition stays consistent
     with real availability (the condition cannot reference `now`).
+
+    A bed collision is RETRIED, not reported as "slot full". `select_for_update`
+    can only lock rows that already exist, so on an empty slot concurrent
+    requests do not serialise: they all read "0 taken", all pick the lowest free
+    bed, and all but one trip the unique constraint on insert. Returning 409 to
+    every loser then refuses visitors while beds are still free -- observed under
+    a 7-way race on production: five beds booked, one still free, two requests
+    wrongly refused. So on IntegrityError we re-read and take the next free bed;
+    only a genuinely full slot 409s. Bounded by the bed count -- after that many
+    collisions every bed is taken and the slot really is full.
     """
-    now = timezone.now()
-    try:
-        with transaction.atomic():
-            # 1. Reap expired holds for these slots -> their beds are freed.
-            FacilityBooking.objects.filter(
-                date=date_value, slot__in=slots, status="HELD", expires_at__lte=now,
-            ).update(status="CANCELLED", bed_index=None)
+    for _ in range(FACILITY_BEDS + 2):
+        now = timezone.now()
+        try:
+            with transaction.atomic():
+                # 1. Reap expired holds for these slots -> their beds are freed.
+                FacilityBooking.objects.filter(
+                    date=date_value, slot__in=slots, status="HELD", expires_at__lte=now,
+                ).update(status="CANCELLED", bed_index=None)
 
-            # 2. Lock the surviving occupiers and read which beds they hold.
-            occupying = list(
-                FacilityBooking.objects.select_for_update().filter(
-                    FacilityBooking.occupies_bed_q(now), date=date_value, slot__in=slots,
+                # 2. Lock the surviving occupiers and read which beds they hold.
+                occupying = list(
+                    FacilityBooking.objects.select_for_update().filter(
+                        FacilityBooking.occupies_bed_q(now), date=date_value, slot__in=slots,
+                    )
                 )
-            )
-            taken = {}
-            for r in occupying:
-                taken.setdefault(r.slot, set()).add(r.bed_index)
+                taken = {}
+                for r in occupying:
+                    taken.setdefault(r.slot, set()).add(r.bed_index)
 
-            # 3. Assign the lowest free bed per slot; a slot with none is full.
-            rows, full = [], []
-            for s in slots:
-                used = taken.get(s, set())
-                free = [i for i in range(FACILITY_BEDS) if i not in used]
-                if not free:
-                    full.append(s)
-                else:
-                    rows.append(make_row(s, free[0]))
-            if full:
-                labels = ", ".join(slot_label(s) for s in full)
-                return problem(
-                    409, "Slot full",
-                    f"These slots just filled up: {labels}. Please pick another time.",
-                )
+                # 3. Assign the lowest free bed per slot; a slot with none is full.
+                rows, full = [], []
+                for s in slots:
+                    used = taken.get(s, set())
+                    free = [i for i in range(FACILITY_BEDS) if i not in used]
+                    if not free:
+                        full.append(s)
+                    else:
+                        rows.append(make_row(s, free[0]))
+                if full:
+                    labels = ", ".join(slot_label(s) for s in full)
+                    return problem(
+                        409, "Slot full",
+                        f"These slots just filled up: {labels}. Please pick another time.",
+                    )
 
-            # 4. Insert. If a racing request grabbed the same bed, the unique
-            #    constraint rejects us here -> handled below as "slot full".
-            FacilityBooking.objects.bulk_create(rows)
-    except IntegrityError:
-        return problem(
-            409, "Slot full",
-            "Those slots just filled up. Please pick another time.",
-        )
-    return None
+                # 4. Insert. If a racing request grabbed the same bed, the unique
+                #    constraint rejects us here -> caught below and retried with
+                #    the next free bed.
+                FacilityBooking.objects.bulk_create(rows)
+            return None
+        except IntegrityError:
+            continue
+
+    # Every attempt collided: the slot filled up under us while we retried.
+    return problem(
+        409, "Slot full",
+        "Those slots just filled up. Please pick another time.",
+    )
 
 
 def _facility_create(request):

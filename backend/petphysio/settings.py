@@ -103,9 +103,43 @@ WSGI_APPLICATION = "petphysio.wsgi.application"
 # DATABASE_URL, e.g. postgres://user:pass@host:5432/dbname. Falls back to the
 # local sqlite file only for local dev convenience (not a secret).
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+
 DATABASES = {
     "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)
 }
+
+# --- Connection pooling for serverless (Neon + Vercel) ---------------------
+# On Vercel every request runs in a short-lived function, and holding a direct
+# Postgres connection per instance exhausts Neon's connection limit under load
+# -- the concrete risk behind "will it hold up at ~500 concurrent users". Neon's
+# answer is its PgBouncer *pooled* endpoint, whose host is the direct host with
+# "-pooler" inserted into the endpoint id
+# (ep-foo-123.<region>.aws.neon.tech -> ep-foo-123-pooler.<region>.aws.neon.tech).
+# We DERIVE it from DATABASE_URL so there is no second secret to store or leak.
+#
+# Turned on by DB_POOLED=1 (set at runtime in api/index.py). It is deliberately
+# NOT on during the build's migrate step: DDL must run on a direct connection,
+# not through a transaction pooler. A transaction pooler also cannot hold a
+# server-side cursor across statements, so those are disabled, and the app does
+# not keep connections between requests (CONN_MAX_AGE=0) -- the pooler owns reuse.
+def _neon_pooled_host(host):
+    """Neon's pooled host for a direct host: '-pooler' inserted into the
+    endpoint id. Returned unchanged if the host is not Neon or already pooled."""
+    if not host or not host.endswith(".neon.tech") or "-pooler" in host:
+        return host
+    label, dot, rest = host.partition(".")
+    return f"{label}-pooler.{rest}" if dot else host
+
+
+if os.environ.get("DB_POOLED", "") == "1":
+    _pooled = DATABASES["default"]
+    if _pooled.get("HOST"):
+        _pooled["HOST"] = _neon_pooled_host(_pooled["HOST"])
+    # The pooler, not the app, manages connection reuse across requests.
+    _pooled["CONN_MAX_AGE"] = 0
+    # Required for PgBouncer transaction pooling: server-side cursors cannot
+    # survive across the pooler's per-statement connection assignment.
+    _pooled["DISABLE_SERVER_SIDE_CURSORS"] = True
 
 AUTH_USER_MODEL = "appointments.UserProfile"
 

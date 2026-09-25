@@ -40,6 +40,14 @@ if [ "${VERCEL_ENV:-}" = "production" ] && printf '%s' "${DATABASE_URL:-}" | gre
   ( cd backend && DEBUG=true DJANGO_SETTINGS_MODULE=petphysio.settings \
       python3 manage.py migrate --noinput )
   echo "--- migrations applied ---"
+
+  # Verify the pooled endpoint the serving function will use (DB_POOLED=1) is
+  # actually reachable, BEFORE this deploy goes live. If the derived Neon pooler
+  # host is wrong or unreachable, this fails the build atomically and the current
+  # deployment stays up -- rather than shipping a site that 500s on every request.
+  echo "--- verifying pooled DB endpoint is reachable ---"
+  ( cd backend && DEBUG=true DB_POOLED=1 DJANGO_SETTINGS_MODULE=petphysio.settings \
+      python3 -c "import django; django.setup(); from django.db import connection; connection.ensure_connection(); print('pooled endpoint reachable')" )
 else
   echo "--- skipping migrations (VERCEL_ENV=${VERCEL_ENV:-unset}, not production) ---"
 fi
