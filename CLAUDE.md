@@ -401,12 +401,12 @@ Trade-off: this disables all confirmations, including destructive commands — i
   raises `ImproperlyConfigured` and refuses to boot. That is the intended fail-fast
   behaviour of rule 1, not a bug. Use `backend/.venv/bin/python`, NOT system `python3`.
 - **Frontend:** `cd frontend && npm run dev` → http://localhost:5173 (proxies `/api` to :8000).
-- **Migrate / seed:** `cd backend && DEBUG=true ./.venv/bin/python manage.py migrate`, then
-  `DEBUG=true ./.venv/bin/python manage.py seed_data` (idempotent). There is **no**
-  `seed_parity` command — `seed_data` is the only one.
+- **Migrate:** `cd backend && DEBUG=true ./.venv/bin/python manage.py migrate`
+- **First login:** there is **no `seed_data` command any more** — it was removed
+  because it committed demo passwords into the repo. Create a clinician with
+  `DEBUG=true ./.venv/bin/python manage.py create_doctor` and register owners
+  through the signup form.
 - **Tests:** `cd backend && DEBUG=true ./.venv/bin/python manage.py test appointments`
-- **Demo credentials** (created by `seed_data`; login now genuinely verifies passwords):
-  `dr_dhanvi / DoctorPass123!` · `owner_sarah|owner_rahul|owner_priya / OwnerPass123!`
 
 ## Team (see .claude/agents/)
 - `product-manager` — backlog, user stories, acceptance criteria, sprint scope, sign-off.

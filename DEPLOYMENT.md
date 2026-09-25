@@ -165,10 +165,9 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(64))'
 
 ### 2.5 Create the first real clinician account
 
-**Do not run `seed_data` here.** It creates demo accounts whose passwords are committed to
-this repository — `dr_dhanvi / DoctorPass123!` has full access to every patient record.
-The command now refuses to run when `DEBUG` is off, so this is enforced rather than trusted,
-but the reason is worth knowing.
+There is no `seed_data` command — it was removed because it fabricated demo
+accounts with passwords committed to the repository. Create the first clinician
+explicitly instead (below); there is no demo data to avoid any more.
 
 ```bash
 docker exec -it <backend-container> python manage.py create_doctor <username> <email>
@@ -252,7 +251,7 @@ Run on 2026-08-20 against real Postgres 16 in Docker, not asserted from inspecti
 docker compose build              both images built (amd64 + arm64)
 docker compose up                 postgres / backend / frontend all healthy
 migrations                        0001–0007 applied on Postgres
-create_doctor                     real clinician account (seed_data is dev-only)
+create_doctor                     real clinician account (the only account-creation command)
 GET  /                            200   SPA loads through nginx
 GET  /invoices/1                  200   deep link returns SPA, not 404
 POST /api/v1/auth/login           200   same-origin proxy works

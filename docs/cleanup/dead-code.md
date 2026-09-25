@@ -41,3 +41,34 @@ Example — `views/auth.py`:
 - **`frontend/tools/` (20 CDP `.mjs` QA scripts).** Not imported by the app and
   not a wired test suite, but they are operational tooling the previous team used
   by hand. Not removed — see `remaining-work.md`.
+
+
+## Removed — `seed_data` management command (2026-09-25, on request)
+
+`backend/appointments/management/commands/seed_data.py` (310 lines) deleted. It
+fabricated demo data including a clinician login `dr_dhanvi / DoctorPass123!` and
+three owner accounts whose passwords were committed to the repository.
+
+Verified safe before removal:
+- **No test** depends on it (the suite builds its own fixtures in `tests/base.py`;
+  `tests/base.py` is a different file from `management/base.py`).
+- **No deploy/runtime path** invokes it (not in Dockerfile, compose, vercel.json,
+  scripts, or `api/`).
+- The only in-code mention was a historical **comment** in `serializers.py`, left
+  intact as an accurate record.
+
+Kept:
+- `management/base.py` (`DevOnlyCommand`) — its only consumer was `seed_data`, so
+  it now has no subclass, but it is retained as the documented mandatory guard
+  base for any future data-fabricating command (CLAUDE.md).
+- `management/commands/create_doctor.py` — the supported way to create the first
+  clinician; owners register via signup.
+
+Docs updated (operational instructions only): `CLAUDE.md` local-dev section and
+`DEPLOYMENT.md`. Historical records that mention `seed_data` as past context
+(CLAUDE.md remediation notes, `docs/API_CONTRACT.md`, `docs/DESIGN_mobile.md`,
+the `serializers.py` comment) were deliberately left unchanged — they truthfully
+describe what happened and rewriting them would falsify the record.
+
+Validation: `manage.py check` clean; 420-test suite green; `create_doctor` still
+discoverable, `seed_data` no longer listed.
