@@ -465,6 +465,23 @@ class CreateDoctorCommandTests(ApiTestCase):
             call_command("create_doctor", "drwho", "dup@clinic.test",
                          "--password", "Cl1nicPass!", stdout=StringIO())
 
+    def test_skip_if_exists_is_idempotent(self):
+        # The deploy-time bootstrap (Vercel build) reruns on every deploy, so a
+        # duplicate must be a no-op success, not a CommandError that fails the build.
+        out = StringIO()
+        call_command("create_doctor", "drwho", "dup@clinic.test",
+                     "--password", "Cl1nicPass!", "--skip-if-exists", stdout=out)
+        self.assertIn("already exists", out.getvalue())
+
+    def test_skip_if_exists_still_creates_when_absent(self):
+        out = StringIO()
+        call_command("create_doctor", "freshdoc", "freshdoc@clinic.test",
+                     "--password", "Cl1nicPass!", "--skip-if-exists", stdout=out)
+        self.assertIn("Created DOCTOR", out.getvalue())
+        self.assertTrue(
+            UserProfile.objects.filter(username="freshdoc", role="DOCTOR").exists()
+        )
+
     def test_command_rejects_a_duplicate_email(self):
         with self.assertRaises(CommandError):
             call_command("create_doctor", "otherdoc", "dr@example.com",

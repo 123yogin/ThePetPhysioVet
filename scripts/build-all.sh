@@ -48,6 +48,21 @@ if [ "${VERCEL_ENV:-}" = "production" ] && printf '%s' "${DATABASE_URL:-}" | gre
   echo "--- verifying pooled DB endpoint is reachable ---"
   ( cd backend && DEBUG=true DB_POOLED=1 DJANGO_SETTINGS_MODULE=petphysio.settings \
       python3 -c "import django; django.setup(); from django.db import connection; connection.ensure_connection(); print('pooled endpoint reachable')" )
+
+  # First-clinician bootstrap. There is no shell on Vercel to run create_doctor,
+  # and public signup can only ever create OWNERs, so without this the doctor
+  # portal has no account at all on production. Set DOCTOR_USERNAME +
+  # DOCTOR_PASSWORD (and optionally DOCTOR_EMAIL) in the Vercel production env to
+  # create the first clinician on the next deploy. --skip-if-exists makes it
+  # idempotent, so it is safe to leave the vars in place across redeploys (or to
+  # remove them once the account exists). The password lives only in Vercel's
+  # secret store, never in the repo -- the reason seed_data was deleted.
+  if [ -n "${DOCTOR_USERNAME:-}" ] && [ -n "${DOCTOR_PASSWORD:-}" ]; then
+    echo "--- bootstrapping first clinician (idempotent) ---"
+    ( cd backend && DEBUG=true DJANGO_SETTINGS_MODULE=petphysio.settings \
+        python3 manage.py create_doctor "$DOCTOR_USERNAME" "${DOCTOR_EMAIL:-}" \
+          --password "$DOCTOR_PASSWORD" --skip-if-exists )
+  fi
 else
   echo "--- skipping migrations (VERCEL_ENV=${VERCEL_ENV:-unset}, not production) ---"
 fi

@@ -23,6 +23,16 @@ class Command(BaseCommand):
         parser.add_argument("username")
         parser.add_argument("email")
         parser.add_argument("--password", help="If omitted, you will be prompted interactively.")
+        parser.add_argument(
+            "--skip-if-exists",
+            action="store_true",
+            help=(
+                "Exit successfully (rather than erroring) if a user with this "
+                "username or email already exists. Makes the command safe to run "
+                "idempotently from an automated deploy, e.g. the Vercel build's "
+                "first-clinician bootstrap."
+            ),
+        )
         parser.add_argument("--first-name", default="")
         parser.add_argument("--last-name", default="")
         parser.add_argument("--phone", default="")
@@ -34,9 +44,18 @@ class Command(BaseCommand):
         username = options["username"]
         email = options["email"]
 
-        if UserProfile.objects.filter(username=username).exists():
+        username_taken = UserProfile.objects.filter(username=username).exists()
+        email_taken = bool(email) and UserProfile.objects.exclude(email="").filter(email=email).exists()
+
+        if options.get("skip_if_exists") and (username_taken or email_taken):
+            self.stdout.write(self.style.SUCCESS(
+                f"DOCTOR account for {username!r} already exists; nothing to do."
+            ))
+            return
+
+        if username_taken:
             raise CommandError(f"A user with username {username!r} already exists.")
-        if email and UserProfile.objects.exclude(email="").filter(email=email).exists():
+        if email_taken:
             raise CommandError(f"A user with email {email!r} already exists.")
 
         password = options.get("password")
