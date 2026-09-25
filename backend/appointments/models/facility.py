@@ -104,6 +104,15 @@ class FacilityBooking(models.Model):
     # Set only while status == HELD. Null once confirmed (a PENDING/CONFIRMED
     # booking does not expire).
     expires_at = models.DateTimeField(null=True, blank=True)
+    # Which of the six beds (0-5) this booking occupies in its (date, slot).
+    # This is what makes overbooking impossible at the DATABASE level rather than
+    # in application code: the partial unique constraint below means two bookings
+    # can never hold the same bed in the same slot, so two requests racing for
+    # the last bed collide in Postgres and one is rejected -- no reliance on
+    # select_for_update seeing a row that does not exist yet. Null on
+    # non-occupying rows (cancelled/completed/expired), where NULLs are distinct
+    # and so never collide.
+    bed_index = models.PositiveSmallIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -112,6 +121,20 @@ class FacilityBooking(models.Model):
             # The availability query is always "active rows for this date and
             # slot", so index exactly that.
             models.Index(fields=["date", "slot", "status"]),
+        ]
+        constraints = [
+            # One bed, one occupier: no two HELD/PENDING/CONFIRMED bookings may
+            # share (date, slot, bed_index). The condition is static (it cannot
+            # reference `now`), so expired holds are reaped to CANCELLED inside
+            # the reservation transaction before beds are assigned -- see
+            # views/facility._reserve_slots -- which keeps this index consistent
+            # with real availability. Partial unique indexes are supported by
+            # both Postgres and SQLite.
+            models.UniqueConstraint(
+                fields=["date", "slot", "bed_index"],
+                condition=Q(status__in=("HELD", "PENDING", "CONFIRMED")),
+                name="uniq_active_bed_per_date_slot",
+            ),
         ]
 
     @staticmethod

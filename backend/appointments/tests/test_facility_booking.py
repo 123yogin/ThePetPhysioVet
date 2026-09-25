@@ -237,3 +237,47 @@ class FacilityUnapprovedBookingSurvivesTests(ApiTestCase):
         self.auth(self.doctor)
         listed = self.client.get(f"{API}/facility/bookings", {"date": self._tomorrow()}).data
         self.assertTrue(any(g["reference"] == ref for g in listed["results"]))
+
+
+class FacilityBedConstraintTests(ApiTestCase):
+    """The database itself refuses to put two occupying bookings in the same bed
+    -- the guarantee that holds on Postgres, not just SQLite's write serialising."""
+
+    HOLD = f"{API}/facility/holds"
+
+    def _tomorrow(self):
+        return (date.today() + timedelta(days=1)).isoformat()
+
+    def test_bookings_get_distinct_bed_indexes(self):
+        for i in range(3):
+            self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json")
+        beds = sorted(
+            FacilityBooking.objects.filter(date=self._tomorrow(), slot=0).values_list("bed_index", flat=True)
+        )
+        self.assertEqual(beds, [0, 1, 2])
+
+    def test_the_database_rejects_a_duplicate_bed(self):
+        from django.db import IntegrityError
+        self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json")
+        # a confirmed booking already sits in bed 0; forcing a second row into the
+        # same (date, slot, bed) must be refused by the unique constraint.
+        with self.assertRaises(IntegrityError):
+            FacilityBooking.objects.create(
+                reference="FAC-DUP", date=self._tomorrow(), slot=0, bed_index=0,
+                status="PENDING", pet_name="X", owner_name="Y", owner_phone="9",
+            )
+
+    def test_an_expired_holds_bed_is_reused_not_wasted(self):
+        # hold bed 0, then expire it
+        ref = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json").data["reference"]
+        FacilityBooking.objects.filter(reference=ref).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        # a new hold on the same slot should succeed and take bed 0 again
+        res = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json")
+        self.assertEqual(res.status_code, 201)
+        live = FacilityBooking.objects.filter(
+            FacilityBooking.occupies_bed_q(timezone.now()), date=self._tomorrow(), slot=0
+        )
+        self.assertEqual(live.count(), 1)
+        self.assertEqual(live.first().bed_index, 0)

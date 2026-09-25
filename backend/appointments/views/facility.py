@@ -1,22 +1,26 @@
 """Indoor-facility (day-care) slot bookings.
 
-Three surfaces:
+Public surface:
+  GET  /facility/availability?date=          beds free per slot
+  POST /facility/holds                       hold 1-3 slots (BookMyShow-style)
+  POST /facility/holds/<ref>/confirm         confirm a hold within its countdown
+  POST /facility/bookings                    direct one-shot book (no hold step)
 
-  GET  /api/v1/facility/availability?date=  PUBLIC  -- beds left per slot
-  POST /api/v1/facility/bookings            PUBLIC  -- hold 1-3 slots
-  GET  /api/v1/facility/bookings            DOCTOR  -- the day's bookings
-  POST /api/v1/facility/bookings/<ref>/status  DOCTOR -- confirm / cancel
+Doctor surface:
+  GET  /facility/bookings                    the day's bookings, grouped
+  POST /facility/bookings/<ref>/status       confirm / cancel / complete
 
-The public write mirrors the enquiry intake exactly (honeypot + two rate-limit
-windows + RFC-7807 problems), because it is the same threat: an unauthenticated
-endpoint that mints rows. It differs in one way that matters -- these rows are
-*inventory*, so the write is transactional and re-checks capacity under a lock
-before committing.
+The public writes mirror the enquiry intake (honeypot + rate-limit + RFC-7807),
+because it is the same threat: an unauthenticated endpoint that mints rows. They
+differ in that these rows are *inventory* -- overbooking is prevented at the
+database by the per-(date, slot, bed_index) unique constraint, so two requests
+racing for the last bed cannot both succeed on Postgres, not only on SQLite. See
+_reserve_slots.
 """
 import uuid as _uuid
 from datetime import date as date_cls, timedelta
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
@@ -119,39 +123,66 @@ def facility_availability_view(request):
 
 
 def _reserve_slots(date_value, slots, make_row):
-    """Atomically re-check capacity and insert one row per slot.
+    """Atomically assign a specific bed (0-5) per slot and insert one row each.
 
-    `make_row(slot)` builds the FacilityBooking to create for that slot. Returns
-    a `problem(...)` Response on failure (409 slot full / could-not-book), or
-    None on success. Shared by direct booking and holding so the capacity rule
-    lives in one place.
+    `make_row(slot, bed_index)` builds the FacilityBooking to create. Returns a
+    `problem(...)` Response on failure (409 slot full), or None on success.
+    Shared by direct booking and holding so the capacity rule lives in one place.
 
-    DEV NOTE: select_for_update locks *existing* rows, not the empty space a new
-    row would take, so on Postgres two concurrent transactions could both pass
-    and over-insert. SQLite (dev) serialises writes at the database level, so
-    this is correct here. Production must add a real guard -- a per-(date,slot)
-    counter row locked FOR UPDATE, or a bed-index partial unique constraint.
-    Called out so it is not mistaken for production-ready.
+    Overbooking is prevented by the DATABASE, not by this code reading a count:
+    the `uniq_active_bed_per_date_slot` constraint means two bookings can never
+    hold the same (date, slot, bed_index). We pick the lowest free bed and
+    insert; if a concurrent request took that same bed between our read and our
+    write, the insert raises IntegrityError and we return a clean "slot full".
+    This is correct on Postgres (the production DB) as well as SQLite -- it does
+    not depend on select_for_update seeing a not-yet-inserted row.
+
+    Expired holds are reaped to CANCELLED first, inside the same transaction, so
+    their bed frees up and the static partial-unique condition stays consistent
+    with real availability (the condition cannot reference `now`).
     """
+    now = timezone.now()
     try:
         with transaction.atomic():
-            list(
+            # 1. Reap expired holds for these slots -> their beds are freed.
+            FacilityBooking.objects.filter(
+                date=date_value, slot__in=slots, status="HELD", expires_at__lte=now,
+            ).update(status="CANCELLED", bed_index=None)
+
+            # 2. Lock the surviving occupiers and read which beds they hold.
+            occupying = list(
                 FacilityBooking.objects.select_for_update().filter(
-                    FacilityBooking.occupies_bed_q(timezone.now()),
-                    date=date_value, slot__in=slots,
+                    FacilityBooking.occupies_bed_q(now), date=date_value, slot__in=slots,
                 )
             )
-            counts = _slot_counts(date_value, slots)
-            full = [s for s in slots if counts.get(s, 0) >= FACILITY_BEDS]
+            taken = {}
+            for r in occupying:
+                taken.setdefault(r.slot, set()).add(r.bed_index)
+
+            # 3. Assign the lowest free bed per slot; a slot with none is full.
+            rows, full = [], []
+            for s in slots:
+                used = taken.get(s, set())
+                free = [i for i in range(FACILITY_BEDS) if i not in used]
+                if not free:
+                    full.append(s)
+                else:
+                    rows.append(make_row(s, free[0]))
             if full:
                 labels = ", ".join(slot_label(s) for s in full)
                 return problem(
                     409, "Slot full",
                     f"These slots just filled up: {labels}. Please pick another time.",
                 )
-            FacilityBooking.objects.bulk_create([make_row(s) for s in slots])
-    except Exception:  # pragma: no cover - defensive; surfaced as a clean 409
-        return problem(409, "Could not book", "Those slots could not be held. Please try again.")
+
+            # 4. Insert. If a racing request grabbed the same bed, the unique
+            #    constraint rejects us here -> handled below as "slot full".
+            FacilityBooking.objects.bulk_create(rows)
+    except IntegrityError:
+        return problem(
+            409, "Slot full",
+            "Those slots just filled up. Please pick another time.",
+        )
     return None
 
 
@@ -185,8 +216,8 @@ def _facility_create(request):
 
     err = _reserve_slots(
         data["date"], slots,
-        lambda s: FacilityBooking(
-            reference=reference, date=data["date"], slot=s,
+        lambda s, bed: FacilityBooking(
+            reference=reference, date=data["date"], slot=s, bed_index=bed,
             pet_name=data["pet_name"], owner_name=data["owner_name"],
             owner_phone=phone, owner_email=data.get("owner_email", ""),
             note=data.get("note", ""), status="PENDING",
@@ -321,8 +352,8 @@ def facility_hold_view(request):
 
     err = _reserve_slots(
         data["date"], slots,
-        lambda s: FacilityBooking(
-            reference=reference, date=data["date"], slot=s,
+        lambda s, bed: FacilityBooking(
+            reference=reference, date=data["date"], slot=s, bed_index=bed,
             status="HELD", expires_at=expires_at,
         ),
     )
