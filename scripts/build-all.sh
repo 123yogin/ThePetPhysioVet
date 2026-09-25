@@ -11,6 +11,35 @@
 set -euo pipefail
 
 
+# ---------------------------------------------------------------------------
+# DATABASE MIGRATIONS (production deploys only)
+# ---------------------------------------------------------------------------
+# Vercel's build historically never ran migrations, so the schema on the live
+# Neon Postgres only ever advanced when someone ran `migrate` by hand -- and
+# nobody had a reliable way to do that, because DATABASE_URL is a Vercel
+# *secret* and cannot be pulled out to a laptop. That is the "migrations run:
+# never / mechanism unknown" gap the deployment audit flagged.
+#
+# The Docker/Coolify path has always migrated on start
+# (docker/entrypoint-single.sh); this gives the Vercel path the same guarantee.
+# It runs ONLY for a production deploy, where the real DATABASE_URL secret is
+# injected into the build environment. DEBUG=true lets Django boot for the
+# migrate without every prod EMAIL_*/HTTPS var (all guarded behind `if DEBUG`
+# in settings.py); it changes nothing about the database connection, which is
+# driven entirely by the injected DATABASE_URL. `set -e` means a failing
+# migration fails the whole build, so a bad migration can never deploy on top
+# of an un-migrated database -- the previous deployment stays live, untouched.
+if [ "${VERCEL_ENV:-}" = "production" ] && printf '%s' "${DATABASE_URL:-}" | grep -q '^postgres'; then
+  echo "--- applying database migrations (production) ---"
+  python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt
+  ( cd backend && DEBUG=true DJANGO_SETTINGS_MODULE=petphysio.settings \
+      python3 manage.py migrate --noinput )
+  echo "--- migrations applied ---"
+else
+  echo "--- skipping migrations (VERCEL_ENV=${VERCEL_ENV:-unset}, not production) ---"
+fi
+
+
 # ROUTING NOTE (see vercel.json "rewrites")
 # -----------------------------------------
 # The doctor SPA needs a fallback: /app/login, /app/enquiries and the rest
