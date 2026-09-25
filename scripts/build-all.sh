@@ -31,7 +31,12 @@ set -euo pipefail
 # of an un-migrated database -- the previous deployment stays live, untouched.
 if [ "${VERCEL_ENV:-}" = "production" ] && printf '%s' "${DATABASE_URL:-}" | grep -q '^postgres'; then
   echo "--- applying database migrations (production) ---"
-  python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt
+  # The Vercel build image's Python is uv-managed and marked externally-managed
+  # (PEP 668), so a plain `pip install` is refused. This container is ephemeral
+  # and rebuilt on every deploy, and these packages never reach the serverless
+  # function bundle (Vercel installs the function's own deps separately), so
+  # installing into the build's Python with --break-system-packages is safe.
+  python3 -m pip install --break-system-packages --quiet --disable-pip-version-check -r requirements.txt
   ( cd backend && DEBUG=true DJANGO_SETTINGS_MODULE=petphysio.settings \
       python3 manage.py migrate --noinput )
   echo "--- migrations applied ---"
