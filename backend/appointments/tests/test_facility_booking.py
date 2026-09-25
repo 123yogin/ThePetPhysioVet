@@ -193,3 +193,47 @@ class FacilityHoldFlowTests(ApiTestCase):
         res = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0, 1, 2, 3]}, format="json")
         self.assertEqual(res.status_code, 400)
         self.assertEqual(FacilityBooking.objects.count(), 0)
+
+
+class FacilityUnapprovedBookingSurvivesTests(ApiTestCase):
+    """A confirmed booking the doctor has not yet approved must NEVER be lost:
+    only the pre-confirmation HELD lock expires; a PENDING request persists
+    until the clinic acts on it."""
+
+    HOLD = f"{API}/facility/holds"
+
+    def _tomorrow(self):
+        return (date.today() + timedelta(days=1)).isoformat()
+
+    def _confirm_a_booking(self):
+        ref = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json").data["reference"]
+        self.anon().post(f"{API}/facility/holds/{ref}/confirm", {
+            "petName": "Rex", "ownerName": "Owner", "ownerPhone": "9000000001",
+        }, format="json")
+        return ref
+
+    def test_a_confirmed_booking_has_no_expiry(self):
+        ref = self._confirm_a_booking()
+        for row in FacilityBooking.objects.filter(reference=ref):
+            self.assertEqual(row.status, "PENDING")
+            self.assertIsNone(row.expires_at)
+
+    def test_an_unapproved_booking_still_holds_its_bed_much_later(self):
+        ref = self._confirm_a_booking()
+        # simulate the doctor forgetting for a month
+        FacilityBooking.objects.filter(reference=ref).update(
+            created_at=timezone.now() - timedelta(days=30)
+        )
+        # it still occupies its bed (availability reflects it) and is still there
+        avail = self.anon().get(f"{API}/facility/availability", {"date": self._tomorrow()}).data["slots"]
+        self.assertEqual(avail[0]["beds_available"], FACILITY_BEDS - 1)
+        self.assertTrue(FacilityBooking.objects.filter(reference=ref, status="PENDING").exists())
+
+    def test_an_unapproved_booking_is_still_in_the_doctor_inbox(self):
+        ref = self._confirm_a_booking()
+        FacilityBooking.objects.filter(reference=ref).update(
+            created_at=timezone.now() - timedelta(days=30)
+        )
+        self.auth(self.doctor)
+        listed = self.client.get(f"{API}/facility/bookings", {"date": self._tomorrow()}).data
+        self.assertTrue(any(g["reference"] == ref for g in listed["results"]))
