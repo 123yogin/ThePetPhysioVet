@@ -11,6 +11,7 @@ Traceability: CLAUDE.md rules 4 and 7.
 """
 from datetime import date, timedelta
 
+from django.utils import timezone
 from appointments.models import FacilityBooking, FACILITY_BEDS
 
 from .base import API, ApiTestCase
@@ -124,3 +125,71 @@ class FacilityDoctorTests(ApiTestCase):
         self.client.post(f"{BOOK}/{ref}/status", {"status": "CONFIRMED"}, format="json")
         avail = self.anon().get(AVAIL, {"date": _tomorrow()}).data["slots"]
         self.assertEqual(avail[3]["beds_available"], FACILITY_BEDS - 1)
+
+
+class FacilityHoldFlowTests(ApiTestCase):
+    """The two-step, BookMyShow-style hold -> confirm flow (no payment)."""
+
+    HOLD = f"{API}/facility/holds"
+
+    def _tomorrow(self):
+        return (date.today() + timedelta(days=1)).isoformat()
+
+    def test_holding_slots_occupies_beds_and_returns_a_countdown(self):
+        res = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0, 1]}, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(res.data["reference"].startswith("FAC-"))
+        self.assertTrue(res.data["expires_at"])
+        self.assertEqual(res.data["hold_seconds"], 600)
+        # a held bed is unavailable to the next visitor
+        avail = self.anon().get(f"{API}/facility/availability", {"date": self._tomorrow()}).data["slots"]
+        self.assertEqual(avail[0]["beds_available"], FACILITY_BEDS - 1)
+        # ...but it is NOT shown in the doctor's inbox (transient)
+        self.auth(self.doctor)
+        listed = self.client.get(f"{API}/facility/bookings", {"date": self._tomorrow()}).data
+        self.assertEqual(listed["results"], [])
+
+    def test_confirming_a_hold_turns_it_into_a_pending_booking(self):
+        ref = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [2]}, format="json").data["reference"]
+        res = self.anon().post(f"{API}/facility/holds/{ref}/confirm", {
+            "petName": "Rex", "ownerName": "Owner", "ownerPhone": "9000000001",
+        }, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["status"], "PENDING")
+        row = FacilityBooking.objects.get(reference=ref)
+        self.assertEqual(row.status, "PENDING")
+        self.assertIsNone(row.expires_at)
+        self.assertEqual(row.pet_name, "Rex")
+        # now the doctor sees it
+        self.auth(self.doctor)
+        listed = self.client.get(f"{API}/facility/bookings", {"date": self._tomorrow()}).data
+        self.assertEqual(len(listed["results"]), 1)
+
+    def test_an_expired_hold_frees_its_beds_and_cannot_be_confirmed(self):
+        ref = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [3]}, format="json").data["reference"]
+        # force the hold into the past
+        FacilityBooking.objects.filter(reference=ref).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        # the bed is free again (lazy expiry, no sweep)
+        avail = self.anon().get(f"{API}/facility/availability", {"date": self._tomorrow()}).data["slots"]
+        self.assertEqual(avail[3]["beds_available"], FACILITY_BEDS)
+        # confirming an expired hold is refused with 410
+        res = self.anon().post(f"{API}/facility/holds/{ref}/confirm", {
+            "petName": "Rex", "ownerName": "Owner", "ownerPhone": "9000000001",
+        }, format="json")
+        self.assertEqual(res.status_code, 410)
+
+    def test_a_hold_cannot_exceed_capacity(self):
+        for i in range(FACILITY_BEDS):
+            self.assertEqual(
+                self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json").status_code,
+                201,
+            )
+        res = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0]}, format="json")
+        self.assertEqual(res.status_code, 409)
+
+    def test_hold_honours_the_three_slot_cap(self):
+        res = self.anon().post(self.HOLD, {"date": self._tomorrow(), "slots": [0, 1, 2, 3]}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(FacilityBooking.objects.count(), 0)

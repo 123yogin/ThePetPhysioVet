@@ -353,10 +353,18 @@ class PermissionConfigTests(ApiTestCase):
     # reaches nothing. Its authZ is pinned by
     # test_facility_booking.FacilityDoctorTests.test_the_list_is_doctor_only
     # and test_cancelling_frees_the_beds. Widened to exactly ten, and no wider.
+    #
+    # AMENDED 2026-09-25 for the two-step (BookMyShow-style) facility hold flow.
+    # `facility_hold_view` (POST /facility/holds) and `facility_confirm_view`
+    # (POST /facility/holds/<ref>/confirm) are PUBLIC for the same reason as the
+    # other facility writes -- a visitor holding a bed cannot be expected to hold
+    # a token. Both are the enquiries category (unauthenticated intake); neither
+    # returns anyone else's data. Widened to exactly twelve, and no wider.
     ALLOWANY_ALLOWLIST = [
         "appointment_options_view", "enquiries_view",
         "facility_availability_view", "facility_booking_status_view",
-        "facility_bookings_view", "login_view",
+        "facility_bookings_view", "facility_confirm_view",
+        "facility_hold_view", "login_view",
         "password_reset_confirm_view", "password_reset_request_view",
         "refresh_view", "signup_view",
     ]

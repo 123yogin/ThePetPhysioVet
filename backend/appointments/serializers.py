@@ -817,6 +817,39 @@ class FacilityBookingCreateSerializer(serializers.Serializer):
     website = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+class FacilityHoldSerializer(serializers.Serializer):
+    """Backs the PUBLIC ``POST /api/v1/facility/holds`` (step one).
+
+    Only date + slots -- no personal details, because a hold is placed before
+    the visitor fills anything in. `website` is the honeypot.
+    """
+
+    date = serializers.DateField()
+    slots = serializers.ListField(
+        child=serializers.IntegerField(min_value=0),
+        allow_empty=False,
+    )
+    website = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class FacilityConfirmSerializer(serializers.Serializer):
+    """Backs the PUBLIC ``POST /api/v1/facility/holds/<ref>/confirm`` (step two).
+
+    Just the details -- the slots and date already live on the HELD rows. Same
+    capping rationale as the other public writes.
+    """
+
+    petName = serializers.CharField(source="pet_name", max_length=100, trim_whitespace=True)
+    ownerName = serializers.CharField(source="owner_name", max_length=150, trim_whitespace=True)
+    ownerPhone = serializers.CharField(source="owner_phone", max_length=50, trim_whitespace=True)
+    ownerEmail = serializers.EmailField(
+        source="owner_email", max_length=254, required=False, allow_blank=True, default="",
+    )
+    note = serializers.CharField(
+        max_length=1000, required=False, allow_blank=True, default="", trim_whitespace=True,
+    )
+
+
 class FacilityBookingSerializer(serializers.ModelSerializer):
     """Doctor-facing read of one held bed-slot.
 

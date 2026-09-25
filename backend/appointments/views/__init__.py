@@ -115,6 +115,8 @@ from .facility import (  # noqa: F401
     facility_availability_view,
     facility_bookings_view,
     facility_booking_status_view,
+    facility_hold_view,
+    facility_confirm_view,
 )
 
 __all__ = [
@@ -177,4 +179,6 @@ __all__ = [
     "facility_availability_view",
     "facility_bookings_view",
     "facility_booking_status_view",
+    "facility_hold_view",
+    "facility_confirm_view",
 ]

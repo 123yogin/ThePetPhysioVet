@@ -23,6 +23,7 @@ from .messaging import QueryThread, QueryMessage, QueryAttachment  # noqa: F401
 from .enquiries import Enquiry  # noqa: F401
 from .facility import (  # noqa: F401
     FacilityBooking, FACILITY_BEDS, FACILITY_MAX_SLOTS_PER_BOOKING,
+    FACILITY_HOLD_SECONDS,
     FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label,
 )
 

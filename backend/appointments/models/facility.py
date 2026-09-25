@@ -15,6 +15,7 @@ per (date, slot).
 import uuid
 
 from django.db import models
+from django.db.models import Q
 
 # The rules, defined here so the API, the serializers and both front-ends read
 # one source of truth rather than each hard-coding "6" and "09:30" (the exact
@@ -23,6 +24,14 @@ from django.db import models
 FACILITY_BEDS = 6
 
 FACILITY_MAX_SLOTS_PER_BOOKING = 3
+
+# How long a slot is held for the visitor while they fill in their details --
+# the "seats blocked for 10:00" countdown, minus the payment. After this the
+# hold is treated as released and its beds return to the pool. There is no
+# background worker in this app, so expiry is LAZY: an expired hold is simply
+# excluded from the capacity count (see `occupies_bed_q`); nothing needs to
+# sweep it.
+FACILITY_HOLD_SECONDS = 600
 
 # Four one-hour slots, 09:30-13:30. `slot` is stored as the 0-based index; the
 # times live here so a stored row never disagrees with what was shown.
@@ -64,26 +73,37 @@ class FacilityBooking(models.Model):
     # menu, and an index cannot drift into a half-hour the clinic never offered.
     slot = models.PositiveSmallIntegerField()
 
-    pet_name = models.CharField(max_length=100)
-    owner_name = models.CharField(max_length=150)
-    owner_phone = models.CharField(max_length=50)
+    # Blank until the visitor confirms: a HELD row is created before any details
+    # are given (the countdown starts the moment slots are picked), and these are
+    # filled when the hold is confirmed. The confirm serializer still requires
+    # them, so a real booking always has them.
+    pet_name = models.CharField(max_length=100, blank=True, default="")
+    owner_name = models.CharField(max_length=150, blank=True, default="")
+    owner_phone = models.CharField(max_length=50, blank=True, default="")
     owner_email = models.EmailField(blank=True, default="")
     note = models.TextField(max_length=1000, blank=True, default="")
 
-    # PENDING holds a bed the moment it is requested -- the count must not lie
-    # while the clinic decides -- and the doctor confirms or cancels. CANCELLED
-    # frees the bed. COMPLETED is a past, honoured stay kept for the record.
+    # HELD is a temporary lock with an `expires_at` -- the "seats blocked for
+    # 10:00" state -- created before details exist and occupying a bed so nobody
+    # else takes it. On confirm it becomes PENDING (expiry cleared) and the
+    # clinic confirms or cancels. CANCELLED frees the bed. COMPLETED is a past,
+    # honoured stay kept for the record.
     STATUS_CHOICES = (
+        ("HELD", "Held"),
         ("PENDING", "Pending"),
         ("CONFIRMED", "Confirmed"),
         ("CANCELLED", "Cancelled"),
         ("COMPLETED", "Completed"),
     )
-    # The statuses that occupy a bed. A booking in one of these counts against
-    # the six; anything else does not.
+    # Non-expiring statuses that always occupy a bed. HELD also occupies a bed,
+    # but only until `expires_at` -- see `occupies_bed_q`, which must be used for
+    # any capacity count so expired holds are treated as free.
     ACTIVE_STATUSES = ("PENDING", "CONFIRMED")
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
+    # Set only while status == HELD. Null once confirmed (a PENDING/CONFIRMED
+    # booking does not expire).
+    expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -93,6 +113,15 @@ class FacilityBooking(models.Model):
             # slot", so index exactly that.
             models.Index(fields=["date", "slot", "status"]),
         ]
+
+    @staticmethod
+    def occupies_bed_q(now):
+        """Q for rows that currently take up a bed: a confirmed/pending booking,
+        or a HELD one whose hold has not yet expired. Expired holds match
+        nothing here, so their beds are free without any sweep."""
+        return Q(status__in=FacilityBooking.ACTIVE_STATUSES) | Q(
+            status="HELD", expires_at__gt=now
+        )
 
     def __str__(self):
         return f"{self.reference} {self.date} slot {self.slot} ({self.status})"
