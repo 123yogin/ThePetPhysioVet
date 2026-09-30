@@ -123,6 +123,16 @@ button, input, select, textarea {
   box-shadow: 0 4px 12px rgba(62, 39, 35, 0.2);
 }
 
+/* The inbox count badge is a faint 10%-opacity fill with dark text — legible on
+   the light sidebar, but it disappears on the active item's dark-brown fill.
+   On the active row make it a solid white pill with a dark number so the count
+   stays readable whichever inbox the doctor is on. */
+.nav-item.active .badge {
+  background: #ffffff;
+  color: var(--brown-900);
+  border-color: transparent;
+}
+
 .nav-item .icon {
   font-size: 16px;
   width: 20px;

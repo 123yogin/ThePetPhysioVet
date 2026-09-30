@@ -6,12 +6,15 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .validators import normalise_phone
+from .validators import normalise_phone, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
-    Enquiry, FacilityBooking,
+    Enquiry, FacilityBooking, BoardingBooking,
+)
+from .models import (
+    BOARDING_DURATION_KEYS, BOARDING_WALK_KEYS, duration_label, duration_price,
 )
 
 # Upload validation constants (API_CONTRACT.md §3 "Diagnostic reports").
@@ -871,3 +874,78 @@ class FacilityBookingSerializer(serializers.ModelSerializer):
     def get_slot_label(self, obj):
         from .models import slot_label
         return slot_label(obj.slot)
+
+
+_PROVIDER = ("clinic", "owner")
+
+
+class BoardingCreateSerializer(serializers.Serializer):
+    """Backs the PUBLIC ``POST /api/v1/facility/boarding`` (and the doctor's own
+    "new boarding" form). camelCase in, like the other marketing intakes.
+
+    ``price`` and ``check_out`` are NOT accepted — the model derives them from
+    the duration, so a caller cannot set their own price. ``status`` is likewise
+    absent; the view always writes PENDING.
+    """
+
+    petName = serializers.CharField(source="pet_name", max_length=100, trim_whitespace=True)
+    ownerName = serializers.CharField(source="owner_name", max_length=150, trim_whitespace=True)
+    ownerPhone = serializers.CharField(source="owner_phone", max_length=50, trim_whitespace=True)
+    ownerEmail = serializers.EmailField(
+        source="owner_email", max_length=254, required=False, allow_blank=True, default="",
+    )
+    checkIn = serializers.DateField(source="check_in")
+    duration = serializers.ChoiceField(choices=list(BOARDING_DURATION_KEYS))
+
+    foodBy = serializers.ChoiceField(source="food_by", choices=_PROVIDER, required=False, default="owner")
+    utensilsBy = serializers.ChoiceField(source="utensils_by", choices=_PROVIDER, required=False, default="owner")
+    medicinesBy = serializers.ChoiceField(source="medicines_by", choices=_PROVIDER, required=False, default="owner")
+    blanketBy = serializers.ChoiceField(source="blanket_by", choices=_PROVIDER, required=False, default="owner")
+    foodPreference = serializers.CharField(
+        source="food_preference", max_length=200, required=False, allow_blank=True, default="",
+    )
+    walkTimes = serializers.ListField(
+        source="walk_times",
+        child=serializers.ChoiceField(choices=list(BOARDING_WALK_KEYS)),
+        required=False, default=list,
+    )
+    aadhaar = serializers.CharField(max_length=12, required=False, allow_blank=True, default="")
+    termsAccepted = serializers.BooleanField(source="terms_accepted")
+    website = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_checkIn(self, value):
+        from datetime import date as _date
+        if value < _date.today():
+            raise serializers.ValidationError("Choose today or a future date.")
+        return value
+
+    def validate_termsAccepted(self, value):
+        if not value:
+            raise serializers.ValidationError("Please accept the terms and conditions to book.")
+        return value
+
+    def validate_aadhaar(self, value):
+        # 12 digits + Verhoeff checksum (validators.validate_aadhaar). Optional
+        # here; empty passes, a malformed number is a 400.
+        return _validate_aadhaar(value)
+
+
+class BoardingSerializer(serializers.ModelSerializer):
+    """Doctor-facing read of one boarding stay (snake_case, this app's internal
+    convention). Derived fields (duration label, price) come along so the portal
+    needs no pricing table of its own."""
+
+    duration_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BoardingBooking
+        fields = [
+            "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
+            "check_in", "check_out", "duration", "duration_label", "price",
+            "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
+            "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_duration_label(self, obj):
+        return duration_label(obj.duration)

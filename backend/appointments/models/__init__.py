@@ -26,6 +26,11 @@ from .facility import (  # noqa: F401
     FACILITY_HOLD_SECONDS,
     FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label,
 )
+from .boarding import (  # noqa: F401
+    BoardingBooking, BOARDING_BEDS, BOARDING_DURATIONS, BOARDING_DURATION_KEYS,
+    BOARDING_WALK_OPTIONS, BOARDING_WALK_KEYS,
+    duration_days, duration_price, duration_label, duration_hours,
+)
 
 __all__ = [
     "UserProfile",
@@ -46,4 +51,5 @@ __all__ = [
     "QueryAttachment",
     "Enquiry",
     "FacilityBooking",
+    "BoardingBooking",
 ]

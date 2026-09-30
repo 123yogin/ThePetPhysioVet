@@ -99,6 +99,7 @@ from .owner import (  # noqa: F401
     owner_appointment_cancel_view,
     owner_invoices_view,
     owner_invoice_detail_view,
+    owner_bookings_view,
 )
 from .enquiries import (  # noqa: F401
     ENQUIRY_WINDOW_SECONDS,
@@ -117,6 +118,12 @@ from .facility import (  # noqa: F401
     facility_booking_status_view,
     facility_hold_view,
     facility_confirm_view,
+)
+from .boarding import (  # noqa: F401
+    boarding_availability_view,
+    boarding_view,
+    boarding_status_view,
+    boarding_ending_soon_view,
 )
 
 __all__ = [
@@ -181,4 +188,8 @@ __all__ = [
     "facility_booking_status_view",
     "facility_hold_view",
     "facility_confirm_view",
+    "boarding_availability_view",
+    "boarding_view",
+    "boarding_status_view",
+    "boarding_ending_soon_view",
 ]

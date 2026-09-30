@@ -2,9 +2,17 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchDashboardStats, completeAppointment, confirmAppointment } from '../api/appointments';
+import { fetchBoardingEndingSoon, boardingEndingSoonQueryKey } from '../api/boarding';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
 import { humanizeStatus, formatMoney } from '../lib/labels';
+
+/** "ends in 12m", "ending now", "overdue by 20m" — from minutes remaining. */
+function endsInLabel(minutesLeft: number): string {
+  if (minutesLeft < 0) return `overdue by ${Math.abs(minutesLeft)}m`;
+  if (minutesLeft === 0) return 'ending now';
+  return `ends in ${minutesLeft}m`;
+}
 
 export const DashboardScreen: React.FC = () => {
   const { addFlash } = useFlash();
@@ -19,6 +27,16 @@ export const DashboardScreen: React.FC = () => {
     queryKey: ['dashboardStats'],
     queryFn: fetchDashboardStats,
   });
+
+  // Boarding stays about to end (or overdue). Polled every 30s since it moves
+  // minute to minute — the moment a stay is inside the 15-minute window it
+  // surfaces here without a reload.
+  const { data: endingSoon } = useQuery({
+    queryKey: boardingEndingSoonQueryKey(),
+    queryFn: () => fetchBoardingEndingSoon(),
+    refetchInterval: 30_000,
+  });
+  const endingSoonList = endingSoon?.results ?? [];
 
   const handleComplete = async (apptId: string) => {
     try {
@@ -45,6 +63,52 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     <div>
+      {/* Stays about to end — the clinic needs to prepare the hand-off / pickup.
+          Red because it is time-sensitive; each row links into Boarding. */}
+      {endingSoonList.length > 0 && (
+        <div
+          className="glass-card"
+          style={{ marginBottom: '20px', padding: '16px 18px', borderLeft: '4px solid #c62828' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+            <Icon name="bell" size={16} />
+            <strong style={{ color: 'var(--brown-900)' }}>
+              {endingSoonList.length} boarding {endingSoonList.length === 1 ? 'stay' : 'stays'} ending soon
+            </strong>
+          </div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {endingSoonList.map((s) => (
+              <div
+                key={s.reference}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '13px' }}
+              >
+                <span style={{ color: 'var(--brown-800)' }}>
+                  <Icon name="paw" size={13} /> <strong>{s.pet_name}</strong>
+                  <span style={{ color: 'var(--brown-500)' }}> · {s.owner_name} · {s.duration_label}</span>
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+                  <span className={`badge ${s.overdue ? 'badge-danger' : 'badge-warning'}`}>
+                    {endsInLabel(s.minutes_left)}
+                  </span>
+                  {s.owner_phone && (
+                    <a href={`tel:${s.owner_phone}`} className="table-link" style={{ fontSize: '12px' }}>
+                      Call
+                    </a>
+                  )}
+                  <Link
+                    to={`/boarding?tab=CHECKED_IN&ref=${encodeURIComponent(s.reference)}`}
+                    className="table-link"
+                    style={{ fontSize: '12px' }}
+                  >
+                    Open
+                  </Link>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 className="page-title">Clinic Dashboard</h1>
