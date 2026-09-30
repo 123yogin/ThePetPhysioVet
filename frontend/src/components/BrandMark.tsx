@@ -1,60 +1,37 @@
 import React from 'react';
 
 interface BrandMarkProps {
-  /** Diameter of the mark in px. */
+  /** Approx. height driver in px (height renders at ~2×, keeping the old call sites). */
   size?: number;
-  /** Rendered beside the mark; omit for the mark alone. */
+  /** Accessible name; the wordmark itself is baked into the lockup art. */
   label?: string;
-  /** Stack the label under the mark instead of beside it. */
+  /** Retained for call-site compatibility; the lockup is always stacked art. */
   stacked?: boolean;
   labelSize?: number;
 }
 
 /**
- * The clinic lockup: the mark plus, usually, the name.
+ * The clinic lockup — the full "THE PET PHYSIO VET" wordmark with the
+ * illustration beneath it (public/logo-lockup.png, background removed so it sits
+ * on any surface). Used on the auth screens (login / forgot / reset).
  *
- * `logo.svg` is referenced through BASE_URL so it resolves both in the native
- * bundle (served from /) and on the web (served from /app/).
+ * The wordmark is part of the artwork, so this renders the image alone and needs
+ * no separate text label; `label` is the accessible name.
  *
- * SIZE FLOOR: do not use this below ~64px. The mark is a detailed
- * illustration -- a vet with a bird on her head, a dog and a cat -- and its
- * smallest features are a few units across on a 900-unit artboard. It was
- * tried in the sidebar header at 28px and the animals collapsed into noise, so
- * that spot keeps the paw glyph, which is drawn to read at 20px. Every use here
- * is 84px. If a small placement ever needs the mark rather than the paw, it
- * needs a purpose-drawn reduced version, not this one scaled down.
+ * Resolved through BASE_URL so it works both in the native bundle (served from /)
+ * and on the web (served from /app/).
  */
-export const BrandMark: React.FC<BrandMarkProps> = ({
-  size = 20,
-  label,
-  stacked = false,
-  labelSize,
-}) => {
-  const img = (
-    <img
-      src={`${import.meta.env.BASE_URL}logo.svg`}
-      alt=""
-      width={size}
-      height={size}
-      style={{ display: 'block', borderRadius: '50%', flexShrink: 0 }}
-    />
-  );
-
-  if (!label) return img;
-
-  return (
-    <span
-      style={{
-        display: 'flex',
-        flexDirection: stacked ? 'column' : 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: stacked ? '10px' : '8px',
-        ...(labelSize ? { fontSize: `${labelSize}px` } : {}),
-      }}
-    >
-      {img}
-      <span>{label}</span>
-    </span>
-  );
-};
+export const BrandMark: React.FC<BrandMarkProps> = ({ size = 84, label = 'The Pet Physio Vet' }) => (
+  <img
+    src={`${import.meta.env.BASE_URL}logo-lockup.png`}
+    alt={label}
+    style={{
+      display: 'block',
+      height: `${size * 2}px`,
+      width: 'auto',
+      maxWidth: '100%',
+      margin: '0 auto',
+      flexShrink: 0,
+    }}
+  />
+);

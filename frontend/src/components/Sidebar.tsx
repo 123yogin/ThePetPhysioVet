@@ -43,9 +43,6 @@ export const Sidebar: React.FC = () => {
   // Shares the ['me'] cache with RequireAuth, so this is normally already
   // warm and doesn't trigger an extra request.
   const { data: user } = useQuery({ queryKey: ['me'], queryFn: fetchMe });
-  const userName = user
-    ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
-    : null;
 
   // `|| []` is not redundant despite the closed union on User['role']: the
   // value comes from the API, not the type system. An unexpected role would
@@ -79,10 +76,14 @@ export const Sidebar: React.FC = () => {
     <aside className="sidebar" id="app-sidebar">
       <div className="sidebar-brand" style={{ paddingBottom: '12px' }}>
         <div style={{ fontSize: '18px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Icon name="paw" size={20} /> Pet Physio Vet
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--brown-600)', marginTop: '2px', fontWeight: '600', minHeight: '15px' }}>
-          {userName || ' '}
+          <img
+            src={`${import.meta.env.BASE_URL}logo.svg`}
+            alt=""
+            width={28}
+            height={28}
+            style={{ borderRadius: '50%', display: 'block', flexShrink: 0 }}
+          />
+          Pet Physio Vet
         </div>
       </div>
 

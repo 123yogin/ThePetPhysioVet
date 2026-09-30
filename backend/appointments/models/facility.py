@@ -21,9 +21,13 @@ from django.db.models import Q
 # one source of truth rather than each hard-coding "6" and "09:30" (the exact
 # mistake that once made every visit-type booking 400 -- see
 # appointment_options_view). Change them here and every surface follows.
-FACILITY_BEDS = 6
+# Capacity per one-hour slot. Three bookings may share a slot; the fourth is
+# turned away. (Named FACILITY_BEDS for historical reasons — it is now just the
+# per-slot capacity, no "beds" concept is surfaced to anyone.)
+FACILITY_BEDS = 3
 
-FACILITY_MAX_SLOTS_PER_BOOKING = 3
+# One slot per booking: a visitor reserves a single time, not several at once.
+FACILITY_MAX_SLOTS_PER_BOOKING = 1
 
 # How long a slot is held for the visitor while they fill in their details --
 # the "seats blocked for 10:00" countdown, minus the payment. After this the

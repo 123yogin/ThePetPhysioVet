@@ -71,9 +71,10 @@ def _validate_slots(data):
     if not slots:
         return None, problem(400, "No slot chosen", "Choose at least one time slot.")
     if len(slots) > FACILITY_MAX_SLOTS_PER_BOOKING:
+        n = FACILITY_MAX_SLOTS_PER_BOOKING
         return None, problem(
             400, "Too many slots",
-            f"You can book at most {FACILITY_MAX_SLOTS_PER_BOOKING} slots in one request.",
+            f"You can book at most {n} slot{'' if n == 1 else 's'} in one request.",
         )
     if [s for s in slots if s not in FACILITY_SLOT_INDEXES]:
         return None, problem(400, "Unknown slot", "One or more chosen slots are not offered.")
@@ -86,7 +87,7 @@ def _availability_payload(date_value):
     counts = _slot_counts(date_value)
     return {
         "date": date_value.isoformat(),
-        "beds_total": FACILITY_BEDS,
+        "capacity": FACILITY_BEDS,
         "max_slots_per_booking": FACILITY_MAX_SLOTS_PER_BOOKING,
         "slots": [
             {
@@ -94,8 +95,8 @@ def _availability_payload(date_value):
                 "start": s["start"],
                 "end": s["end"],
                 "label": slot_label(s["slot"]),
-                "beds_total": FACILITY_BEDS,
-                "beds_available": max(0, FACILITY_BEDS - counts.get(s["slot"], 0)),
+                "capacity": FACILITY_BEDS,
+                "available": max(0, FACILITY_BEDS - counts.get(s["slot"], 0)),
             }
             for s in FACILITY_SLOTS
         ],
