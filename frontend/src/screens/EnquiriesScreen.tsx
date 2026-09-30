@@ -301,6 +301,12 @@ export const EnquiriesScreen: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '16px' }}>
           {sorted.map((enq) => {
             const fullName = [enq.first_name, enq.last_name].filter(Boolean).join(' ') || 'Unknown';
+            // Which service the owner asked for, shown as a chip so a doctor can
+            // tell a Swimming request from a Grooming or Walking one at a glance
+            // rather than reading it out of the reason sentence.
+            const serviceLabel = enq.service
+              ? visitTypes.find((v) => v.value === enq.service)?.label || enq.service
+              : '';
             const isNew = enq.status === 'NEW';
             const isConverted = enq.status === 'CONVERTED';
             const appointmentId = enq.appointment?.id || enq.converted_appointment_id || '';
@@ -333,6 +339,7 @@ export const EnquiriesScreen: React.FC = () => {
                       <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '17px', fontWeight: '800', color: 'var(--brown-900)' }}>{fullName}</span>
                         <span className={`badge ${BADGE_CLASS[enq.status] || 'badge-neutral'}`}>{humanizeStatus(enq.status)}</span>
+                        {serviceLabel && <span className="badge badge-info">{serviceLabel}</span>}
                       </span>
 
                       <span style={{ display: 'block', fontSize: '14px', color: 'var(--brown-800)', fontWeight: '600', marginTop: '4px' }}>

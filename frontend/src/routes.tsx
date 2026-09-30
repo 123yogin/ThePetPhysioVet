@@ -29,12 +29,14 @@ import { RevenueScreen } from './screens/RevenueScreen';
 import { QueryInboxScreen } from './screens/QueryInboxScreen';
 import { EnquiriesScreen } from './screens/EnquiriesScreen';
 import { FacilityBookingsScreen } from './screens/FacilityBookingsScreen';
+import { BoardingScreen } from './screens/BoardingScreen';
 import { NotificationsSettingsScreen } from './screens/NotificationsSettingsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 
 import { OwnerHomeScreen } from './screens/OwnerHomeScreen';
 import { OwnerPetDetailScreen } from './screens/OwnerPetDetailScreen';
 import { OwnerAppointmentsScreen } from './screens/OwnerAppointmentsScreen';
+import { OwnerBookingsScreen } from './screens/OwnerBookingsScreen';
 import { OwnerBillingScreen } from './screens/OwnerBillingScreen';
 
 export const AppRoutes: React.FC = () => {
@@ -78,6 +80,7 @@ export const AppRoutes: React.FC = () => {
               <Route path="/revenue" element={<RevenueScreen />} />
               <Route path="/enquiries" element={<EnquiriesScreen />} />
               <Route path="/facility" element={<FacilityBookingsScreen />} />
+              <Route path="/boarding" element={<BoardingScreen />} />
               <Route path="/queries" element={<QueryInboxScreen />} />
               <Route path="/notifications-settings" element={<NotificationsSettingsScreen />} />
               <Route path="/profile" element={<ProfileScreen />} />
@@ -92,6 +95,7 @@ export const AppRoutes: React.FC = () => {
               }
             >
               <Route path="/owner/home" element={<OwnerHomeScreen />} />
+              <Route path="/owner/bookings" element={<OwnerBookingsScreen />} />
               <Route path="/owner/pets/:id" element={<OwnerPetDetailScreen />} />
               <Route path="/owner/appointments" element={<OwnerAppointmentsScreen />} />
               <Route path="/owner/billing" element={<OwnerBillingScreen />} />

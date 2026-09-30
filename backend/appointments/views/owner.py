@@ -15,6 +15,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from ..models import (
     Pet, Appointment, Invoice,
+    FacilityBooking, Enquiry, BoardingBooking,
+    slot_label, duration_label,
 )
 from ..permissions import IsOwner, IsObjectOwner
 from ..serializers import (
@@ -245,6 +247,90 @@ def owner_appointment_cancel_view(request, pk):
 def owner_invoices_view(request):
     invoices = Invoice.objects.filter(owner=request.user).order_by("-created_at")
     return Response(InvoiceSerializer(invoices, many=True).data)
+
+
+def _norm_phone(value):
+    """Last ten digits of a phone, so "+91 98765 43210", "098765 43210" and
+    "9876543210" all compare equal. Bookings made on the public site are typed
+    by hand in every format; the owner's stored number is too."""
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsOwner])
+def owner_bookings_view(request):
+    """Everything this owner started on the public site, gathered into their
+    own portal so a website booking is not a black box until the clinic calls.
+
+    Bookings are anonymous on the site (no login), so they are linked back to
+    the account by PHONE — the last ten digits of the number used at booking
+    matched against the owner's stored number. An account with no phone on file
+    cannot be matched, so it simply gets empty lists.
+
+    Three kinds, each in the inbox a doctor triages it from:
+      - facility : Physiotherapy one-hour slots (grouped per reference)
+      - requests : Swimming / Grooming / Walking enquiries (package / time in
+                   the reason)
+      - boarding : Indoor-facility stays (dates, duration, price, status)
+    """
+    mine = _norm_phone(request.user.phone)
+    if not mine:
+        return Response({"facility": [], "requests": [], "boarding": []})
+
+    # Facility slots — real bookings only (a HELD row is a transient lock with
+    # no details yet), grouped into one card per reference like the doctor sees.
+    groups = {}
+    for row in (
+        FacilityBooking.objects
+        .filter(status__in=["PENDING", "CONFIRMED", "COMPLETED"])
+        .order_by("date", "slot")
+    ):
+        if _norm_phone(row.owner_phone) != mine:
+            continue
+        g = groups.setdefault(row.reference, {
+            "reference": row.reference,
+            "date": row.date.isoformat(),
+            "slots": [],
+            "status": row.status,
+            "note": row.note,
+            "pet_name": row.pet_name,
+        })
+        g["slots"].append(slot_label(row.slot))
+    facility = list(groups.values())
+
+    requests = [
+        {
+            # Enquiries have no stored reference — the ENQ-XXXX shown to the
+            # owner is derived from the id, the same way the create view does it.
+            "reference": f"ENQ-{str(e.id)[:8].upper()}",
+            "pet_name": e.pet_name,
+            "service": e.service,
+            "reason": e.reason,
+            "status": e.status,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in Enquiry.objects.order_by("-created_at")
+        if _norm_phone(e.phone) == mine
+    ]
+
+    boarding = [
+        {
+            "reference": b.reference,
+            "pet_name": b.pet_name,
+            "check_in": b.check_in.isoformat(),
+            "check_out": b.check_out.isoformat(),
+            "duration": b.duration,
+            "duration_label": duration_label(b.duration),
+            "price": b.price,
+            "status": b.status,
+            "walk_times": b.walk_times or [],
+        }
+        for b in BoardingBooking.objects.order_by("-created_at")
+        if _norm_phone(b.owner_phone) == mine
+    ]
+
+    return Response({"facility": facility, "requests": requests, "boarding": boarding})
 
 
 @api_view(["GET"])

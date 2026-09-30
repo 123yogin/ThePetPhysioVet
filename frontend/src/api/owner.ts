@@ -5,6 +5,46 @@ export async function fetchOwnerPets(): Promise<Pet[]> {
   return http<Pet[]>('/owner/pets');
 }
 
+/** Everything this owner started on the public site, matched to their account
+    by phone — Physiotherapy slots, Swimming/Grooming/Walking requests, and
+    boarding stays, each with its live status. */
+export interface OwnerFacilityBooking {
+  reference: string;
+  date: string;
+  slots: string[];
+  status: string;
+  note: string;
+  pet_name: string;
+}
+export interface OwnerServiceRequest {
+  reference: string;
+  pet_name: string;
+  service: string;
+  reason: string;
+  status: string;
+  created_at: string;
+}
+export interface OwnerBoardingStay {
+  reference: string;
+  pet_name: string;
+  check_in: string;
+  check_out: string;
+  duration: string;
+  duration_label: string;
+  price: number;
+  status: string;
+  walk_times: string[];
+}
+export interface OwnerBookings {
+  facility: OwnerFacilityBooking[];
+  requests: OwnerServiceRequest[];
+  boarding: OwnerBoardingStay[];
+}
+
+export async function fetchOwnerBookings(): Promise<OwnerBookings> {
+  return http<OwnerBookings>('/owner/bookings');
+}
+
 export async function createOwnerPet(formData: FormData): Promise<Pet> {
   return http<Pet>('/owner/pets', {
     method: 'POST',

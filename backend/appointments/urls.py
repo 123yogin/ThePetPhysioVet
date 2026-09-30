@@ -27,11 +27,12 @@ from .views import (
     owner_pets_view, owner_pet_detail_view, owner_pet_diagnoses_view, owner_pet_history_view,
     owner_appointments_view, owner_appointment_accept_view, owner_appointment_reschedule_request_view,
     owner_appointment_cancel_view, owner_invoices_view, owner_invoice_detail_view,
-    owner_pet_queries_view,
+    owner_pet_queries_view, owner_bookings_view,
     # Enquiries
     enquiries_view, enquiry_convert_view, enquiry_dismiss_view,
     facility_availability_view, facility_bookings_view, facility_booking_status_view,
     facility_hold_view, facility_confirm_view,
+    boarding_availability_view, boarding_view, boarding_status_view, boarding_ending_soon_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -109,6 +110,7 @@ urlpatterns = [
     path("owner/pets/<uuid:pk>/diagnoses", owner_pet_diagnoses_view, name="owner-pet-diagnoses"),
     path("owner/pets/<uuid:pk>/history", owner_pet_history_view, name="owner-pet-history"),
     path("owner/pets/<uuid:pk>/queries", owner_pet_queries_view, name="owner-pet-queries"),
+    path("owner/bookings", owner_bookings_view, name="owner-bookings"),
     path("owner/appointments", owner_appointments_view, name="owner-appointments"),
     path(
         "owner/appointments/<uuid:pk>/accept",
@@ -137,4 +139,8 @@ urlpatterns = [
     path("facility/bookings/<str:reference>/status", facility_booking_status_view, name="facility-booking-status"),
     path("facility/holds", facility_hold_view, name="facility-holds"),
     path("facility/holds/<str:reference>/confirm", facility_confirm_view, name="facility-confirm"),
+    path("facility/boarding/availability", boarding_availability_view, name="boarding-availability"),
+    path("facility/boarding/ending-soon", boarding_ending_soon_view, name="boarding-ending-soon"),
+    path("facility/boarding", boarding_view, name="boarding"),
+    path("facility/boarding/<str:reference>/status", boarding_status_view, name="boarding-status"),
 ]
