@@ -63,9 +63,10 @@ export const Sidebar: React.FC = () => {
   // while the doctor is sitting on any page bumps the count on its own — the
   // Sidebar never remounts and the app has refetchOnWindowFocus off, so without
   // this the count would only move when the doctor acts on something or reloads.
-  // A minute is frequent enough for a booking inbox and cheap (three small GETs);
-  // acting on an item still updates instantly via query invalidation.
-  const INBOX_POLL_MS = 60_000;
+  // Five minutes is frequent enough for a booking inbox and keeps serverless
+  // function usage low on the free tier; acting on an item still updates
+  // instantly via query invalidation.
+  const INBOX_POLL_MS = 300_000;
 
   const { data: enquiriesData } = useQuery({
     queryKey: enquiriesQueryKey('NEW'),
@@ -100,7 +101,7 @@ export const Sidebar: React.FC = () => {
     queryKey: boardingEndingSoonQueryKey(),
     queryFn: () => fetchBoardingEndingSoon(),
     enabled: user?.role === 'DOCTOR',
-    refetchInterval: 30_000,
+    refetchInterval: 180_000,
   });
   const endingSoonCount = endingSoonData?.count ?? 0;
 

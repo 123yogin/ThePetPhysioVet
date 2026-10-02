@@ -77,9 +77,9 @@ export const OwnerBookingsScreen: React.FC = () => {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['ownerBookings'],
     queryFn: fetchOwnerBookings,
-    // Same idea as the clinic's inbox badges: the clinic may confirm or check a
-    // booking in while the owner has this page open, so keep it fresh.
-    refetchInterval: 60_000,
+    // Refresh every 5 min so the clinic's confirm/check-in shows up while the
+    // owner has this open, without heavy free-tier function usage.
+    refetchInterval: 300_000,
   });
 
   const total =
