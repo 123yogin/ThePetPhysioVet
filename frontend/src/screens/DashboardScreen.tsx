@@ -28,13 +28,13 @@ export const DashboardScreen: React.FC = () => {
     queryFn: fetchDashboardStats,
   });
 
-  // Boarding stays about to end (or overdue). Polled every 30s since it moves
-  // minute to minute — the moment a stay is inside the 15-minute window it
-  // surfaces here without a reload.
+  // Boarding stays about to end (or overdue). Polled every 3 min — frequent
+  // enough to catch the 15-minute window while keeping free-tier function usage
+  // low; actions still refresh it instantly via query invalidation.
   const { data: endingSoon } = useQuery({
     queryKey: boardingEndingSoonQueryKey(),
     queryFn: () => fetchBoardingEndingSoon(),
-    refetchInterval: 30_000,
+    refetchInterval: 180_000,
   });
   const endingSoonList = endingSoon?.results ?? [];
 
