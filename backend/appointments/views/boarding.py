@@ -128,7 +128,12 @@ def boarding_availability_view(request):
             "price": duration_price(duration),
             "available": max(0, BOARDING_BEDS - used),
         }
-    return Response(payload)
+    resp = Response(payload)
+    # The duration/walk menu + capacity is static config, so let the CDN cache
+    # it. A `selection` carries the LIVE free-bed count and must never be cached.
+    if "selection" not in payload:
+        resp["Cache-Control"] = "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400"
+    return resp
 
 
 def _boarding_create(request):
