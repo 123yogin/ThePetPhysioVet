@@ -68,6 +68,19 @@ def login_view(request):
     # django.contrib.auth.authenticate() — the actual credential check.
     # No username-only lookup, no role-based fallback, no anonymous default.
     user = authenticate(request, username=username, password=password)
+
+    # The sign-in form offers "Username or Email", but Django's ModelBackend
+    # only matches the USERNAME column, so an email address never authenticated
+    # — a user who knows only the email they reset their password with was
+    # locked out even with the correct password. If the identifier looks like an
+    # email and the username lookup failed, resolve it to the owning account and
+    # retry. `email` is unique among non-blank values (UserProfile.Meta), so
+    # this maps to at most one account; the password is still fully checked.
+    if user is None and "@" in username:
+        match = UserProfile.objects.filter(email__iexact=username).first()
+        if match:
+            user = authenticate(request, username=match.username, password=password)
+
     if user is None:
         return problem(401, "Invalid credentials", "Incorrect username or password.")
 
