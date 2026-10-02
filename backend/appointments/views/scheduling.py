@@ -208,7 +208,7 @@ def appointment_options_view(request):
     hardcode (or drift from) it again. Open to every caller — doctors and
     owners both book appointments, and the public site advertises the same list.
     """
-    return Response({
+    resp = Response({
         "visit_types": [
             {
                 "value": value,
@@ -222,3 +222,7 @@ def appointment_options_view(request):
             for value, label in Appointment.VISIT_TYPES
         ],
     })
+    # Static config (VISIT_TYPES is a code constant; a deploy busts any cached
+    # copy), and no per-user data — let the CDN serve it and spare the function.
+    resp["Cache-Control"] = "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400"
+    return resp
