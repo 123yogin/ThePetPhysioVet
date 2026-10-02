@@ -47,6 +47,16 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"] if DEBUG else [])
 
+# The clinic's own domains + the Vercel deployment are ALWAYS allowed, so a
+# missing or partial ALLOWED_HOSTS env var can never 400 the live site (which is
+# exactly what happened the first time the custom domain went live). Hosts carry
+# no scheme; SITE_ORIGINS below are the matching https origins for CSRF/CORS.
+SITE_HOSTS = ["thepetphysiovet.com", "www.thepetphysiovet.com", "petphysio.vercel.app"]
+SITE_ORIGINS = [f"https://{_h}" for _h in SITE_HOSTS]
+for _h in SITE_HOSTS:
+    if _h not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_h)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -359,6 +369,10 @@ CORS_ALLOWED_ORIGINS = _env_list(
     "CORS_ALLOWED_ORIGINS",
     default=["http://localhost:5173", "http://127.0.0.1:5173"] if DEBUG else [],
 )
+# Always permit the clinic's own https origins (see SITE_ORIGINS above).
+for _o in SITE_ORIGINS:
+    if _o not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_o)
 
 # The Capacitor WebView serves the app bundle from a fixed origin per platform.
 # These are constants of the native runtime rather than deployment choices, so
@@ -439,6 +453,10 @@ SIMPLE_JWT = {
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS", default=[])
+# Always trust the clinic's own https origins (see SITE_ORIGINS above).
+for _o in SITE_ORIGINS:
+    if _o not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_o)
 
 # Opting out of TLS. Only meaningful before a domain and certificate exist;
 # on that deployment every password, phone number and clinical note crosses
