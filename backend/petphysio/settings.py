@@ -277,6 +277,13 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", default=True)
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 
+# Clinic notifications: email the practice when a new enquiry/booking/boarding
+# arrives, so leads are seen without logging into the portal. Off by default —
+# turn on with NOTIFY_DOCTOR=true once DOCTOR_EMAIL and a working EMAIL_BACKEND
+# are set. A send failure must never break the booking (see appointments/notify.py).
+NOTIFY_DOCTOR = _env_bool("NOTIFY_DOCTOR", default=False)
+DOCTOR_EMAIL = os.environ.get("DOCTOR_EMAIL", "")
+
 if EMAIL_BACKEND.endswith("smtp.EmailBackend") and not EMAIL_HOST:
     raise ImproperlyConfigured(
         "EMAIL_BACKEND is set to the SMTP backend but EMAIL_HOST is empty. "

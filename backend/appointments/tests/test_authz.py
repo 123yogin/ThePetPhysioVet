@@ -360,8 +360,24 @@ class PermissionConfigTests(ApiTestCase):
     # other facility writes -- a visitor holding a bed cannot be expected to hold
     # a token. Both are the enquiries category (unauthenticated intake); neither
     # returns anyone else's data. Widened to exactly twelve, and no wider.
+    #
+    # AMENDED 2026-09-25 for the indoor-facility BOARDING feature (four views),
+    # the duration-priced overnight-stay sibling of the hourly slot booking.
+    # `boarding_availability_view` is the "nothing to protect" category like
+    # facility_availability: it returns the duration/walk menu + bed capacity, no
+    # patient or user data. `boarding_view` is the enquiries category exactly: one
+    # view backing a PUBLIC `POST /facility/boarding` (an owner requesting a stay
+    # cannot be expected to hold a token) and a DOCTOR-only `GET`, the GET half
+    # authenticating and enforcing IsDoctor by hand before doing anything.
+    # `boarding_status_view` and `boarding_ending_soon_view` are DECORATED AllowAny
+    # for the same split-posture reason but are doctor-only in practice: each
+    # authenticates and requires role == DOCTOR by hand before any read/mutation,
+    # so a public caller reaches nothing. Widened to exactly sixteen, and no wider.
     ALLOWANY_ALLOWLIST = [
-        "appointment_options_view", "enquiries_view",
+        "appointment_options_view",
+        "boarding_availability_view", "boarding_ending_soon_view",
+        "boarding_status_view", "boarding_view",
+        "enquiries_view",
         "facility_availability_view", "facility_booking_status_view",
         "facility_bookings_view", "facility_confirm_view",
         "facility_hold_view", "login_view",

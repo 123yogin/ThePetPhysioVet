@@ -21,6 +21,7 @@ from ..serializers import (
 )
 
 from ._shared import _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem, require_doctor
+from ..notify import notify_doctor
 
 # Same rationale/shape as the password-reset rate limits above: two
 # independent fixed windows (IP, email) so neither a targeted spam run
@@ -86,6 +87,22 @@ def _enquiry_create(request):
 
     enquiry = serializer.save()
     reference = f"ENQ-{str(enquiry.id)[:8].upper()}"
+    notify_doctor(
+        kind="enquiry",
+        subject=f"New enquiry — {enquiry.pet_name or 'a pet'} ({reference})",
+        headline=enquiry.pet_name or "New enquiry",
+        subhead=f"({enquiry.species_breed})" if enquiry.species_breed else "",
+        lead="Someone asked for help through the website.",
+        owner_phone=enquiry.phone,
+        rows=[
+            ("Owner", f"{enquiry.first_name} {enquiry.last_name}".strip()),
+            ("Phone", enquiry.phone),
+            ("Email", enquiry.email),
+            ("In their words", enquiry.reason),
+            ("Preferred date", enquiry.preferred_date or "—"),
+            ("Reference", reference),
+        ],
+    )
     return Response(
         {
             "id": str(enquiry.id),
