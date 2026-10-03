@@ -14,7 +14,7 @@ from .models import (
     Enquiry, FacilityBooking, BoardingBooking,
 )
 from .models import (
-    BOARDING_DURATION_KEYS, BOARDING_WALK_KEYS, duration_label, duration_price,
+    BOARDING_DURATION_KEYS, BOARDING_WALK_KEYS, duration_label,
 )
 
 # Upload validation constants (API_CONTRACT.md §3 "Diagnostic reports").
