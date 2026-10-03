@@ -63,6 +63,33 @@ class DoctorNotifyTests(ApiTestCase):
         self.assertIn("facility booking", mail.outbox[0].subject.lower())
         self.assertIn("Rex", mail.outbox[0].subject)
 
+    # --- the "Open in portal" button deep-links to the matching screen --------
+    @override_settings(FRONTEND_BASE_URL="https://www.thepetphysiovet.com/app")
+    def test_each_kind_links_to_its_own_portal_screen(self):
+        # enquiry -> /enquiries
+        self.anon().post(f"{API}/enquiries", ENQUIRY, format="json")
+        self.assertIn("https://www.thepetphysiovet.com/app/enquiries",
+                      mail.outbox[-1].alternatives[0][0])
+        # facility booking -> /facility
+        ref = self.anon().post(
+            f"{API}/facility/holds", {"date": _tomorrow(), "slots": [0]}, format="json"
+        ).data["reference"]
+        self.anon().post(
+            f"{API}/facility/holds/{ref}/confirm",
+            {"petName": "Rex", "ownerName": "O", "ownerPhone": "9000000001"}, format="json",
+        )
+        self.assertIn("https://www.thepetphysiovet.com/app/facility",
+                      mail.outbox[-1].alternatives[0][0])
+        # boarding -> /boarding
+        self.anon().post(
+            f"{API}/facility/boarding",
+            {"petName": "Coco", "ownerName": "O", "ownerPhone": "9000000002",
+             "checkIn": _tomorrow(), "duration": BOARDING_DURATION_KEYS[0], "termsAccepted": True},
+            format="json",
+        )
+        self.assertIn("https://www.thepetphysiovet.com/app/boarding",
+                      mail.outbox[-1].alternatives[0][0])
+
     def test_boarding_emails_the_clinic(self):
         r = self.anon().post(
             f"{API}/facility/boarding",
