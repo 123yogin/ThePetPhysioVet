@@ -1,0 +1,395 @@
+/*
+ * Motion layer.
+ *
+ * Movement only: nothing here changes a colour, font or layout at rest. Every
+ * effect is switched off under prefers-reduced-motion, and every "hidden
+ * before reveal" state is applied by JavaScript after hydration, so a visitor
+ * without JS (or a crawler) always gets the fully visible page.
+ */
+
+/* ---------- Scroll reveal ---------- */
+
+.rv-pending {
+  opacity: 0;
+  transform: translate3d(0, 34px, 0);
+  filter: blur(6px);
+}
+.rv-in {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition:
+    opacity 0.9s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 1.1s cubic-bezier(0.2, 0.7, 0.2, 1),
+    filter 0.9s ease;
+  transition-delay: var(--rv-delay, 0ms);
+}
+
+/* Image wipe: the frame opens upward from its bottom edge while the picture
+   inside settles from a slight zoom. */
+.rv-wipe.rv-pending {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  clip-path: inset(100% 0 0 0);
+}
+.rv-wipe.rv-pending img,
+.rv-wipe.rv-pending video {
+  transform: scale(1.25);
+}
+.rv-wipe.rv-in {
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 1.2s cubic-bezier(0.7, 0, 0.2, 1);
+  transition-delay: var(--rv-delay, 0ms);
+}
+.rv-wipe.rv-in img,
+.rv-wipe.rv-in video {
+  transition: transform 1.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ---------- Split headline ---------- */
+
+/* Each word sits in a clipping box and rises into it. */
+.sw-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  /* Room for descenders (g, y, p) so the clip never trims them. */
+  padding-bottom: 0.18em;
+  margin-bottom: -0.18em;
+}
+.sw-inner {
+  display: inline-block;
+}
+.sw-pending .sw-inner {
+  transform: translate3d(0, 110%, 0) rotate(4deg);
+}
+.sw-in .sw-inner {
+  transform: none;
+  transition: transform 1s cubic-bezier(0.2, 0.75, 0.15, 1);
+  transition-delay: calc(var(--sw-i, 0) * 55ms + var(--rv-delay, 0ms));
+}
+
+/* ---------- Hero entrance (plays on first paint, no JS needed) ---------- */
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translate3d(0, 40px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes hero-line {
+  from { transform: translate3d(0, 110%, 0) rotate(3deg); }
+  to   { transform: none; }
+}
+@keyframes hero-wipe {
+  from { clip-path: inset(0 0 0 100%); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+@keyframes hero-zoom {
+  from { transform: scale(1.2); }
+  to   { transform: scale(1); }
+}
+
+.hero-rise { animation: hero-rise 1s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--intro-wait, 0ms) + var(--d, 0ms)); }
+.hero-line { display: block; overflow: hidden; padding-bottom: 0.14em; margin-bottom: -0.14em; }
+.hero-line > span { display: inline-block; animation: hero-line 1.1s cubic-bezier(0.2, 0.75, 0.15, 1) both; animation-delay: calc(var(--intro-wait, 0ms) + var(--d, 0ms)); }
+.hero-wipe { animation: hero-wipe 1.4s cubic-bezier(0.7, 0, 0.2, 1) both; animation-delay: var(--intro-wait, 0ms); }
+.hero-wipe > * { animation: hero-zoom 2.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--intro-wait, 0ms); }
+
+/* While the intro plays, the hero waits for it. */
+html.intro { --intro-wait: 1500ms; }
+
+/* ---------- Intro overlay (markup lives in index.html) ---------- */
+
+@keyframes intro-out {
+  0%, 82% { opacity: 1; visibility: visible; }
+  100%    { opacity: 0; visibility: hidden; }
+}
+@keyframes intro-half-l {
+  from { transform: translateX(-34vw) rotate(-14deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@keyframes intro-half-r {
+  from { transform: translateX(34vw) rotate(14deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@keyframes intro-ticks {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+@keyframes intro-lift {
+  to { transform: translateY(-100%); }
+}
+
+#intro { display: none; }
+html.intro #intro {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-bg);
+  animation: intro-out 2.1s ease forwards;
+}
+html.intro #intro.is-done {
+  animation: intro-lift 0.8s cubic-bezier(0.7, 0, 0.2, 1) forwards;
+}
+#intro .intro-mark { position: relative; width: min(180px, 40vw); aspect-ratio: 1; }
+#intro .intro-mark img { position: absolute; inset: 0; width: 100%; height: 100%; }
+#intro .intro-l { clip-path: inset(0 50% 0 0); animation: intro-half-l 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+#intro .intro-r { clip-path: inset(0 0 0 50%); animation: intro-half-r 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* Centred by spanning the full width, not by translateX(-50%): the hero-rise
+   animation below owns `transform` (fill-mode both), so a centring transform
+   was overwritten and the word started at the midpoint, off to the right of
+   the logo. The left padding balances the trailing letter-spacing so the
+   letters, not their box, sit on the centre line. */
+#intro .intro-word {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% + min(120px, 26vw));
+  text-align: center;
+  padding-left: 0.3em;
+  font: 500 12px/1 var(--f-body), sans-serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  white-space: nowrap;
+  animation: hero-rise 0.9s 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+#intro .intro-ticks {
+  position: absolute;
+  left: 32px;
+  bottom: 32px;
+  display: flex;
+  gap: 3px;
+  animation: intro-ticks 1.6s ease-out both;
+}
+#intro .intro-ticks i { display: block; width: 2px; height: 12px; background: var(--c-accent); }
+
+/* ---------- Nav text roll ---------- */
+
+.roll {
+  display: inline-flex;
+  flex-direction: column;
+  height: 1.3em;
+  line-height: 1.3;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+.roll > span { transition: transform 0.45s cubic-bezier(0.7, 0, 0.2, 1); }
+a:hover > .roll > span,
+a:focus-visible > .roll > span,
+button:hover > .roll > span,
+button:focus-visible > .roll > span {
+  transform: translateY(-100%);
+}
+
+/* ---------- Marquee band ---------- */
+
+/* Outlined type. Plus Jakarta is served as a variable font whose glyphs are
+   built from overlapping contours, so a plain text-stroke draws every inner
+   overlap (a line through each "e"). Stroking first and then filling with the
+   band's own background covers the inner half of the stroke and every
+   overlap, leaving a clean 1px outline. */
+.mq-outline {
+  color: var(--c-bg);
+  -webkit-text-stroke: 2px var(--c-ink);
+  paint-order: stroke fill;
+}
+
+/* ---------- Reduced motion: everything off ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-pending, .rv-wipe.rv-pending { opacity: 1 !important; transform: none !important; filter: none !important; clip-path: none !important; }
+  .rv-wipe img, .rv-wipe video { transform: none !important; }
+  .sw-pending .sw-inner { transform: none !important; }
+  .hero-rise, .hero-line > span, .hero-wipe, .hero-wipe > * { animation: none !important; }
+  html.intro #intro { display: none !important; }
+  .roll > span { transition: none !important; }
+}
+
+/* ---------- Heartbeat line (section labels) ---------- */
+
+.pulse-line {
+  width: 44px;
+  height: 11px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.pulse-line path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.pulse-line.is-drawn path:first-child {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1.4s cubic-bezier(0.6, 0, 0.2, 1) 0.15s;
+}
+/* A bright segment that travels the trace every few seconds, like a monitor. */
+@keyframes pulse-blip {
+  0%   { stroke-dashoffset: 112; opacity: 0; }
+  8%   { opacity: 1; }
+  45%  { stroke-dashoffset: -12; opacity: 1; }
+  50%, 100% { stroke-dashoffset: -12; opacity: 0; }
+}
+.pulse-line .pulse-blip {
+  stroke-width: 2.2;
+  stroke-dasharray: 12 100;
+  stroke-dashoffset: 112;
+  opacity: 0;
+  filter: drop-shadow(0 0 2px currentColor);
+}
+.pulse-line.is-drawn .pulse-blip {
+  animation: pulse-blip 4.2s ease-in-out 1.6s infinite;
+}
+
+/* ---------- Page curtain ---------- */
+
+@keyframes curtain-lift {
+  0%, 30% { transform: translateY(0); }
+  100%    { transform: translateY(-100%); visibility: hidden; }
+}
+@keyframes curtain-mark {
+  0%   { opacity: 0; transform: scale(0.8) rotate(-20deg); }
+  25%  { opacity: 1; transform: scale(1) rotate(0); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+.page-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-bg);
+  pointer-events: none;
+  animation: curtain-lift 0.95s cubic-bezier(0.7, 0, 0.2, 1) forwards;
+}
+.page-curtain img {
+  width: 72px;
+  height: 72px;
+  animation: curtain-mark 0.95s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-line path { stroke-dashoffset: 0 !important; transition: none !important; }
+  .pulse-line .pulse-blip { display: none; }
+  .page-curtain { display: none; }
+}
+
+/* ---------- Scroll cue ---------- */
+
+@keyframes cue-step {
+  0%, 100% { opacity: 0; }
+  20%, 55% { opacity: 0.85; }
+}
+.scroll-cue-paw {
+  opacity: 0;
+  animation: cue-step 2.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-cue-paw { animation: none; opacity: 0.6; }
+}
+
+/* ---------- Overlay entrances ----------
+
+   Three components already carry `animate-in fade-in` / `slide-in-from-top`,
+   classes from the tailwindcss-animate plugin -- which this project never
+   installed, so they did nothing and every overlay snapped open. Defining
+   them here makes the authors' intent real. `.ov-panel` gives any dialog
+   body a short rise-and-settle. */
+
+@keyframes ov-fade  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ov-drop  { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+@keyframes ov-rise  { from { opacity: 0; transform: translateY(28px) scale(0.97); } to { opacity: 1; transform: none; } }
+
+.animate-in.fade-in { animation: ov-fade 0.3s ease both; }
+.animate-in.slide-in-from-top { animation: ov-drop 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.animate-in.fade-in > :first-child,
+.ov-panel { animation: ov-rise 0.55s cubic-bezier(0.2, 0.75, 0.15, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in, .animate-in > :first-child, .ov-panel { animation: none !important; }
+}
+
+/* ---------- Journey step swap ---------- */
+
+@keyframes step-swap {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+.step-swap { animation: step-swap 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .step-swap { animation: none; } }
+
+/* ---------- Icon nudge on card hover ---------- */
+
+@keyframes icon-nudge {
+  0%, 100% { transform: rotate(0) scale(1); }
+  30%      { transform: rotate(-10deg) scale(1.08); }
+  60%      { transform: rotate(6deg) scale(1.04); }
+}
+.group:hover .icon-nudge > svg,
+.group:focus-visible .icon-nudge > svg {
+  animation: icon-nudge 0.7s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .icon-nudge > svg { animation: none; }
+}
+
+/* ---------- Footer link underline ---------- */
+
+/* Text links in the footer draw an underline from the left on hover. Styled
+   (filled) buttons are excluded by their background classes. */
+footer a:not([class*="bg-"]) {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0 1px;
+  transition: background-size 0.45s cubic-bezier(0.7, 0, 0.2, 1), color 0.3s ease;
+}
+footer a:not([class*="bg-"]):hover,
+footer a:not([class*="bg-"]):focus-visible {
+  background-size: 100% 1px;
+}
+
+/* ---------- Scroll ticks ---------- */
+.scroll-ticks > span { background: color-mix(in oklab, var(--c-accent) 22%, transparent); transition: background-color 0.3s ease; }
+.scroll-ticks > span.is-lit { background: var(--c-accent); }
+
+/* ---------- Paw trail ---------- */
+.paw-trail > svg {
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + var(--paw-y, 0px))) rotate(90deg) scale(0.4);
+  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.paw-trail > svg.is-on {
+  opacity: 0.75;
+  transform: translate(-50%, calc(-50% + var(--paw-y, 0px))) rotate(90deg) scale(1);
+}
+/* Vertical trail (the journey timeline): paws walk down the rail. */
+.paw-trail.is-vertical > svg {
+  transform: translate(calc(-50% + var(--paw-y, 0px)), -50%) rotate(180deg) scale(0.4);
+}
+.paw-trail.is-vertical > svg.is-on {
+  transform: translate(calc(-50% + var(--paw-y, 0px)), -50%) rotate(180deg) scale(1);
+}
+
+/* Journey timeline step markers (lit by the motion engine). */
+.step-dot { background: var(--c-card); color: var(--c-ink); border-color: var(--c-line); }
+.step-dot.is-lit { background: var(--c-ink); color: var(--c-bg); border-color: var(--c-ink); }
+
+/* ---------- Mobile action bar ---------- */
+.mobile-action-bar {
+  transform: translateY(calc(100% + 1.5rem));
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mobile-action-bar[data-shown='true'] { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .mobile-action-bar { transition: none; }
+}

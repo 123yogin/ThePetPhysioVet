@@ -1,0 +1,196 @@
+@import "tailwindcss";
+
+/* Design tokens.
+
+   Every colour and typeface on the site reads from these. They used to be
+   hex literals repeated in ~700 class names (text-[#3C2117] x121 ...), which
+   made any palette or type change a find-and-replace across 26 files. The
+   defaults below are exactly those old values, so nothing changes visually;
+   the design lab (src/lab) overrides them to audition alternatives. */
+:root {
+  --c-ink: #3c2117;
+  --c-accent: #84523e;
+  --c-accent-soft: #ffbda5;
+  --c-body: #504440;
+  --c-line: #d4c3bd;
+  --c-card: #ffffff;
+  --c-surface: #f8f3ed;
+  --c-surface-2: #f2ede7;
+  --c-surface-3: #e6e2dc;
+  --c-bg: #fef9f2;
+  --c-hover: #ece7e2;
+  --c-mute: #82746f;
+  --c-mute-2: #a8988f;
+  --c-on-ink: #ffffff;
+  /* The hero's own surface; defaults to the page surface. */
+  --c-hero: #fbe9d6;
+  /* Chosen in the design lab (see src/lab): Fraunces with its SOFT axis for
+     warmth, Figtree for friendly, legible body text, Instrument-style italic
+     accents from Fraunces' own italic. */
+  --f-display: 'Fraunces', serif;
+  --f-body: 'Figtree', sans-serif;
+  --f-italic: 'Fraunces', serif;
+  --f-display-weight: 350;
+  --f-display-tracking: -0.02em;
+  /* Round shape system: soft cards, pill buttons and chips. */
+  --lab-card: 24px;
+  --lab-btn: 999px;
+  --lab-img: 18px;
+}
+
+
+/* Continuous horizontal drift for the gallery rows.
+
+   The row renders its items twice and shifts by half its own width, so the
+   second copy sits exactly where the first began and the loop has no seam.
+
+   The `- 0.75rem` is not a fudge: the row uses gap-6 (1.5rem), and a plain
+   -50% lands half a gap out, which shows up as a visible stutter once per
+   cycle. Change the gap and this has to change with it. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-50% - 0.75rem)); }
+}
+
+@theme {
+  --animate-marquee: marquee 38s linear infinite;
+  --color-primary: #3C2117;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #3c2117;
+  --color-on-primary-container: #ae8678;
+  --color-secondary: #84523e;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #ffbda5;
+  --color-on-secondary-container: #7a4a37;
+  --color-tertiary: #230e00;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #411f00;
+  --color-on-tertiary-container: #bc8353;
+  --color-surface: #fef9f2;
+  --color-surface-dim: #ded9d4;
+  --color-surface-bright: #fef9f2;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f8f3ed;
+  --color-surface-container: #f2ede7;
+  --color-surface-container-high: #ece7e2;
+  --color-surface-container-highest: #e6e2dc;
+  --color-surface-variant: #e6e2dc;
+  --color-on-surface: #1d1b18;
+  --color-on-surface-variant: #504440;
+  --color-outline: #82746f;
+  --color-outline-variant: #d4c3bd;
+  --color-background: #fef9f2;
+  --color-on-background: #1d1b18;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --font-display-lg: 'Plus Jakarta Sans', sans-serif;
+  --font-headline-md: 'Plus Jakarta Sans', sans-serif;
+  --font-headline-sm: 'Plus Jakarta Sans', sans-serif;
+  --font-body-lg: 'Inter', sans-serif;
+  --font-body-md: 'Inter', sans-serif;
+  --font-label-caps: 'Inter', sans-serif;
+}
+
+/* Material Symbols font settings */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Typography and Spacing Utility Helpers */
+.font-display-lg {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 64px;
+  line-height: 72px;
+  letter-spacing: -0.03em;
+  font-weight: 300;
+}
+
+.font-display-lg-mobile {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 40px;
+  line-height: 48px;
+  letter-spacing: -0.02em;
+  font-weight: 300;
+}
+
+.font-headline-md {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 48px;
+  line-height: 56px;
+  letter-spacing: -0.02em;
+  font-weight: 300;
+}
+
+.font-headline-sm {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 500;
+}
+
+.font-body-lg {
+  font-family: 'Inter', sans-serif;
+  font-size: 18px;
+  line-height: 32px;
+  font-weight: 300;
+}
+
+.font-body-md {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  line-height: 28px;
+  font-weight: 300;
+}
+
+.font-label-caps {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.max-w-container-max {
+  max-width: 1280px;
+}
+
+.px-gutter {
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+@media (max-width: 640px) {
+  .px-gutter {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+.py-section-padding {
+  padding-top: 120px;
+  padding-bottom: 120px;
+}
+
+@media (max-width: 768px) {
+  .py-section-padding {
+    padding-top: 80px;
+    padding-bottom: 80px;
+  }
+}
+

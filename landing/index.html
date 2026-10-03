@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth" data-lab-font="frauncesfig" data-lab-shape="round" data-lab-btn="wipe" data-lab-eye="pill" data-lab-pal="peachhero">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Per-route <title>, description, canonical, Open Graph, Twitter and JSON-LD are
+      injected at build time by scripts/prerender.mjs (from src/seo/head.ts) and kept
+      in sync on client navigation by the same generator. The title below is only a
+      fallback for the dev server, where prerendering does not run.
+    -->
+    <title>The Pet Physio Vet</title>
+
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#fef9f2" />
+
+    <!--
+      Icons. These files existed in public/ but nothing ever linked to them, so
+      the browser tab fell back to a blank default.
+
+      Same mark, and the same wiring, as the clinic app (frontend/index.html):
+      an SVG icon the browser scales to any density, and a 1024px PNG for the
+      iOS home screen. Keeping the two products on one icon means a user who
+      has both open sees one brand, not two.
+
+      favicon-32.png and apple-touch-icon.png are deliberately NOT linked: they
+      still hold the older paw mark, and a fallback that shows a different logo
+      is worse than no fallback.
+
+      The ?v= is not decoration. Vite fingerprints what it bundles, but files in
+      public/ are copied verbatim, so the icon URL never changes when the art
+      does -- and a browser caches a favicon far more stubbornly than a page.
+      This origin kept serving the previous paw from cache after the file itself
+      had been replaced. Bump the number whenever the mark changes.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/logo.svg?v=4" />
+    <link rel="apple-touch-icon" href="/logo.png?v=3" />
+
+    <!--
+      Fonts: preconnect saves a round trip on the render-blocking stylesheet, and
+      display=swap keeps text painting immediately instead of blocking LCP on the
+      font file. Both stylesheets are Google Fonts, the one external host allowed here.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,50..100;1,9..144,300..700,50..100&family=Figtree:wght@300..700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- The Material Symbols icon font was linked here but no component uses it:
+         it was a render-blocking request (~460 ms in a trace) for nothing. -->
+
+    <!--
+      Intro gate. Runs before first paint so the intro overlay and the hero's
+      delayed entrance agree from the very first frame. Home page only, once
+      per browser session, never under reduced motion. If storage is blocked
+      it simply shows. The overlay's exit is a CSS animation, so it clears
+      itself even if the app never hydrates.
+    -->
+    <style>#intro{display:none}html.intro #intro{display:flex;position:fixed;inset:0;z-index:1000;background:#fef9f2}</style>
+    <script>
+      (function () {
+        try {
+          if (location.pathname !== '/') return;
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          if (sessionStorage.getItem('pp-intro')) return;
+          sessionStorage.setItem('pp-intro', '1');
+        } catch (e) {}
+        document.documentElement.classList.add('intro');
+      })();
+    </script>
+
+  </head>
+  <body
+    class="bg-(--c-bg) text-(--c-ink) antialiased selection:bg-(--c-ink) selection:text-white min-h-screen flex flex-col font-(family-name:--f-body)"
+  >
+    <div id="intro" aria-hidden="true">
+      <div class="intro-mark">
+        <img class="intro-l" src="/logo.svg?v=4" alt="" width="180" height="180" />
+        <img class="intro-r" src="/logo.svg?v=4" alt="" width="180" height="180" />
+      </div>
+      <span class="intro-word">The Pet Physio Vet</span>
+      <div class="intro-ticks"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
