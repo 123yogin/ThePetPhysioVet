@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOwnerBookings } from '../api/owner';
 import { Icon } from '../components/Icon';
-import { friendlyDate } from '../lib/labels';
+import { friendlyDate, formatMoney } from '../lib/labels';
 
 /**
  * "My Bookings" — the owner's own view of everything they booked with the
@@ -16,7 +16,6 @@ import { friendlyDate } from '../lib/labels';
  * app's own "Book Appointment" on My Pets.
  */
 
-const rupee = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
 // The owner does not think in HELD / NEW / CONVERTED — say what each means for
 // them, and pick a badge colour that reads at a glance.
@@ -155,7 +154,7 @@ export const OwnerBookingsScreen: React.FC = () => {
                   <Icon name="clock" size={12} /> {friendlyDate(b.check_in)}
                   {b.check_out !== b.check_in ? ` → ${friendlyDate(b.check_out)}` : ''} · {b.duration_label}
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>{rupee(b.price)}</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>{formatMoney(b.price)}</div>
                 {b.walk_times.length > 0 && (
                   <div className="page-sub" style={{ fontSize: '12px' }}>Walks: {b.walk_times.join(', ')}</div>
                 )}
