@@ -35,6 +35,41 @@ def problem(status_code, title, detail=None):
     return Response(body, status=status_code)
 
 
+def maybe_doctor(request):
+    """Return the DOCTOR user if the request carries a valid doctor token, else
+    None. Never raises — a stale/absent token just means "treat as public".
+    Shared by the public/doctor split-posture views (enquiries, facility, boarding)."""
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    try:
+        result = JWTAuthentication().authenticate(request)
+    except AuthenticationFailed:
+        return None
+    if result is None:
+        return None
+    user, _token = result
+    return user if getattr(user, "role", None) == "DOCTOR" else None
+
+
+def require_doctor(request):
+    """Doctor-only gate for @authentication_classes([]) views (which don't populate
+    request.user). Returns (user, None) on success, or (None, problem_response) to
+    return directly. One copy for every view that hand-authenticates a doctor —
+    was duplicated verbatim in boarding, enquiries and facility."""
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    try:
+        result = JWTAuthentication().authenticate(request)
+    except AuthenticationFailed as exc:
+        return None, problem(401, "Not signed in", str(exc.detail) if exc.detail else "Invalid or expired token.")
+    if result is None:
+        return None, problem(401, "Not signed in", "Authentication credentials were not provided.")
+    user, _token = result
+    if getattr(user, "role", None) != "DOCTOR":
+        return None, problem(403, "Not allowed", "This action requires a doctor account.")
+    return user, None
+
+
 def _first_error_detail(errors):
     """Flatten a DRF serializer `.errors` dict into one human-readable
     string for a `problem()` `detail` — see `problem()`'s docstring:

@@ -35,7 +35,7 @@ from ..serializers import (
     FacilityBookingCreateSerializer, FacilityBookingSerializer,
     FacilityHoldSerializer, FacilityConfirmSerializer,
 )
-from ._shared import _client_ip, _first_error_detail, _rate_limited, problem
+from ._shared import _client_ip, _first_error_detail, _rate_limited, problem, require_doctor
 
 # Same two-window rationale as the enquiry intake: one window per IP, one per
 # phone, so neither a spray from one source nor a targeted run against one
@@ -313,17 +313,9 @@ def facility_bookings_view(request):
     if request.method == "POST":
         return _facility_create(request)
 
-    from rest_framework_simplejwt.authentication import JWTAuthentication
-    from rest_framework.exceptions import AuthenticationFailed
-    try:
-        auth_result = JWTAuthentication().authenticate(request)
-    except AuthenticationFailed as exc:
-        return problem(401, "Not signed in", str(exc.detail) if exc.detail else "Invalid or expired token.")
-    if auth_result is None:
-        return problem(401, "Not signed in", "Authentication credentials were not provided.")
-    user, _token = auth_result
-    if getattr(user, "role", None) != "DOCTOR":
-        return problem(403, "Not allowed", "This action requires a doctor account.")
+    user, err = require_doctor(request)
+    if err:
+        return err
     request.user = user
     return _facility_list(request)
 
@@ -459,17 +451,9 @@ def facility_booking_status_view(request, reference):
     Confirms or cancels every slot in a booking group at once. Cancelling frees
     the beds (they stop counting against capacity the instant the status flips).
     """
-    from rest_framework_simplejwt.authentication import JWTAuthentication
-    from rest_framework.exceptions import AuthenticationFailed
-    try:
-        auth_result = JWTAuthentication().authenticate(request)
-    except AuthenticationFailed as exc:
-        return problem(401, "Not signed in", str(exc.detail) if exc.detail else "Invalid or expired token.")
-    if auth_result is None:
-        return problem(401, "Not signed in", "Authentication credentials were not provided.")
-    user, _token = auth_result
-    if getattr(user, "role", None) != "DOCTOR":
-        return problem(403, "Not allowed", "This action requires a doctor account.")
+    user, err = require_doctor(request)
+    if err:
+        return err
 
     new_status = str(request.data.get("status", "")).upper()
     allowed = {"CONFIRMED", "CANCELLED", "COMPLETED"}
