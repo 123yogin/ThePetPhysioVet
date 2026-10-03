@@ -26,9 +26,20 @@ _EYEBROW = {
 }
 
 
-def _portal_url() -> str:
-    base = (getattr(settings, "FRONTEND_BASE_URL", "") or "").rstrip("/")
-    return base or "/app"
+# Which portal screen each kind opens. FRONTEND_BASE_URL already points at the
+# portal root (e.g. https://…/app), so the "Open in portal" button lands the
+# clinic straight on the matching inbox/tab (see frontend/src/routes.tsx) rather
+# than the generic dashboard.
+_PORTAL_PATH = {
+    "enquiry": "/enquiries",
+    "booking": "/facility",
+    "boarding": "/boarding",
+}
+
+
+def _portal_url(kind="") -> str:
+    base = (getattr(settings, "FRONTEND_BASE_URL", "") or "").rstrip("/") or "/app"
+    return base + _PORTAL_PATH.get(kind, "")
 
 
 def _esc(v) -> str:
@@ -92,7 +103,7 @@ def notify_doctor(*, kind, subject, headline, lead, rows, subhead="", owner_phon
         return
     try:
         fg, bg, eyebrow_text = _EYEBROW.get(kind, ("#ffffff", "#35251b", "New activity"))
-        portal_url = _portal_url()
+        portal_url = _portal_url(kind)
         html_body = _render_html(fg, bg, eyebrow_text, headline, subhead, lead, rows, portal_url, owner_phone)
         text_body = _render_text(eyebrow_text, headline, subhead, lead, rows, portal_url)
         msg = EmailMultiAlternatives(subject=subject, body=text_body, to=[to])
