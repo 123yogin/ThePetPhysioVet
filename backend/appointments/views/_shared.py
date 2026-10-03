@@ -98,6 +98,15 @@ def _rate_limited(key, limit, window_seconds):
 
 
 def _client_ip(request):
+    # NOTE (known limitation, deliberately NOT "fixed" with a spoofable header):
+    # behind Cloudflare -> Vercel, REMOTE_ADDR is the edge, so per-IP limits share
+    # a coarse bucket. Trusting CF-Connecting-IP or the left-most X-Forwarded-For
+    # is WORSE — the *.vercel.app origin is directly reachable, so a client can
+    # forge those and bypass/poison every per-IP limit. A coarse-but-unspoofable
+    # key beats a precise-but-forgeable one. Proper fix needs (a) a shared rate-
+    # limit cache — today it's per-instance LocMemCache, so the limit is already
+    # soft on serverless — and (b) a header the trusted edge sets and clients
+    # cannot (e.g. x-vercel-forwarded-for) with the origin locked to that edge.
     return request.META.get("REMOTE_ADDR") or "unknown"
 
 

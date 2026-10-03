@@ -100,6 +100,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
     escalate to DOCTOR and reuse their existing JWT to read every patient's
     PII. `is_staff`/`is_superuser` are deliberately not exposed as fields at
     all (see also SignupSerializer), so they can't be mass-assigned either.
+
+    Known-issue #9 (IDOR via mutable identity key): `phone` is read-only here.
+    The owner portal reconstructs which bookings belong to a caller by matching
+    their account `phone` against the phone on anonymous bookings (see
+    owner.owner_bookings_view). If owners could PATCH their own `phone`, anyone
+    could set it to a victim's number and read that victim's bookings and PII.
+    The phone is captured once at signup (SignupSerializer, required) and is an
+    identity key, so it must not be self-mutable without verification. A
+    verified self-service change (phone OTP) would be the way to reopen editing.
     """
 
     class Meta:
@@ -108,12 +117,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "id", "username", "email", "first_name", "last_name",
             "role", "clinic_name", "clinic_address", "clinic_phone", "phone"
         ]
-        read_only_fields = ["id", "username", "role"]
-
-    def validate_phone(self, value):
-        return normalise_phone(value)
+        read_only_fields = ["id", "username", "role", "phone"]
 
     def validate_clinic_phone(self, value):
+        # clinic_phone is a doctor's clinic contact number shown on the site,
+        # not an ownership key, so it stays editable (and normalised).
         return normalise_phone(value)
 
 
