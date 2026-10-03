@@ -36,6 +36,7 @@ from ..serializers import (
     FacilityHoldSerializer, FacilityConfirmSerializer,
 )
 from ._shared import _client_ip, _first_error_detail, _rate_limited, problem, require_doctor
+from ..notify import notify_doctor
 
 # Same two-window rationale as the enquiry intake: one window per IP, one per
 # phone, so neither a spray from one source nor a targeted run against one
@@ -243,6 +244,22 @@ def _facility_create(request):
     if err:
         return err
 
+    notify_doctor(
+        kind="booking",
+        subject=f"New facility booking — {data['pet_name']} ({reference})",
+        headline=data["pet_name"],
+        subhead="(Indoor facility)",
+        lead="A new facility booking was just requested on the website.",
+        owner_phone=phone,
+        rows=[
+            ("Owner", data["owner_name"]),
+            ("Phone", phone),
+            ("Date", data["date"].isoformat()),
+            ("Slots", ", ".join(slot_label(s) for s in slots)),
+            ("Reference", reference),
+            ("Status", "Pending"),
+        ],
+    )
     return Response(
         {
             "reference": reference,
@@ -426,6 +443,22 @@ def facility_confirm_view(request, reference):
         )
 
     slots = sorted(r.slot for r in rows)
+    notify_doctor(
+        kind="booking",
+        subject=f"New facility booking — {data['pet_name']} ({reference})",
+        headline=data["pet_name"],
+        subhead="(Indoor facility)",
+        lead="A new facility booking was just confirmed on the website.",
+        owner_phone=data["owner_phone"],
+        rows=[
+            ("Owner", data["owner_name"]),
+            ("Phone", data["owner_phone"]),
+            ("Date", rows[0].date.isoformat()),
+            ("Slots", ", ".join(slot_label(s) for s in slots)),
+            ("Reference", reference),
+            ("Status", "Pending"),
+        ],
+    )
     return Response(
         {
             "reference": reference,

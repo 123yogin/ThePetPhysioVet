@@ -33,6 +33,7 @@ from ..models import (
     BOARDING_WALK_OPTIONS, duration_days, duration_price, duration_label,
 )
 from ..serializers import BoardingCreateSerializer, BoardingSerializer
+from ..notify import notify_doctor
 from ._shared import (
     _client_ip, _first_error_detail, _rate_limited, problem,
     maybe_doctor as _maybe_doctor, require_doctor as _require_doctor,
@@ -151,6 +152,24 @@ def _boarding_create(request):
         )
         booking.save()  # derives check_out + price
 
+    notify_doctor(
+        kind="boarding",
+        subject=f"New boarding — {data['pet_name']} ({reference})",
+        headline=data["pet_name"],
+        subhead=f"({duration_label(data['duration'])})",
+        lead="A new boarding stay was just requested on the website.",
+        owner_phone=data["owner_phone"],
+        rows=[
+            ("Owner", data["owner_name"]),
+            ("Phone", data["owner_phone"]),
+            ("Check-in", check_in.isoformat()),
+            ("Check-out", booking.check_out.isoformat()),
+            ("Duration", duration_label(data["duration"])),
+            ("Price", f"₹{booking.price}"),
+            ("Reference", reference),
+            ("Status", booking.status),
+        ],
+    )
     return Response(
         {
             "reference": reference,

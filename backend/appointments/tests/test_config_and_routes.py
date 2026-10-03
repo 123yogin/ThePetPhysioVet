@@ -40,7 +40,7 @@ class SecretKeyFailFastTests(SimpleTestCase):
         self.assertIn("ImproperlyConfigured", proc.stderr)
 
     def test_settings_source_contains_no_real_secret(self):
-        src = (REPO / "backend" / "petphysio" / "settings.py").read_text()
+        src = (REPO / "backend" / "petphysio" / "settings.py").read_text(encoding="utf-8")
         for line in src.splitlines():
             if "SECRET_KEY" in line and "=" in line and "os.environ" not in line:
                 if '"' in line or "'" in line:
@@ -71,7 +71,7 @@ class SpaRouteSmokeTests(ApiTestCase):
     def _spa_paths(self):
         paths = set()
         for f in FRONTEND_SRC.rglob("*.ts*"):
-            for m in self.PATH_RE.finditer(f.read_text()):
+            for m in self.PATH_RE.finditer(f.read_text(encoding="utf-8")):
                 raw = m.group(1)
                 # normalise template holes: `/pets/${id}` -> a syntactically
                 # valid placeholder UUID (every path pk is a UUID since the
@@ -205,7 +205,7 @@ class RequirementsParityTests(ApiTestCase):
         """Requirement lines only — comments and blank lines are free to differ."""
         return [
             line.strip()
-            for line in path.read_text().splitlines()
+            for line in path.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.strip().startswith("#")
         ]
 
@@ -248,6 +248,7 @@ class ModelPackageIntegrityTests(ApiTestCase):
         "QueryThread", "QueryMessage", "QueryAttachment",      # messaging
         "Enquiry",                                     # enquiries
         "FacilityBooking",                             # facility (2026-09-21)
+        "BoardingBooking",                             # boarding (2026-09-25)
     }
 
     def test_no_pending_migrations(self):
