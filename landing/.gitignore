@@ -1,0 +1,16 @@
+node_modules/
+build/
+dist/
+.ssr/
+server.js
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Raw/unencoded hero clips. The shipped loop is public/hero-loop.mp4, which IS
+# tracked -- see the encoding recipe in Hero.tsx before replacing it. Anything
+# named hero-preview.* is a scratch drop straight off a camera or a stock site
+# and must not reach a deploy at full bitrate.
+public/hero-preview.*
