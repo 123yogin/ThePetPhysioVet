@@ -7,7 +7,7 @@ import {
 } from '../api/boarding';
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
-import { friendlyDate } from '../lib/labels';
+import { friendlyDate, formatMoney } from '../lib/labels';
 import { isValidAadhaar } from '../lib/aadhaar';
 
 /**
@@ -35,7 +35,6 @@ const BADGE_CLASS: Record<string, string> = {
   CANCELLED: 'badge-cancelled',
 };
 
-const rupee = (n: number) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
 const providerLabel = (v: string) => (v === 'clinic' ? 'clinic' : 'owner');
 
 // Actions offered per status.
@@ -185,7 +184,7 @@ const BoardingCard: React.FC<{
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontWeight: 700 }}>{g.duration_label}</div>
-          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--primary)' }}>{rupee(g.price)}</div>
+          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--primary)' }}>{formatMoney(g.price)}</div>
           <div className="page-sub" style={{ fontSize: '0.72rem', marginTop: '2px' }}>{g.reference}</div>
         </div>
       </div>
@@ -328,7 +327,7 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         <input className="input" type="date" value={f.checkIn} min={today} onChange={(e) => set('checkIn', e.target.value)} />
         <select className="input" value={f.duration} onChange={(e) => set('duration', e.target.value)}>
           <option value="">Duration *</option>
-          {(menu?.durations ?? []).map((d) => <option key={d.key} value={d.key}>{d.label} — {rupee(d.price)}</option>)}
+          {(menu?.durations ?? []).map((d) => <option key={d.key} value={d.key}>{d.label} — {formatMoney(d.price)}</option>)}
         </select>
         <input className="input" placeholder="Aadhaar (12 digits)" inputMode="numeric" value={f.aadhaar} onChange={(e) => set('aadhaar', e.target.value)} />
       </div>
