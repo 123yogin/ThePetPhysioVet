@@ -33,42 +33,14 @@ from ..models import (
     BOARDING_WALK_OPTIONS, duration_days, duration_price, duration_label,
 )
 from ..serializers import BoardingCreateSerializer, BoardingSerializer
-from ._shared import _client_ip, _first_error_detail, _rate_limited, problem
+from ._shared import (
+    _client_ip, _first_error_detail, _rate_limited, problem,
+    maybe_doctor as _maybe_doctor, require_doctor as _require_doctor,
+)
 
 BOARDING_WINDOW_SECONDS = 60 * 60
 BOARDING_IP_LIMIT = 15
 BOARDING_PHONE_LIMIT = 6
-
-
-def _maybe_doctor(request):
-    """Return the DOCTOR user if the request carries a valid doctor token, else
-    None. Never raises — a stale/absent token just means "treat as public"."""
-    from rest_framework_simplejwt.authentication import JWTAuthentication
-    from rest_framework.exceptions import AuthenticationFailed
-    try:
-        result = JWTAuthentication().authenticate(request)
-    except AuthenticationFailed:
-        return None
-    if result is None:
-        return None
-    user, _token = result
-    return user if getattr(user, "role", None) == "DOCTOR" else None
-
-
-def _require_doctor(request):
-    """For the doctor-only reads/actions. Returns (user, None) or (None, problem)."""
-    from rest_framework_simplejwt.authentication import JWTAuthentication
-    from rest_framework.exceptions import AuthenticationFailed
-    try:
-        result = JWTAuthentication().authenticate(request)
-    except AuthenticationFailed as exc:
-        return None, problem(401, "Not signed in", str(exc.detail) if exc.detail else "Invalid or expired token.")
-    if result is None:
-        return None, problem(401, "Not signed in", "Authentication credentials were not provided.")
-    user, _token = result
-    if getattr(user, "role", None) != "DOCTOR":
-        return None, problem(403, "Not allowed", "This action requires a doctor account.")
-    return user, None
 
 
 def _max_concurrent(check_in, check_out, exclude_ref=None):

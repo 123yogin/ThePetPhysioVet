@@ -20,7 +20,7 @@ from ..serializers import (
     EnquiryCreateSerializer, EnquirySerializer,
 )
 
-from ._shared import _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem
+from ._shared import _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem, require_doctor
 
 # Same rationale/shape as the password-reset rate limits above: two
 # independent fixed windows (IP, email) so neither a targeted spam run
@@ -140,20 +140,11 @@ def enquiries_view(request):
     if request.method == "POST":
         return _enquiry_create(request)
 
-    # GET: doctor-only. Authenticate by hand since @authentication_classes([])
-    # above means nothing has populated request.user yet.
-    from rest_framework_simplejwt.authentication import JWTAuthentication
-    from rest_framework.exceptions import AuthenticationFailed
-
-    try:
-        auth_result = JWTAuthentication().authenticate(request)
-    except AuthenticationFailed as exc:
-        return problem(401, "Not signed in", str(exc.detail) if exc.detail else "Invalid or expired token.")
-    if auth_result is None:
-        return problem(401, "Not signed in", "Authentication credentials were not provided.")
-    user, _token = auth_result
-    if getattr(user, "role", None) != "DOCTOR":
-        return problem(403, "Not allowed", "This action requires a doctor account.")
+    # GET: doctor-only. @authentication_classes([]) means nothing populated
+    # request.user yet, so gate by hand via the shared helper.
+    user, err = require_doctor(request)
+    if err:
+        return err
     request.user = user
     return _enquiries_list(request)
 
