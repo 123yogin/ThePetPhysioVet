@@ -149,10 +149,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'indoor-physiotherapy',
     title: 'Indoor Physiotherapy',
-    seoH1: 'Indoor physiotherapy for dogs and cats at our Shilaj clinic',
-    seoTitle: 'Indoor Dog & Cat Physiotherapy Clinic in Shilaj, Ahmedabad',
+    seoH1: 'Residential physiotherapy for dogs and cats at our Shilaj clinic',
+    seoTitle: 'Residential Pet Physiotherapy in Shilaj, Ahmedabad',
     seoDescription:
-      'Indoor physiotherapy at our Shilaj clinic in Ahmedabad: residential care for dogs and cats from outside the city, with supervised food, hygiene and rehab.',
+      'Residential physiotherapy in Shilaj, Ahmedabad for dogs and cats from out of town: your pet stays for their course, with special care for food and hygiene.',
     icon: 'night_shelter',
     shortDesc: 'Residential care for patients travelling from outside the city.',
     fullDesc: 'For patients coming from out of the city: your pet stays at the clinic for their course of physiotherapy.',
@@ -235,7 +235,7 @@ export const SERVICES: ServiceItem[] = [
     seoH1: 'Veterinary acupuncture for dogs and cats in Ahmedabad',
     seoTitle: 'Dog & Cat Acupuncture in Ahmedabad | The Pet Physio Vet',
     seoDescription:
-      'Veterinary acupuncture and electro-acupuncture for dogs and cats in Ahmedabad with Dr. Dhanvi Patel (CVA, Chi University), with the rest of your pet\'s rehab.',
+      "Veterinary acupuncture and electro-acupuncture for dogs and cats in Ahmedabad with Dr. Dhanvi Patel (CVA), alongside the rest of your pet's rehab.",
     icon: 'sparkles',
     shortDesc: 'Acupuncture and electro-acupuncture, with a certified veterinary acupuncturist.',
     fullDesc: 'Acupuncture and electro-acupuncture, used alongside the rest of your pet\'s rehabilitation plan. Dr. Dhanvi Patel holds a CVA, Certified Veterinary Acupuncturist, from Chi University, U.S.A.',

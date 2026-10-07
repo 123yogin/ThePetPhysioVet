@@ -234,7 +234,7 @@ const ServicesBento: React.FC = () => {
       <TypeTile service={electro} index={2} span="lg:col-span-5 lg:row-span-1" bg="bg-(--c-hero)" />
       <PhotoTile service={hydro} index={3} span="lg:col-span-7 lg:row-span-1" />
       <PhotoTile service={acupuncture} index={4} span="lg:col-span-5 lg:row-span-1" />
-      <TypeTile service={homeCare} index={5} span="lg:col-span-12 lg:row-span-1" bg="bg-(--c-card)" />
+      <TypeTile service={homeCare} index={5} span="sm:col-span-2 lg:col-span-12 lg:row-span-1" bg="bg-(--c-card)" />
     </div>
   );
 };

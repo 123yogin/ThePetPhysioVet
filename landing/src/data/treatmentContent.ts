@@ -338,7 +338,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
       {
         heading: 'Home visits across Ahmedabad',
         paragraphs: [
-          'Dr. Dhanvi Patel sees patients at the Shilaj clinic and on home visits across Ahmedabad. We list the areas we serve as Ahmedabad, Shilaj, Thaltej, Bodakdev, Science City, Sola and Gota. A home visit can suit a pet that is hard to move, anxious in the car, elderly or recovering at home after surgery.',
+          'Dr. Dhanvi Patel sees patients at the Shilaj clinic and on home visits across Ahmedabad. A home visit can suit a pet that is hard to move, anxious in the car, elderly or recovering at home after surgery.',
           'Some treatments stay at the clinic: hydrotherapy takes place in our [[indoor pool|/treatments/hydrotherapy]]. The home plan is built to complement clinic sessions.',
         ],
       },

@@ -119,7 +119,7 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
               {content.faqs.map((faq) => (
                 <div key={faq.q}>
                   <h3 className="font-(family-name:--f-display) text-lg sm:text-xl text-(--c-ink) font-medium mb-2">{faq.q}</h3>
-                  <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed">{faq.a}</p>
+                  <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed"><RichText text={faq.a} /></p>
                 </div>
               ))}
             </div>
