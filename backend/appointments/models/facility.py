@@ -13,8 +13,10 @@ booking can be confirmed or cancelled as a unit while capacity is still counted
 per (date, slot).
 """
 import uuid
+from datetime import datetime
 
 from django.db import models
+from django.utils import timezone
 from django.db.models import Q
 
 # The rules, defined here so the API, the serializers and both front-ends read
@@ -55,6 +57,24 @@ def slot_label(index):
         if s["slot"] == index:
             return f"{s['start']} – {s['end']}"
     return ""
+
+
+def slot_has_started(date_value, slot_index, now=None):
+    """True once the slot's start time (clinic-local, TIME_ZONE) has passed on
+    `date_value`. A past date has always started; an unknown slot index has not.
+    `now` defaults to the current instant; it is converted to clinic time, so a
+    UTC server clock cannot shift the answer.
+    """
+    for s in FACILITY_SLOTS:
+        if s["slot"] == slot_index:
+            local_now = timezone.localtime(now or timezone.now())
+            hour, minute = map(int, s["start"].split(":"))
+            start = datetime(
+                date_value.year, date_value.month, date_value.day, hour, minute,
+                tzinfo=local_now.tzinfo,
+            )
+            return local_now >= start
+    return False
 
 
 class FacilityBooking(models.Model):
