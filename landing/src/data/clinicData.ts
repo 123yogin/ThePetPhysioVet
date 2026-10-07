@@ -55,7 +55,7 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Physiotherapy', 'Therapeutic Exercise (Peanut Ball)', 'Indoor Swimming Pool', 'Cryotherapy & Heat Modalities', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '6 to 8 weeks for baseline stabilization',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCWOALUCpPzB5Y48NeeAIMH1krV-26VzLU8CBjGtyCfSCsGVwNbQxlr4cpMbTK7jpQEGpgrgvhghtk_NSM9ysyH0tIvZHm4l7TR25RxG6dzG5DxBZawa37qGWu9G3rs3uLlIDHEy251XixCQs8R61E6sSOYMiT7PX1AozXa7K-NMA0rWEZ7W99P8gf-o7AZLJBT8AYyZX822P_PI0jPyCppt9M4qJDXlb_Z8zKfhIwNskreTHLNrYuj',
+      '/photos/conditions/hip-dysplasia.webp',
     altText: 'Golden Retriever doing core stabilization on a peanut ball',
   },
   {
@@ -106,7 +106,7 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['High-Power Laser', 'Myofascial Trigger Point Release', 'Aquatic Conditioning', 'Plyometric Strength Building', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '4 to 10 weeks to return to agility & outdoor sports',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBtr-022SXsB1NTBRLaXQRGaW7oir_XGpluV1e2iB7vsWYKAaKjYVUIbJH9h4D1SfHb0ip1XzWp_O1wrnKVxvIf8R6lLS28qeLBlhGSQyb-97-HOzcgXIOaA00mPnNytYgzQP6ujWDsk9ywdvWtnhTkCtROhjYS5hWQOKpPSmn7ZsYzIpP6L-YbtcWGHWVyuvxvYc6N9CNRq41IRDecnDU3MlbPcSU8xttqjgpEcB-amjmxckgXCCs8',
+      '/photos/conditions/sports-injury.webp',
     altText: 'Athletic agility dog training and undergoing injury conditioning',
   },
   {
@@ -123,7 +123,7 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Gentle Massage', 'Warm Water Hydrotherapy Walk', 'Low-Impact Balance Matting', 'Nonslip Assistive Gear Consultation', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: 'Continuous weekly or bi-weekly comfort care program',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBKF6FGM81GUAtKVIRXHExNqGYjoBmY1_dX3XI9ywDCPlO6OTk-_xo-ysi6LHjXx9f3BGBU9ZAd_y-eewRU_wVWAt5PGf48yFZO_PJsXsgmdUmiHsBjYoOZSx68zuKATGHpJqfO9JYxKE_Zk9s02qUzelrLdYME86vhydM-DOO_0P6l82WlWKJixoe_6KestRf_W80gEt9XaWgIX2GK7JAB7d8MfbyJ172-wMMXgQjVCOGwuCurClCf',
+      '/photos/conditions/senior-mobility.webp',
     altText: 'Senior dog comfortably resting in a warm rehabilitation clinic',
   },
   {
@@ -140,7 +140,7 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Indoor Pool Swimming Sessions', 'Targeted Metabolic Caloric Plan', 'Land Resistance Walks', 'Progressive Weight Milestones', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 16 weeks target body condition restoration',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAmDWgI1fS9Ph9ngrwa3L9PHwN7DzI3mZPsCTEiQO_-9yP6lAPBlmU6muhXOSQ0zpEmw8rR0watnXCvI31JOoyPBeYciqUA3x1eapZE6h5E1XCxrUWM5uDitc5G2Jj_K57z7Dly70y3co2fBZyFTpU5YtQlBVZgSOwnUkRC5XsqGnXRurn3qa8r-hZAPxTy_nZlIg3yKW01Qf1z0EbUr1xuUOu5pPz_JBpuTT0t65K9HDSHh5B_h108',
+      '/photos/conditions/obesity-rehab.webp',
     altText: 'Dog swimming in the indoor hydrotherapy pool during weight management rehabilitation',
   }
 ];

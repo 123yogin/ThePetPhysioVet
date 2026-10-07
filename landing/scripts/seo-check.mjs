@@ -75,6 +75,13 @@ for (const file of pages) {
   const html = readFileSync(file, 'utf8');
   const is404 = rel === '/404.html';
 
+  // ── Third-party hosts: images and fonts are self-hosted ──
+  // Hotlinked art can vanish or be swapped by its host, and every external
+  // origin is an extra connection and a privacy-policy entry.
+  for (const host of ['googleusercontent.com', 'fonts.googleapis.com', 'fonts.gstatic.com']) {
+    if (html.includes(host)) fail(`${rel}: references third-party host ${host} — self-host it under /photos or /fonts.`);
+  }
+
   // ── Rendered content: the check that catches an empty SPA shell ──
   // Vite hoists the module script into <head>, so #root runs to </body>. A volume
   // heuristic is enough here: the failure being guarded against is "empty shell",
