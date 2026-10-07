@@ -132,7 +132,7 @@ export function getPageMeta(pathname: string): PageMeta {
   if (isSpecialist(entity)) {
     return {
       ...base,
-      title: buildTitle(`${entity.name}, ${entity.role}`),
+      title: entity.seoTitle ?? buildTitle(`${entity.name}, ${entity.role}`),
       description: buildDescription(
         `${entity.name} — ${entity.role} at ${SITE.brandName}. ${entity.credentials}.`,
         entity.bio,

@@ -249,9 +249,8 @@ export function serviceNode(service: ServiceItem): Node {
     // Reference the AdministrativeArea nodes defined once on the business node
     // (always in the same graph) instead of repeating them for every Service.
     areaServed: SITE.areaServed.map((name) => ({ '@id': ID.area(name) })),
-    // suitableFor is empty for most services; an Audience with no audienceType
-    // is an empty object, so fall back to the actual audience: pet owners.
-    audience: { '@type': 'Audience', audienceType: service.suitableFor.length ? service.suitableFor.join(', ') : 'Pet owners' },
+    // audienceType names a group of people, not conditions or animals.
+    audience: { '@type': 'Audience', audienceType: 'Pet owners' },
     hoursAvailable: openingHoursSpecification(),
     additionalProperty: [
       { '@type': 'PropertyValue', name: 'Typical session length', value: service.duration },

@@ -268,7 +268,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
       {
         heading: 'What electro-physical therapy is',
         paragraphs: [
-          'Electro-physical therapies are equipment-assisted treatments applied under clinical supervision, chosen to suit the animal and the stage of their recovery. The modalities we use are pulsed electro-magnetic field therapy (PEMF), Class IV laser, ultrasound, TENS, NMES and electro-acupuncture.',
+          'Electro-physical therapies are equipment-assisted treatments applied under clinical supervision at our Shilaj clinic in Ahmedabad, chosen to suit the animal and the stage of their recovery. The modalities we use are pulsed electro-magnetic field therapy (PEMF), Class IV laser, ultrasound, TENS, NMES and electro-acupuncture.',
         ],
       },
       {

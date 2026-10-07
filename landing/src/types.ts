@@ -65,6 +65,9 @@ export interface Specialist {
    *  profile page carries every qualification. Falls back to `credentials`
    *  when unset. */
   credentialsShort?: string;
+  /** Optional <title> / <h1> overrides for the profile page. */
+  seoTitle?: string;
+  seoH1?: string;
   bio: string;
   specialties: string[];
   experienceYears: number;

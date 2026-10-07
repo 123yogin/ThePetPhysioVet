@@ -45,7 +45,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'hip-dysplasia',
     title: 'Hip Dysplasia',
     seoH1: 'Hip dysplasia in dogs: physiotherapy and rehab in Ahmedabad',
-    seoTitle: 'Hip Dysplasia in Dogs: Physiotherapy in Ahmedabad',
+    seoTitle: 'Hip Dysplasia Treatment for Dogs in Ahmedabad',
     seoDescription:
       'Hip dysplasia physiotherapy for dogs in Ahmedabad: targeted exercise, peanut-ball work, indoor pool swimming and laser to steady the hips and build muscle.',
     category: 'degenerative',
@@ -381,6 +381,8 @@ export const SPECIALISTS: Specialist[] = [
   {
     id: 'dhanvi-patel',
     name: 'Dr. Dhanvi Patel',
+    seoTitle: 'Dr. Dhanvi Patel, Veterinary Physiotherapist, Ahmedabad',
+    seoH1: 'Dr. Dhanvi Patel, veterinary physiotherapist',
     role: 'Veterinary Physiotherapist',
     // Supplied by the clinic, 2026-09-18. Separated by ';' because two of
     // these contain commas of their own.

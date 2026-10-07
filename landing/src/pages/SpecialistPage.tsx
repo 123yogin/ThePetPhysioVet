@@ -48,7 +48,7 @@ export const SpecialistPage: React.FC<{ specialist: Specialist }> = ({ specialis
               </span>
             )}
             <h1 style={{ ['--d' as string]: '280ms' }} className="hero-rise font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light leading-tight tracking-tight mb-2">
-              {specialist.name}
+              {specialist.seoH1 ?? specialist.name}
             </h1>
             {specialist.role && (
               <p className="font-(family-name:--f-body) text-base text-(--c-accent) uppercase tracking-widest font-semibold mb-6">

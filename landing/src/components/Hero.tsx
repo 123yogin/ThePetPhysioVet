@@ -140,7 +140,7 @@ const HeroTitle: React.FC<{ className: string; accent: string; tone?: 'light' | 
       <h1 className={className}>
         {/* Two lines that rise out of their own clipping boxes. The text
             content is still a single sentence. */}
-        <span className="hero-line"><span style={{ ['--d' as string]: '200ms' }}>Vet-led {key('physiotherapy')} &amp; hydrotherapy</span></span>{' '}
+        <span className="hero-line"><span style={{ ['--d' as string]: '200ms' }}>Veterinary {key('physiotherapy')} and rehabilitation</span></span>{' '}
         <span className="hero-line"><span style={{ ['--d' as string]: '330ms' }}>for dogs and cats in Ahmedabad</span></span>
       </h1>
     </>
