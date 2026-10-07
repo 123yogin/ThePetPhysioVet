@@ -182,7 +182,7 @@ export function getPageMeta(pathname: string): PageMeta {
   // Home
   return {
     ...base,
-    title: buildTitle(`Pet Physiotherapy & Rehabilitation in ${locality}`),
+    title: buildTitle(`Dog & Cat Physiotherapy in ${locality}`),
     description: buildDescription(SITE.metaDescription),
     image: socialImage(),
     imageAlt: `${SITE.brandName} rehabilitation clinic`,

@@ -106,8 +106,20 @@ const HeroBadge: React.FC<{ tone?: 'light' | 'dark' }> = ({ tone = 'light' }) =>
   </div>
 );
 
+/** The slogan, demoted to a small eyebrow line directly above the H1. */
+const HeroSlogan: React.FC<{ tone?: 'light' | 'dark' }> = ({ tone = 'light' }) => (
+  <p
+    style={{ ['--d' as string]: '150ms' }}
+    className={`hero-rise text-xs font-(family-name:--f-body) uppercase tracking-widest ${
+      tone === 'dark' ? 'text-white/90' : 'text-(--c-body)'
+    }`}
+  >
+    Life is movement, movement is life.
+  </p>
+);
+
 /** The headline, with the lab's optional accent on the key word. */
-const HeroTitle: React.FC<{ className: string; accent: string }> = ({ className, accent }) => {
+const HeroTitle: React.FC<{ className: string; accent: string; tone?: 'light' | 'dark' }> = ({ className, accent, tone }) => {
   const key = (word: string) => {
     if (accent === 'italic') return <em className="acc-italic">{word}</em>;
     if (accent === 'marker') return <span className="acc-marker">{word}</span>;
@@ -123,20 +135,22 @@ const HeroTitle: React.FC<{ className: string; accent: string }> = ({ className,
     return word;
   };
   return (
-    <h1 className={className}>
-      {/* Two lines that rise out of their own clipping boxes. The text
-          content is still the single sentence it always was. */}
-      <span className="hero-line"><span style={{ ['--d' as string]: '200ms' }}>Life is {key('movement')},</span></span>
-      <span className="hero-line"><span style={{ ['--d' as string]: '330ms' }}>movement is {key('life')}.</span></span>
-    </h1>
+    <>
+      <HeroSlogan tone={tone} />
+      <h1 className={className}>
+        {/* Two lines that rise out of their own clipping boxes. The text
+            content is still a single sentence. */}
+        <span className="hero-line"><span style={{ ['--d' as string]: '200ms' }}>Vet-led {key('physiotherapy')} &amp; hydrotherapy</span></span>{' '}
+        <span className="hero-line"><span style={{ ['--d' as string]: '330ms' }}>for dogs and cats in Ahmedabad</span></span>
+      </h1>
+    </>
   );
 };
 
 const HeroCopy: React.FC<{ className?: string }> = ({ className = 'text-(--c-body)' }) => (
   <p style={{ ['--d' as string]: '480ms' }} className={`hero-rise font-(family-name:--f-body) text-lg sm:text-xl max-w-xl font-light leading-relaxed ${className}`}>
-    Experience the absolute best in restorative care. Our specialized team blends clinical
-    precision with a warm, comforting environment to ensure your companion's optimal
-    wellness and mobility.
+    Dr. Dhanvi Patel (M.V.Sc.) treats arthritis, IVDD and post-surgical recovery at our
+    Shilaj clinic and on home visits across Ahmedabad.
   </p>
 );
 
@@ -235,7 +249,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBooking }) => {
         </div>
         <div className="relative z-10 px-4 sm:px-8 max-w-[1200px] mx-auto w-full flex flex-col items-center text-center gap-7">
           <HeroBadge tone="dark" />
-          <HeroTitle accent={accent} className="font-(family-name:--f-display) text-white font-light leading-[1.02] tracking-tight text-5xl sm:text-7xl lg:text-[120px]" />
+          <HeroTitle tone="dark" accent={accent} className="font-(family-name:--f-display) text-white font-light leading-[1.02] tracking-tight text-5xl sm:text-7xl lg:text-[120px]" />
           <HeroCopy className="text-white/85 mx-auto" />
           <HeroCtas onOpenBooking={onOpenBooking} tone="dark" className="mt-2 justify-center" />
         </div>

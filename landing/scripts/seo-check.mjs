@@ -85,7 +85,9 @@ for (const file of pages) {
   const title = first(/<title>([\s\S]*?)<\/title>/i, html);
   if (!title) fail(`${rel}: missing <title>`);
   else {
-    if (title.length > TITLE_MAX) fail(`${rel}: title ${title.length} chars (>${TITLE_MAX}) — will be truncated.`);
+    // Length is what the SERP shows, so count "&amp;" as one character.
+    const shown = title.replace(/&amp;/g, '&').length;
+    if (shown > TITLE_MAX) fail(`${rel}: title ${shown} chars (>${TITLE_MAX}) — will be truncated.`);
     if (title.length < TITLE_MIN) warn(`${rel}: title only ${title.length} chars — under-using the space.`);
     if (titles.has(title)) fail(`${rel}: duplicate title, also on ${titles.get(title)}`);
     else titles.set(title, rel);
@@ -154,6 +156,21 @@ for (const file of pages) {
   }
   const noAlt = imgs.filter((tag) => !/\balt=/.test(tag));
   if (noAlt.length) fail(`${rel}: ${noAlt.length} <img> without an alt attribute`);
+}
+
+// ── Home page must say what / where / who in plain words ──
+const homeFile = join(DIST, 'index.html');
+if (existsSync(homeFile)) {
+  const homeHtml = readFileSync(homeFile, 'utf8');
+  const h1 = (first(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i, homeHtml) ?? '')
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!/physiotherapy/i.test(h1) || !/ahmedabad/i.test(h1)) {
+    fail(`/: <h1> must name the service and the city (Physiotherapy + Ahmedabad); got "${h1}"`);
+  }
+  const homeTitle = first(/<title[^>]*>([^<]*)<\/title>/i, homeHtml) ?? '';
+  if (!homeTitle.includes('The Pet Physio Vet')) {
+    fail(`/: <title> must contain the brand "The Pet Physio Vet"; got "${homeTitle}"`);
+  }
 }
 
 // ── Sitemap must match what was actually built ──
