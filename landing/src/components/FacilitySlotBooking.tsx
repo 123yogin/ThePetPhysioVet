@@ -80,6 +80,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   const [chosen, setChosen] = React.useState<number[]>([]);
   // Auto-advance past an exhausted day only until the visitor picks a date themselves.
   const userPickedDate = React.useRef(false);
+  const [advancedFrom, setAdvancedFrom] = React.useState<string | null>(null);
 
   const [hold, setHold] = React.useState<Hold | null>(null);
   const [secondsLeft, setSecondsLeft] = React.useState(0);
@@ -114,6 +115,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
         setAvail(d);
         // Nothing bookable left (all started or full): move on to the next day.
         if (!userPickedDate.current && date < maxDate && d.slots.every((s) => s.past || s.available <= 0)) {
+          setAdvancedFrom((prev) => prev ?? date);
           setDate(nextDay(date));
         }
       })
@@ -377,10 +379,17 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
         max={maxDate}
         onChange={(e) => {
           userPickedDate.current = true;
+          setAdvancedFrom(null);
           setDate(e.target.value || minDate);
         }}
-        className={`${field} mb-6`}
+        className={`${field} ${advancedFrom ? 'mb-2' : 'mb-6'}`}
       />
+      {advancedFrom && (
+        <p role="status" className="text-xs text-(--c-accent) mb-6">
+          No times left {advancedFrom === minDate ? 'today' : 'on that day'} — showing{' '}
+          {new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+        </p>
+      )}
 
       <span className={labelCls}>
         Time slot{' '}
