@@ -453,7 +453,12 @@ export const SPECIALISTS: Specialist[] = [
     // Dr. Dhanvi Pa... / Veterinary Physio...", which is her own uniform.
     imageUrl: '/photos/dhanvi-patel.webp',
     altText:
-      'Dr. Dhanvi Patel, veterinary physiotherapist and acupuncturist, smiling in her The Pet Physio Vet clinic scrub',
+      'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
+    // Formal standalone portrait, used only on the dedicated profile page; the
+    // homepage "about" card keeps the warmer beagle photo above.
+    portraitUrl: '/photos/dhanvi-portrait.webp',
+    portraitAlt:
+      'Dr. Dhanvi Patel, veterinary physiotherapist and acupuncturist, in her The Pet Physio Vet clinic scrub',
   },
 ];
 

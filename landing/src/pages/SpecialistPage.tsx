@@ -26,11 +26,11 @@ export const SpecialistPage: React.FC<{ specialist: Specialist }> = ({ specialis
     <PageShell>
       <article className="max-w-[1280px] mx-auto px-4 sm:px-8 pb-16">
         <header className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start border-b border-(--c-line)/30 pb-12 mb-12">
-          {specialist.imageUrl && (
+          {(specialist.portraitUrl || specialist.imageUrl) && (
             <div className="lg:col-span-4">
               <img
-                src={specialist.imageUrl}
-                alt={specialist.altText}
+                src={specialist.portraitUrl ?? specialist.imageUrl}
+                alt={specialist.portraitAlt ?? specialist.altText}
                 width={600}
                 height={750}
                 loading="eager"

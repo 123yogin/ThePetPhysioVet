@@ -85,6 +85,11 @@ export interface Specialist {
   experienceYears: number;
   imageUrl: string;
   altText: string;
+  /** Formal standalone portrait for the dedicated profile page. The homepage
+   *  "about" card keeps the warmer `imageUrl` (clinician with a patient);
+   *  falls back to `imageUrl` when unset. */
+  portraitUrl?: string;
+  portraitAlt?: string;
 }
 
 export interface GalleryItem {
