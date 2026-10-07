@@ -201,17 +201,59 @@ export const SERVICES: ServiceItem[] = [
     duration: 'Assessed per pet'
   },
   {
-    id: 'specialised',
-    title: 'Acupuncture & Hydrotherapy',
-    seoH1: 'Acupuncture and hydrotherapy for dogs and cats in Ahmedabad',
-    seoTitle: 'Acupuncture & Hydrotherapy for Dogs in Ahmedabad',
+    id: 'hydrotherapy',
+    title: 'Hydrotherapy',
+    seoH1: 'Hydrotherapy for dogs in Ahmedabad',
+    seoTitle: 'Dog Hydrotherapy in Ahmedabad | The Pet Physio Vet',
     seoDescription:
-      'Acupuncture and indoor hydrotherapy for dogs and cats in Ahmedabad: veterinary acupuncture and a lukewarm indoor pool, planned and assessed for each pet.',
+      'Dog hydrotherapy in Ahmedabad: supported swimming in our lukewarm indoor pool with a hydrotherapist alongside. For IVDD, post-surgery, arthritis, weight loss.',
     icon: 'star',
-    shortDesc: 'Acupuncture and our indoor hydrotherapy pool.',
-    fullDesc: 'Acupuncture, and hydrotherapy in an indoor swimming pool kept at lukewarm temperature.',
-    benefits: ['Acupuncture', 'Hydrotherapy — indoor swimming pool (lukewarm water)'],
-    suitableFor: [],
+    shortDesc: 'Supported swimming in our indoor, lukewarm pool.',
+    fullDesc: 'Hydrotherapy in an indoor swimming pool kept at lukewarm temperature (29-31\u00b0C), with a dedicated hydrotherapist in the water alongside your pet.',
+    benefits: [
+      'Indoor swimming pool, clean and filtered',
+      'Lukewarm water, kept at 29-31\u00b0C (84-88\u00b0F)',
+      'A dedicated hydrotherapist in the water with your pet',
+      'Flotation aid where it helps',
+      'Gradual introduction, with treats and praise',
+      'Under the observation of the vet'
+    ],
+    suitableFor: [
+      'IVDD and spinal conditions',
+      'Recovery after orthopaedic surgery',
+      'Overweight dogs',
+      'Senior dogs with stiff joints',
+      'Arthritis and hip dysplasia',
+      'Neurological recovery',
+      'Active and sporting dogs'
+    ],
+    duration: 'Assessed per pet'
+  },
+  {
+    id: 'acupuncture',
+    title: 'Acupuncture',
+    seoH1: 'Veterinary acupuncture for dogs and cats in Ahmedabad',
+    seoTitle: 'Dog & Cat Acupuncture in Ahmedabad | The Pet Physio Vet',
+    seoDescription:
+      'Veterinary acupuncture and electro-acupuncture for dogs and cats in Ahmedabad with Dr. Dhanvi Patel (CVA, Chi University), with the rest of your pet\'s rehab.',
+    icon: 'sparkles',
+    shortDesc: 'Acupuncture and electro-acupuncture, with a certified veterinary acupuncturist.',
+    fullDesc: 'Acupuncture and electro-acupuncture, used alongside the rest of your pet\'s rehabilitation plan. Dr. Dhanvi Patel holds a CVA, Certified Veterinary Acupuncturist, from Chi University, U.S.A.',
+    benefits: [
+      'Acupuncture',
+      'Electro-acupuncture',
+      'Certified Veterinary Acupuncturist (CVA), Chi University, U.S.A.',
+      'Combined with laser, hydrotherapy and manual therapy as needed'
+    ],
+    suitableFor: [
+      'Arthritis',
+      'IVDD and spinal conditions',
+      'Hip dysplasia',
+      'Post-surgical recovery',
+      'Neurological recovery',
+      'Sports injury',
+      'Senior mobility'
+    ],
     duration: 'Assessed per pet'
   },
   {
@@ -529,6 +571,8 @@ export function servicesForCondition(condition: ConditionItem): ServiceItem[] {
       const t = therapy.toLowerCase();
       const title = service.title.toLowerCase();
       const firstWord = t.split(' ')[0];
+      // Pool/aquatic/swimming therapies are hydrotherapy even when the word is not used.
+      if (service.id === 'hydrotherapy' && /\b(pool|aquatic|swimming|swim)\b/.test(t)) return true;
       return t.includes(title) || (firstWord !== '' && title.includes(firstWord));
     }),
   );

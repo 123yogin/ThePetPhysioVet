@@ -29,11 +29,17 @@ const PHOTOS: Record<string, { src: string; alt: string; w: number; h: number }>
     w: 800,
     h: 600,
   },
-  specialised: {
+  hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported at the edge',
     w: 800,
     h: 600,
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
+    w: 600,
+    h: 800,
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',

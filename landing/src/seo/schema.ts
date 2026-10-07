@@ -20,6 +20,7 @@ import { matchRoute, conditionPath, servicePath, specialistPath, type RouteEntit
 import { getPageMeta } from './metadata';
 import { CONDITIONS, FAQS, SERVICES, SPECIALISTS, HERO_IMAGE, servicesForCondition, CONTENT_REVIEWED_DATE } from '../data/clinicData';
 import { conditionFaqs } from '../data/conditionFaqs';
+import { TREATMENT_CONTENT, plainText } from '../data/treatmentContent';
 import type { ConditionItem, ServiceItem, Specialist } from '../types';
 
 /** Loosely-typed JSON-LD node. */
@@ -334,6 +335,22 @@ export function conditionFaqNode(condition: ConditionItem, path: string): Node {
   };
 }
 
+/** FAQPage for a treatment page, from the same data that renders the visible Q&A. */
+export function serviceFaqNode(service: ServiceItem, path: string): Node | null {
+  const faqs = TREATMENT_CONTENT[service.id]?.faqs ?? [];
+  if (!faqs.length) return null;
+  return {
+    '@type': 'FAQPage',
+    '@id': ID.faq(path),
+    isPartOf: { '@id': ID.webpage(path) },
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: { '@type': 'Answer', text: plainText(faq.a) },
+    })),
+  };
+}
+
 /**
  * Assemble the full @graph for a pathname. One script tag per page.
  */
@@ -363,6 +380,8 @@ export function buildGraph(pathname: string): Node {
 
   if (isService(entity)) {
     graph.push(serviceNode(entity));
+    const faq = serviceFaqNode(entity, path);
+    if (faq) graph.push(faq);
   }
 
   if (isSpecialist(entity)) {

@@ -245,6 +245,8 @@ export const Footer: React.FC = () => {
           {[
             { href: '/#services', label: 'Treatment Modalities' },
             { href: '/#conditions', label: 'Conditions We Treat' },
+            { href: '/treatments/hydrotherapy', label: 'Dog Hydrotherapy' },
+            { href: '/treatments/acupuncture', label: 'Acupuncture' },
             { href: '/#about', label: 'Our Specialists' },
             { href: '/privacy', label: 'Privacy Policy' },
             { href: '/terms', label: 'Terms of Service' },

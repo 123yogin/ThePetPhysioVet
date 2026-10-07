@@ -28,6 +28,10 @@ const DESC_MIN = 140;
 const DESC_MAX = 160;
 /** Content bytes inside #root below which a page is effectively empty. */
 const MIN_ROOT_CONTENT = 1000;
+/** Treatment pages are the service landing pages; below this they are thin. */
+const MIN_TREATMENT_WORDS = 700;
+/** Pages that must exist and be in the sitemap. */
+const REQUIRED_URLS = ['/treatments/hydrotherapy', '/treatments/acupuncture'];
 
 if (!existsSync(DIST)) {
   console.error('dist/ not found — run `npm run build` first.');
@@ -139,6 +143,12 @@ for (const file of pages) {
     fail('/404.html should be noindex');
   }
 
+  // ── Treatment pages: depth. A warning, not a failure -- thin pages still index. ──
+  if (/^\/treatments\//.test(rel)) {
+    const words = text.split(' ').filter(Boolean).length;
+    if (words < MIN_TREATMENT_WORDS) warn(`${rel}: ${words} words in #root (target >= ${MIN_TREATMENT_WORDS}).`);
+  }
+
   // ── Headings ──
   const h1s = (html.match(/<h1[\s>]/gi) || []).length;
   if (h1s === 0) fail(`${rel}: no <h1>`);
@@ -185,6 +195,11 @@ if (existsSync(homeFile)) {
   if (!homeTitle.includes('The Pet Physio Vet')) {
     fail(`/: <title> must contain the brand "The Pet Physio Vet"; got "${homeTitle}"`);
   }
+}
+
+// ── Required dedicated service pages must be in the sitemap ──
+for (const path of REQUIRED_URLS) {
+  if (!sitemapUrls.some((u) => new URL(u).pathname === path)) fail(`sitemap.xml does not list ${path}`);
 }
 
 // ── Sitemap must match what was actually built ──

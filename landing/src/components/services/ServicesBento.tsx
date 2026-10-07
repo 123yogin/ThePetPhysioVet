@@ -10,7 +10,7 @@ import type { ServiceItem } from '../../types';
 /**
  * Bento variant of "Our Services": one big feature tile (the first service,
  * full photo) plus four supporting tiles, alternating photo and typographic
- * treatments. Five services, five tiles, no empty cells at any breakpoint.
+ * treatments. Six services, six tiles, no empty cells at any breakpoint.
  *
  * Pointer/hover effects (spotlight, image scale, arrow rotate) live on a plain
  * wrapper `<div>` around each `EntityCardLink` -- its typed props do not
@@ -50,11 +50,17 @@ const PHOTOS: Record<string, Photo> = {
     w: 800,
     h: 600,
   },
-  specialised: {
+  hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A Golden Retriever swimming with a support harness in the clinic indoor hydrotherapy pool',
     w: 800,
     h: 600,
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
+    w: 600,
+    h: 800,
   },
 };
 
@@ -219,15 +225,16 @@ const TypeTile: React.FC<{ service: ServiceItem; index: number; span: string; bg
 
 const ServicesBento: React.FC = () => {
   const gridRef = useStagger<HTMLDivElement>({ step: 110 });
-  const [feature, manual, electro, specialised, homeCare] = SERVICES;
+  const [feature, manual, electro, hydro, acupuncture, homeCare] = SERVICES;
 
   return (
     <div ref={gridRef} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-12 lg:auto-rows-[260px]">
       <FeatureTile service={feature} />
       <PhotoTile service={manual} index={1} span="lg:col-span-5 lg:row-span-1" />
       <TypeTile service={electro} index={2} span="lg:col-span-5 lg:row-span-1" bg="bg-(--c-hero)" />
-      <PhotoTile service={specialised} index={3} span="lg:col-span-7 lg:row-span-1" />
-      <TypeTile service={homeCare} index={4} span="lg:col-span-5 lg:row-span-1" bg="bg-(--c-card)" />
+      <PhotoTile service={hydro} index={3} span="lg:col-span-7 lg:row-span-1" />
+      <PhotoTile service={acupuncture} index={4} span="lg:col-span-5 lg:row-span-1" />
+      <TypeTile service={homeCare} index={5} span="lg:col-span-12 lg:row-span-1" bg="bg-(--c-card)" />
     </div>
   );
 };
