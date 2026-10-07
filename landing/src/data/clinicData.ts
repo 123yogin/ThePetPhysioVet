@@ -375,9 +375,12 @@ export const SPECIALISTS: Specialist[] = [
   // with avian and exotic experience. Clinic visits at Shilaj, Ahmedabad,
   // Road, and home visits across Ahmedabad." Nothing is added to it.
   //
-  // `experienceYears` and `imageUrl` stay empty because no source states them,
-  // and a guessed number of years in practice or a stock photograph of someone
-  // else is exactly the failure this replacement exists to undo.
+  // `experienceYears` was left at 0 because no source stated a number at the
+  // time; the doctor has since confirmed 2+ years of clinical practice before
+  // this website existed (the clinic predates the site), so it is now set to
+  // 2 -- a stated fact, not a guess. `imageUrl` stays empty because no source
+  // states it, and a stock photograph of someone else is exactly the failure
+  // this replacement exists to undo.
   {
     id: 'dhanvi-patel',
     name: 'Dr. Dhanvi Patel',
@@ -411,7 +414,7 @@ export const SPECIALISTS: Specialist[] = [
       'Avian and exotic patients',
       'Home visits across Ahmedabad',
     ],
-    experienceYears: 0,
+    experienceYears: 2,
     // Her own photograph, supplied by the clinic 2026-09-19. Identity is not
     // assumed: the scrub embroidery in the same set reads "Thepetphysio /
     // Dr. Dhanvi Pa... / Veterinary Physio...", which is her own uniform.

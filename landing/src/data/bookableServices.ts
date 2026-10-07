@@ -39,6 +39,18 @@ export interface BookableService {
    * the options cost.
    */
   priceList?: { label: string; price: number }[];
+  /**
+   * Set to 'per-session' when `priceList` prices the SAME service at
+   * different session-count tiers (e.g. Swimming's single/5-session/
+   * 8-session rates) — every lower price is a bulk discount off the single-
+   * session (highest) rate, so the booking panel can show a "Save X%" badge.
+   *
+   * Leave unset for services whose `priceList` prices separate, unrelated
+   * things (e.g. Grooming's Shampooing / Nail trimming / Hair clipping) —
+   * there is no single baseline to discount against, so no badge should
+   * ever be computed there.
+   */
+  pricingMode?: 'per-session';
 }
 
 export const BOOKABLE_SERVICES: BookableService[] = [
@@ -79,9 +91,10 @@ export const BOOKABLE_SERVICES: BookableService[] = [
     ],
     priceList: [
       { label: 'Single session (swim & dry)', price: 1300 },
-      { label: '5 sessions', price: 900 },
-      { label: '8 sessions', price: 1100 },
+      { label: '5 sessions (per session)', price: 1100 },
+      { label: '8 sessions (per session)', price: 900 },
     ],
+    pricingMode: 'per-session',
     icon: 'waves',
   },
   {
