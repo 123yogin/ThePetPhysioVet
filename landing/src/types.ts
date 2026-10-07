@@ -44,15 +44,27 @@ export interface JourneyStep {
 
 export interface SuccessStory {
   id: string;
-  petName: string;
-  breed: string;
-  condition: string;
+  /** Verbatim quote — trimmed of a leading "& " / "..." at most, never paraphrased. */
   quote: string;
+  /** Who said it. An initial ("R.") when that's all the source gives, or
+   *  "Google review" when no name at all is available. Never a fabricated
+   *  full name. */
   ownerName: string;
-  storyDetails: string;
-  duration: string;
-  imageUrl: string;
-  altText: string;
+  /** Out of 5 (bestRating). Genuine reviews only — never invented. */
+  rating: number;
+  /** Where the review came from, e.g. "Google". Feeds the Review schema node. */
+  source: string;
+  // Everything below is optional and filled ONLY when the reviewer actually
+  // stated it. Most real reviews (e.g. Google Business Profile excerpts) name
+  // neither a pet nor a condition nor an outcome duration — leave the field
+  // out rather than fabricating a plausible-looking value.
+  petName?: string;
+  breed?: string;
+  condition?: string;
+  storyDetails?: string;
+  duration?: string;
+  imageUrl?: string;
+  altText?: string;
 }
 
 export interface Specialist {

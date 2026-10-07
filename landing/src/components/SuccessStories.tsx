@@ -1,80 +1,93 @@
 import React from 'react';
-import { SUCCESS_STORIES } from '../data/clinicData';
-import { Quote, Sparkles } from 'lucide-react';
+import { SUCCESS_STORIES, GOOGLE_RATING } from '../data/clinicData';
+import { Quote, Star } from 'lucide-react';
 
+/**
+ * Reviews as a single-row, auto-scrolling marquee. The track holds the reviews
+ * duplicated so translateX(-50%) lands exactly on the start of the second copy —
+ * a seamless, gapless loop. It pauses on hover and stops entirely under
+ * prefers-reduced-motion (keyframes + the reduced-motion guard live in the
+ * scoped <style> below so the whole effect is self-contained in this file).
+ */
 export const SuccessStories: React.FC = () => {
-
-  // "Real outcomes, restored joy" over an empty grid is worse than no section
-  // at all. Hooks run first so this stays a legal early return.
+  // "Loved by pet parents" over an empty row is worse than no section at all.
   if (SUCCESS_STORIES.length === 0) return null;
 
-  return (
-    <section id="success" className="py-20 sm:py-28 bg-(--c-card)">
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
-        
-        {/* Header */}
-        <div className="mb-16 text-center max-w-2xl mx-auto">
-          <span className="text-xs uppercase tracking-widest text-(--c-accent) font-semibold mb-2 block font-(family-name:--f-body)">
-            Patient Transformation
-          </span>
-          <h2 className="font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light mb-4">
-            Success Stories
-          </h2>
-          <p className="font-(family-name:--f-body) text-base sm:text-lg text-(--c-body) font-light">
-            Real outcomes, restored joy, and active mobility recovered by our dedicated veterinary rehabilitation patients.
-          </p>
-        </div>
+  // Repeat the set so one copy already overflows the viewport (few reviews),
+  // then duplicate that copy once more so the -50% scroll loops seamlessly.
+  const base = [...SUCCESS_STORIES, ...SUCCESS_STORIES];
+  const loop = [...base, ...base];
 
-        {/* Stories Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 sm:gap-16">
-          {SUCCESS_STORIES.map((story) => (
-            <div
-              key={story.id}
-              className="border-l-2 border-(--c-ink)/30 pl-6 sm:pl-10 py-4 flex flex-col justify-between hover:border-(--c-ink) transition-all bg-(--c-surface)/30 p-6"
+  return (
+    <section id="success" className="py-20 sm:py-28 bg-(--c-card) overflow-hidden">
+      {/* Header */}
+      <div className="max-w-2xl mx-auto px-4 sm:px-8 mb-12 sm:mb-16 text-center">
+        <span className="text-xs uppercase tracking-widest text-(--c-accent) font-semibold mb-2 block font-(family-name:--f-body)">
+          What pet parents say
+        </span>
+        <h2 className="font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light text-balance">
+          Loved by Ahmedabad pet parents
+        </h2>
+        <div className="mt-5 inline-flex items-center gap-2 font-(family-name:--f-body) text-sm text-(--c-body)">
+          <span className="flex items-center gap-0.5" aria-hidden="true">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} className="w-4 h-4 fill-(--c-accent) text-(--c-accent)" />
+            ))}
+          </span>
+          <span>
+            Rated {Number(GOOGLE_RATING.ratingValue).toFixed(1)} from{' '}
+            {GOOGLE_RATING.reviewCount} reviews on Google
+          </span>
+        </div>
+      </div>
+
+      {/* Marquee */}
+      <div className="testi-marquee relative">
+        {/* Edge fades */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-40 bg-gradient-to-r from-(--c-card) to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 sm:w-40 bg-gradient-to-l from-(--c-card) to-transparent" />
+
+        <ul className="marquee-track flex w-max gap-5 sm:gap-6 px-4 sm:px-8" aria-label="Reviews from Google">
+          {loop.map((story, i) => (
+            <li
+              key={i}
+              aria-hidden={i >= SUCCESS_STORIES.length ? true : undefined}
+              className="w-[280px] sm:w-[360px] shrink-0 flex flex-col justify-between bg-(--c-surface)/40 border border-(--c-line)/30 p-6 sm:p-7 transition-colors hover:border-(--c-accent)/50"
             >
               <div>
-                <Quote className="w-8 h-8 text-(--c-accent)/40 mb-4" />
-                <p className="font-(family-name:--f-body) text-base sm:text-lg text-(--c-body) italic font-light leading-relaxed mb-8">
+                <div
+                  className="flex items-center gap-0.5 mb-4"
+                  aria-label={`${story.rating} out of 5 stars`}
+                >
+                  {Array.from({ length: story.rating }).map((_, s) => (
+                    <Star key={s} className="w-3.5 h-3.5 fill-(--c-accent) text-(--c-accent)" />
+                  ))}
+                </div>
+                <Quote className="w-6 h-6 text-(--c-accent)/30 mb-3" aria-hidden="true" />
+                <p className="font-(family-name:--f-body) text-base text-(--c-ink) font-light leading-relaxed">
                   {story.quote}
                 </p>
-
-                <div className="bg-(--c-card) p-4 border border-(--c-line)/30 mb-6 text-xs text-(--c-body)">
-                  <span className="font-semibold text-(--c-ink) block mb-1">Clinical Outcome:</span>
-                  {story.storyDetails}
-                </div>
               </div>
-
-              <div className="flex items-center justify-between gap-4 pt-4 border-t border-(--c-line)/20">
-                <div className="flex items-center gap-4">
-                  <img
-                    src={story.imageUrl}
-                    alt={story.altText}
-                    width={56}
-                    height={56}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-14 h-14 object-cover grayscale rounded-none border border-(--c-line)/40"
-                  />
-                  <div>
-                    <h4 className="font-(family-name:--f-display) text-lg text-(--c-ink) font-medium">
-                      {story.petName} <span className="text-xs text-(--c-accent) font-normal">({story.breed})</span>
-                    </h4>
-                    <p className="font-(family-name:--f-body) text-xs text-(--c-body) uppercase tracking-widest mt-0.5">
-                      {story.condition} • {story.ownerName}
-                    </p>
-                  </div>
-                </div>
-
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-(--c-surface-2) text-(--c-ink) px-3 py-1 uppercase tracking-wider border border-(--c-line)/40 shrink-0">
-                  <Sparkles className="w-3 h-3 text-(--c-accent)" />
-                  {story.duration}
+              <figcaption className="mt-6 pt-4 border-t border-(--c-line)/20 flex items-center gap-2 text-[11px] uppercase tracking-widest">
+                <span className="font-semibold text-(--c-ink)">
+                  {[story.petName, story.ownerName].filter(Boolean).join(' • ')}
                 </span>
-              </div>
-            </div>
+                <span className="text-(--c-accent)">· {story.source}</span>
+              </figcaption>
+            </li>
           ))}
-        </div>
-
+        </ul>
       </div>
+
+      <style>{`
+        .marquee-track { animation: testimonial-scroll 48s linear infinite; }
+        .testi-marquee:hover .marquee-track { animation-play-state: paused; }
+        @keyframes testimonial-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        @media (prefers-reduced-motion: reduce) {
+          .marquee-track { animation: none; transform: none; }
+          .testi-marquee { overflow-x: auto; }
+        }
+      `}</style>
     </section>
   );
 };

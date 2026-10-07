@@ -318,33 +318,66 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   }
 ];
 
+/**
+ * The clinic's current Google Business Profile rating. Feeds `aggregateRating`
+ * in seo/schema.ts. The clinic's owner manages that profile directly, so this
+ * is confirmed from the live listing rather than scraped or estimated.
+ *
+ * MUST BE KEPT IN SYNC BY HAND with the live profile
+ * (https://maps.google.com/?cid=16829298020285027612) — there is no API
+ * wired up to pull this automatically, so it will drift as new reviews come
+ * in until someone updates it. Last confirmed 2026-10-07: 5.0 stars, 24
+ * reviews (also 5.0 / 23 on Justdial).
+ */
+export const GOOGLE_RATING = {
+  ratingValue: '5',
+  bestRating: '5',
+  reviewCount: 24,
+};
+
+/**
+ * Genuine excerpts from the clinic's Google Business Profile (5.0 stars, 24
+ * reviews), published at the business owner's direction — the owner manages
+ * that profile and gave these specifically to replace the template fiction
+ * this array used to hold ("Sarah & James M." on an invented dog named
+ * Bella, "Elena R." on an invented IVDD case — fabricated clients quoted by
+ * name about fabricated patients on a real veterinary practice's homepage,
+ * the same template defect as the three fabricated clinicians SPECIALISTS
+ * once carried).
+ *
+ * Each `quote` is verbatim from the profile (only a leading "& " / "..." may
+ * be trimmed) — never paraphrased, never invented. No reviewer gave a full
+ * name on the profile, so `ownerName` is "Google review" rather than a
+ * guessed one; `petName`, `breed`, `condition` and `storyDetails` are left
+ * out entirely because none of these three reviewers stated them — the
+ * `SuccessStory` type makes those fields optional for exactly this case.
+ *
+ * These ARE emitted as Review + AggregateRating schema (see
+ * seo/schema.ts) — unlike the fiction they replace, they are real and the
+ * business owner has authorized publishing them.
+ */
 export const SUCCESS_STORIES: SuccessStory[] = [
-  // Empty on purpose — see the note below. Add real, permissioned stories and
-  // the "Success Stories" section and its nav link reappear automatically.
-  //
-  // This list used to hold two testimonials that were template fiction:
-  // "Sarah & James M." on Bella, a Golden Retriever recovering from TPLO
-  // surgery, and "Elena R." on an IVDD recovery — invented clients quoted by
-  // name about invented patients, describing clinical outcomes on a real
-  // veterinary practice's homepage. They arrived with the same site template
-  // that supplied three fabricated clinicians (see SPECIALISTS above).
-  //
-  // They were display-only rather than emitted as Review/AggregateRating
-  // schema, which is the one thing that kept this out of Google's structured
-  // data. seo/schema.ts deliberately emits neither, and it must stay that way
-  // until there are real reviews to point at.
-  //
-  // The clinic HAS real reviews — 24 of them on its Google Business Profile —
-  // and those are what belongs here. They could not be pulled automatically:
-  // the profile is not indexed by the available search tools, and reading
-  // review text needs the Google Places API plus the clinic's place_id.
-  // Writing stand-ins in the meantime would have recreated the exact defect
-  // this removal exists to fix, so the section renders nothing instead.
-  //
-  // To restore: paste each real review as one entry. `quote` and `ownerName`
-  // come straight from the review; `petName`, `breed`, `condition` and
-  // `storyDetails` only if the reviewer actually stated them — leave them out
-  // rather than filling the shape.
+  {
+    id: 'google-review-1',
+    quote: 'They also recently added Class 4 Laser therapy, which is unique in such a setup.',
+    ownerName: 'Google review',
+    rating: 5,
+    source: 'Google',
+  },
+  {
+    id: 'google-review-2',
+    quote: 'Her clinic itself is a great environment for all pets.',
+    ownerName: 'Google review',
+    rating: 5,
+    source: 'Google',
+  },
+  {
+    id: 'google-review-3',
+    quote: 'Dr Dhanvi is a blessing, such a healing soul and such loving hands.',
+    ownerName: 'Google review',
+    rating: 5,
+    source: 'Google',
+  },
 ];
 
 export const SPECIALISTS: Specialist[] = [
