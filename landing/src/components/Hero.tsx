@@ -102,7 +102,7 @@ const HeroBadge: React.FC<{ tone?: 'light' | 'dark' }> = ({ tone = 'light' }) =>
     }`}
   >
     <Activity className={`w-3.5 h-3.5 ${tone === 'dark' ? 'text-white' : 'text-(--c-accent)'}`} />
-    <span>India&rsquo;s first pet rehabilitation center</span>
+    <span>Dedicated pet physiotherapy &amp; rehabilitation in Ahmedabad</span>
   </div>
 );
 

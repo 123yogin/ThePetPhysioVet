@@ -45,7 +45,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'hip-dysplasia',
     title: 'Hip Dysplasia',
     seoH1: 'Hip dysplasia in dogs: physiotherapy and rehab in Ahmedabad',
-    seoTitle: 'Hip Dysplasia Treatment for Dogs in Ahmedabad',
+    seoTitle: 'Hip Dysplasia Treatment for Dogs & Puppies in Ahmedabad',
     seoDescription:
       'Hip dysplasia physiotherapy for dogs in Ahmedabad: targeted exercise, peanut-ball work, indoor pool swimming and laser to steady the hips and build muscle.',
     category: 'degenerative',
@@ -79,7 +79,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'neurological-recovery',
     title: 'Neurological Recovery',
     seoH1: 'Neurological recovery and paralysis rehab for dogs in Ahmedabad',
-    seoTitle: 'Dog Paralysis & Neurological Rehab in Ahmedabad',
+    seoTitle: 'Dog Paralysis, Ataxia & Neurological Rehab in Ahmedabad',
     seoDescription:
       'Dog paralysis and neurological rehab in Ahmedabad: spinal stroke (FCE), degenerative myelopathy, ataxia and nerve injury. Exercise, stimulation, hydrotherapy.',
     category: 'neurological',
@@ -96,7 +96,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'sports-injury',
     title: 'Sports Injury',
     seoH1: 'Sports and working-dog injury rehabilitation in Ahmedabad',
-    seoTitle: 'Dog Sports Injury Physiotherapy in Ahmedabad',
+    seoTitle: 'Dog Sports Injury Physiotherapy & Recovery in Ahmedabad',
     seoDescription:
       'Sports injury physiotherapy for dogs in Ahmedabad: strains, sprains and tendonitis in agility and working dogs. Biomechanical assessment, laser, recovery plan.',
     category: 'lifestyle',
@@ -113,7 +113,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'senior-mobility',
     title: 'Senior Mobility',
     seoH1: 'Mobility care for senior dogs and cats in Ahmedabad',
-    seoTitle: 'Senior Dog Mobility Care & Physio in Ahmedabad',
+    seoTitle: 'Senior Dog Mobility Care & Arthritis Physio in Ahmedabad',
     seoDescription:
       'Senior dog mobility care in Ahmedabad: gentle massage, warm-water hydrotherapy, balance work and non-slip advice for older dogs and cats who are slowing down.',
     category: 'lifestyle',
@@ -130,7 +130,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'obesity-rehab',
     title: 'Obesity Rehab',
     seoH1: 'Weight loss and obesity rehabilitation for dogs in Ahmedabad',
-    seoTitle: 'Dog Obesity & Weight Loss Programme in Ahmedabad',
+    seoTitle: 'Dog Obesity & Weight Loss Programme in Ahmedabad, Shilaj',
     seoDescription:
       'Dog obesity and weight-loss rehab in Ahmedabad: low-impact swimming in our indoor pool, structured exercise and weight milestones for overweight dogs and cats.',
     category: 'lifestyle',
@@ -169,7 +169,7 @@ export const SERVICES: ServiceItem[] = [
     id: 'manual-therapy',
     title: 'Manual Therapy',
     seoH1: 'Manual therapy and massage for dogs and cats',
-    seoTitle: 'Manual Therapy & Massage for Dogs in Ahmedabad',
+    seoTitle: 'Manual Therapy & Soft Tissue Massage for Dogs in Ahmedabad',
     seoDescription:
       'Hands-on manual therapy for dogs and cats in Ahmedabad: massage, therapeutic exercise, strength training and acupressure, adjusted for each pet in the session.',
     icon: 'front_hand',
@@ -183,7 +183,7 @@ export const SERVICES: ServiceItem[] = [
     id: 'electrophysical',
     title: 'Electro-physical Therapy',
     seoH1: 'Laser and electrotherapy for dogs and cats',
-    seoTitle: 'Laser & Electrotherapy for Dogs in Ahmedabad',
+    seoTitle: 'Laser & Electrotherapy for Dog Arthritis Pain in Ahmedabad',
     seoDescription:
       'Class IV laser, PEMF, ultrasound, TENS, NMES and electro-acupuncture for dogs and cats in Ahmedabad, applied under clinical supervision as recovery progresses.',
     icon: 'bolt',
@@ -284,7 +284,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   {
     number: '01',
     title: 'Assessment',
-    desc: 'Comprehensive evaluation of mobility and condition.',
+    desc: 'A full evaluation of mobility and condition.',
     details: 'A thorough 60-minute consultation including gait analysis, muscle mass girth measurement, joint range-of-motion testing, and neurological reflex check.',
     whatToExpect: ['Medical history review', 'Symmetrical stance inspection', 'Goniometer joint range testing', 'Initial pain & comfort scoring']
   },
@@ -298,7 +298,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   {
     number: '03',
     title: 'Personalized Therapy',
-    desc: 'A tailored plan utilizing various modalities.',
+    desc: 'A plan built from the therapies that suit your pet — hydrotherapy, laser, manual therapy, and acupuncture as needed.',
     details: 'Crafting a dedicated multi-week therapy schedule blending indoor pool hydrotherapy, Class IV laser, manual joint mobilization, and acupuncture as needed.',
     whatToExpect: ['Hands-on therapeutic sessions', 'Gentle, zero-fear approach', 'Immediate post-treatment icing/heat', 'Customized treatment frequency (1-3x/week)']
   },
@@ -531,7 +531,7 @@ export const FAQS: FAQItem[] = [
     id: 'faq2',
     category: 'Sessions',
     question: 'How long is a typical rehabilitation session?',
-    answer: 'Initial comprehensive assessments take 60 minutes. Follow-up treatment sessions typically last between 30 to 45 minutes, depending on your pet\'s specific needs, condition, and stamina.'
+    answer: 'Initial assessments take 60 minutes. Follow-up treatment sessions typically last between 30 to 45 minutes, depending on your pet\'s specific needs, condition, and stamina.'
   },
   {
     id: 'faq3',

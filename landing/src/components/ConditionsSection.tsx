@@ -65,7 +65,7 @@ export const ConditionsSection: React.FC = () => {
           </div>
           <div className="md:col-span-5 md:text-right">
             <p className="font-(family-name:--f-body) text-base sm:text-lg text-(--c-body) font-light leading-relaxed">
-              Expert physical therapy and custom rehabilitation protocols tailored to your pet's precise medical profile.
+              Rehabilitation plans built around what your vet has already told us about your pet.
             </p>
           </div>
         </div>

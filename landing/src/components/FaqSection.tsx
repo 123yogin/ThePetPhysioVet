@@ -65,7 +65,7 @@ export const FaqSection: React.FC = () => {
                     className="w-full flex items-center justify-between p-6 text-left cursor-pointer group"
                   >
                     <span className="font-(family-name:--f-display) text-lg sm:text-xl text-(--c-ink) font-medium group-hover:text-(--c-accent) transition-colors pr-4">
-                      {faq.question}
+                      <h3 className="contents">{faq.question}</h3>
                     </span>
                     <span className={`p-1 text-(--c-ink) transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
                       <ChevronDown className="w-5 h-5" />
@@ -97,7 +97,7 @@ export const FaqSection: React.FC = () => {
           ) : (
             <div className="text-center py-12 bg-(--c-card) p-8 border border-(--c-line)/40">
               <HelpCircle className="w-8 h-8 text-(--c-mute) mx-auto mb-3" />
-              <p className="text-sm text-(--c-body)">No matching questions found. Feel free to contact our team directly!</p>
+              <p className="text-sm text-(--c-body)">Didn&rsquo;t find your question? Call or email us.</p>
             </div>
           )}
         </div>
