@@ -429,7 +429,7 @@ export const FAQS: FAQItem[] = [
     id: 'faq1',
     category: 'General',
     question: 'Do I need a referral from my regular vet?',
-    answer: 'Yes, in most cases we require a referral from your primary care veterinarian to ensure we have your pet\'s complete medical history, surgical reports, X-rays, and can coordinate their care safely and effectively.'
+    answer: 'Yes, in most cases we require a referral from your primary care veterinarian to ensure we have your pet\'s complete medical history, surgical reports, X-rays, and can coordinate their care safely and effectively. No referral? Call us and we\'ll advise you on the next step.'
   },
   {
     id: 'faq2',
@@ -447,7 +447,7 @@ export const FAQS: FAQItem[] = [
     id: 'faq4',
     category: 'Insurance',
     question: 'Does pet insurance cover physiotherapy?',
-    answer: 'Many comprehensive pet insurance policies (such as Trupanion, Nationwide, Healthy Paws, and Petplan) cover veterinary rehabilitation and hydrotherapy when prescribed by a veterinarian. We provide itemized receipts for easy reimbursement.'
+    answer: 'Some pet insurance policies cover physiotherapy and hydrotherapy when your vet recommends it — check your policy. We provide itemised receipts you can submit to your insurer.'
   },
   {
     id: 'faq5',
