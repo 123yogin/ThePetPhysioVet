@@ -165,7 +165,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
       const data = await res.json();
       if (!res.ok) {
         setError(data.detail || 'Those slots could not be held. Please try another time.');
-        if (res.status === 409) {
+        if (res.status === 409 || (res.status === 400 && data.title === 'Slot has started')) {
           loadAvailability(date);
           setChosen([]);
         }

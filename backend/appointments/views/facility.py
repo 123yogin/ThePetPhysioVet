@@ -95,6 +95,7 @@ def _validate_slots(data):
 def _availability_payload(date_value):
     counts = _slot_counts(date_value)
     now = timezone.now()
+    started = {s["slot"]: slot_has_started(date_value, s["slot"], now) for s in FACILITY_SLOTS}
     return {
         "date": date_value.isoformat(),
         "capacity": FACILITY_BEDS,
@@ -106,8 +107,8 @@ def _availability_payload(date_value):
                 "end": s["end"],
                 "label": slot_label(s["slot"]),
                 "capacity": FACILITY_BEDS,
-                "past": slot_has_started(date_value, s["slot"], now),
-                "available": 0 if slot_has_started(date_value, s["slot"], now)
+                "past": started[s["slot"]],
+                "available": 0 if started[s["slot"]]
                 else max(0, FACILITY_BEDS - counts.get(s["slot"], 0)),
             }
             for s in FACILITY_SLOTS

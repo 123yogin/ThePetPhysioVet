@@ -49,7 +49,7 @@ export interface LegalDoc {
 
 export const PRIVACY: LegalDoc = {
   title: 'Privacy Policy',
-  lastUpdated: '19 September 2026',
+  lastUpdated: '7 October 2026',
   intro:
     'This page explains what this website collects, why, and who else sees it. '
     + 'It covers the website only — care your pet receives at the clinic is '
