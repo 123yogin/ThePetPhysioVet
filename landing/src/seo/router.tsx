@@ -34,9 +34,14 @@ export const RouterProvider: React.FC<{ initialPath?: string; children: React.Re
   const [path, setPath] = useState<string>(() =>
     typeof window === 'undefined' ? normalizePath(initialPath) : normalizePath(window.location.pathname),
   );
-  const [search, setSearch] = useState<string>(() =>
-    typeof window === 'undefined' ? '' : window.location.search.replace(/^\?/, ''),
-  );
+  // The prerendered HTML never has a query string, so the first client render
+  // must not either: reading window.location.search here made `/?book=1` render
+  // the booking panel on the client but not on the server, which is hydration
+  // error #418. The real query is adopted right after hydration (effect below).
+  const [search, setSearch] = useState<string>('');
+  useEffect(() => {
+    setSearch(window.location.search.replace(/^\?/, ''));
+  }, []);
 
   const navigate = useCallback((to: string, options?: { replace?: boolean; scroll?: boolean }) => {
     if (typeof window === 'undefined') return;
