@@ -36,6 +36,7 @@ const ID = {
   service: (id: string) => `${absoluteUrl(servicePath(id))}#service`,
   condition: (id: string) => `${absoluteUrl(conditionPath(id))}#condition`,
   person: (id: string) => `${absoluteUrl(specialistPath(id))}#person`,
+  area: (name: string) => `${SITE.origin}/#area-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
   faq: (path: string) => `${absoluteUrl(path)}#faq`,
 };
 
@@ -115,7 +116,7 @@ export function businessNode(): Node {
       addressCountry: SITE.address.addressCountry,
     },
     geo: { '@type': 'GeoCoordinates', latitude: SITE.geo.latitude, longitude: SITE.geo.longitude },
-    areaServed: SITE.areaServed.map((name) => ({ '@type': 'AdministrativeArea', name })),
+    areaServed: SITE.areaServed.map((name) => ({ '@type': 'AdministrativeArea', '@id': ID.area(name), name })),
     openingHoursSpecification: openingHoursSpecification(),
     // Points search engines at the clinic's own Google listing, which is the
     // authoritative source for the pin and the hours this file cannot assert.
@@ -245,8 +246,12 @@ export function serviceNode(service: ServiceItem): Node {
     serviceType: service.title,
     category: 'Veterinary rehabilitation',
     provider: { '@id': ID.business() },
-    areaServed: SITE.areaServed.map((name) => ({ '@type': 'AdministrativeArea', name })),
-    audience: { '@type': 'Audience', audienceType: service.suitableFor.join(', ') },
+    // Reference the AdministrativeArea nodes defined once on the business node
+    // (always in the same graph) instead of repeating them for every Service.
+    areaServed: SITE.areaServed.map((name) => ({ '@id': ID.area(name) })),
+    // suitableFor is empty for most services; an Audience with no audienceType
+    // is an empty object, so fall back to the actual audience: pet owners.
+    audience: { '@type': 'Audience', audienceType: service.suitableFor.length ? service.suitableFor.join(', ') : 'Pet owners' },
     hoursAvailable: openingHoursSpecification(),
     additionalProperty: [
       { '@type': 'PropertyValue', name: 'Typical session length', value: service.duration },

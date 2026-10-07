@@ -8,11 +8,12 @@
  */
 
 import { SITE, absoluteUrl } from './siteConfig';
-import { indexableRoutes } from './routes';
+import { indexableRoutes, matchRoute } from './routes';
 import { getPageMeta } from './metadata';
 import { CONDITIONS, SERVICES, SPECIALISTS, FAQS } from '../data/clinicData';
 import { conditionFaqs } from '../data/conditionFaqs';
 import { conditionPath, servicePath, specialistPath } from './routes';
+
 
 /**
  * AI crawlers, split by purpose.
@@ -127,6 +128,14 @@ export function buildLlmsTxt(): string {
   const line = (path: string, label: string, note: string) =>
     `- [${label}](${absoluteUrl(path)}): ${note.replace(/\s+/g, ' ').trim()}`;
 
+  // Every section is built from the indexable route list (the same source as
+  // sitemap.xml), so a route added there appears here with no further edit.
+  const routesOf = (kind: string) =>
+    indexableRoutes()
+      .filter((r) => r.kind === kind)
+      .map((route) => ({ route, entity: matchRoute(route.path).entity }))
+      .filter((x) => x.entity);
+
   return [
     `# ${SITE.brandName}`,
     '',
@@ -140,18 +149,34 @@ export function buildLlmsTxt(): string {
     '',
     '## Conditions treated',
     '',
-    ...CONDITIONS.map((c) => line(conditionPath(c.id), c.title, `${c.shortDesc} Expected recovery: ${c.expectedRecoveryTime}.`)),
+    ...routesOf('condition').map(({ route, entity }) => {
+      const c = entity as (typeof CONDITIONS)[number];
+      return line(route.path, c.title, `${c.shortDesc} Expected recovery: ${c.expectedRecoveryTime}.`);
+    }),
     '',
     '## Treatment modalities',
     '',
-    ...SERVICES.map((s) => line(servicePath(s.id), s.title, `${s.shortDesc} Typical session: ${s.duration}.`)),
+    ...routesOf('service').map(({ route, entity }) => {
+      const s = entity as (typeof SERVICES)[number];
+      return line(route.path, s.title, `${s.shortDesc} Typical session: ${s.duration}.`);
+    }),
     '',
     '## Clinicians',
     '',
     // Skip the parts we don't have rather than emitting ". ." as a description.
-    ...SPECIALISTS.map((p) =>
-      line(specialistPath(p.id), p.name, [p.role, p.credentials].filter(Boolean).join('. ')),
-    ),
+    ...routesOf('specialist').map(({ route, entity }) => {
+      const p = entity as (typeof SPECIALISTS)[number];
+      return line(route.path, p.name, [p.role, p.credentials].filter(Boolean).join('. '));
+    }),
+    '',
+    '## Other pages',
+    '',
+    ...indexableRoutes()
+      .filter((r) => !['condition', 'service', 'specialist'].includes(r.kind))
+      .map((r) => {
+        const m = getPageMeta(r.path);
+        return line(r.path, r.kind === 'home' ? SITE.brandName : m.title, m.description);
+      }),
     '',
     '## Notes',
     '',
