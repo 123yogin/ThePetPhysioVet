@@ -98,8 +98,10 @@ export function getPageMeta(pathname: string): PageMeta {
   if (isCondition(entity)) {
     return {
       ...base,
-      title: buildTitle(`${entity.title} Rehabilitation for Dogs`),
-      description: buildDescription(
+      // Hand-written copy wins; the template is only the fallback for an entity
+      // that has none. Hand-written titles are used verbatim (no brand suffix added).
+      title: entity.seoTitle ?? buildTitle(`${entity.title} Rehabilitation for Dogs`),
+      description: entity.seoDescription ?? buildDescription(
         entity.shortDesc,
         `Recovery outlook: ${entity.expectedRecoveryTime}.`,
         `Referral-based care in ${locality}.`,
@@ -114,8 +116,8 @@ export function getPageMeta(pathname: string): PageMeta {
   if (isService(entity)) {
     return {
       ...base,
-      title: buildTitle(`${entity.title} for Pets`),
-      description: buildDescription(
+      title: entity.seoTitle ?? buildTitle(`${entity.title} for Pets`),
+      description: entity.seoDescription ?? buildDescription(
         entity.shortDesc,
         `Typical session ${entity.duration}.`,
         `Delivered by certified veterinary rehabilitation specialists in ${locality}.`,

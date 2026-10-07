@@ -9,6 +9,12 @@ export interface ConditionItem {
   expectedRecoveryTime: string;
   imageUrl: string;
   altText: string;
+  /** Hand-written <title> (<= 60 chars as displayed). Preferred over the template. */
+  /** Hand-written page <h1>. Falls back to the entity title. */
+  seoH1?: string;
+  seoTitle?: string;
+  /** Hand-written meta description (140-160 chars). Preferred over the template. */
+  seoDescription?: string;
 }
 
 export interface ServiceItem {
@@ -20,6 +26,12 @@ export interface ServiceItem {
   benefits: string[];
   suitableFor: string[];
   duration: string;
+  /** Hand-written <title> (<= 60 chars as displayed). Preferred over the template. */
+  /** Hand-written page <h1>. Falls back to the entity title. */
+  seoH1?: string;
+  seoTitle?: string;
+  /** Hand-written meta description (140-160 chars). Preferred over the template. */
+  seoDescription?: string;
 }
 
 export interface JourneyStep {

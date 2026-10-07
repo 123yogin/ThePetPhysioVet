@@ -24,7 +24,7 @@ const warn = (msg) => warnings.push(msg);
 
 const TITLE_MIN = 25;
 const TITLE_MAX = 60;
-const DESC_MIN = 120;
+const DESC_MIN = 140;
 const DESC_MAX = 160;
 /** Content bytes inside #root below which a page is effectively empty. */
 const MIN_ROOT_CONTENT = 1000;
@@ -89,6 +89,20 @@ for (const file of pages) {
     const shown = title.replace(/&amp;/g, '&').length;
     if (shown > TITLE_MAX) fail(`${rel}: title ${shown} chars (>${TITLE_MAX}) — will be truncated.`);
     if (title.length < TITLE_MIN) warn(`${rel}: title only ${title.length} chars — under-using the space.`);
+    // Same word-stem twice ("Rehab ... Rehabilitation") reads as keyword stuffing.
+    // The brand suffix is stripped first: "Physiotherapy ... The Pet Physio Vet" is
+    // the brand, not a repeat.
+    const stems = new Map();
+    for (const word of title.replace(/&amp;/g, '&').replace(/\|\s*The Pet Physio Vet\s*$/i, '').toLowerCase().match(/[a-z]{5,}/g) ?? []) {
+      const stem = word.slice(0, 5);
+      if (stems.has(stem) && stems.get(stem) !== word) fail(`${rel}: title repeats the word stem "${stem}" ("${stems.get(stem)}" / "${word}")`);
+      else if (stems.has(stem)) fail(`${rel}: title repeats "${word}"`);
+      stems.set(stem, word);
+    }
+    // Condition and treatment pages are local-intent pages.
+    if (/^\/(conditions|treatments)\//.test(rel) && !/ahmedabad/i.test(title)) {
+      fail(`${rel}: title lacks "Ahmedabad" — condition/treatment pages must carry the locality.`);
+    }
     if (titles.has(title)) fail(`${rel}: duplicate title, also on ${titles.get(title)}`);
     else titles.set(title, rel);
   }

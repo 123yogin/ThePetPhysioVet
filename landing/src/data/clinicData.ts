@@ -10,6 +10,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'arthritis',
     title: 'Arthritis',
+    seoH1: 'Arthritis in dogs and cats: physiotherapy and pain management in Ahmedabad',
+    seoTitle: 'Dog Arthritis Treatment & Physiotherapy in Ahmedabad',
+    seoDescription:
+      'Arthritis physiotherapy for dogs and cats in Ahmedabad: laser, hydrotherapy, massage, acupuncture and TENS to ease stiffness and rebuild muscle support.',
     category: 'degenerative',
     shortDesc: 'Managing pain and improving joint mobility for aging companions.',
     fullDesc: 'Osteoarthritis is a progressive joint disease affecting cartilage and surrounding bones. Our multi-modal rehabilitation targets stiffness, restores range of motion, and rebuilds muscular support without heavy pharmacological side effects.',
@@ -23,6 +27,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'ivdd',
     title: 'IVDD',
+    seoH1: 'IVDD (slipped disc) in dogs: rehabilitation in Ahmedabad',
+    seoTitle: 'IVDD in Dogs: Slipped Disc Physiotherapy in Ahmedabad',
+    seoDescription:
+      'IVDD rehab for dogs in Ahmedabad: electro-acupuncture, TENS, laser and supported swimming in our indoor pool for slipped disc, back pain and weak hind legs.',
     category: 'neurological',
     shortDesc: 'Specialized neurological rehabilitation for spinal conditions.',
     fullDesc: 'Intervertebral Disc Disease affects the spinal column, leading to pain, weakness, or paralysis. Our conservative and post-op spinal protocol focuses on neural stimulation, spinal alignment, proprioceptive re-education, and supported swimming in our indoor pool.',
@@ -36,6 +44,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'hip-dysplasia',
     title: 'Hip Dysplasia',
+    seoH1: 'Hip dysplasia in dogs: physiotherapy and rehab in Ahmedabad',
+    seoTitle: 'Hip Dysplasia in Dogs: Physiotherapy in Ahmedabad',
+    seoDescription:
+      'Hip dysplasia physiotherapy for dogs in Ahmedabad: targeted exercise, peanut-ball work, indoor pool swimming and laser to steady the hips and build muscle.',
     category: 'degenerative',
     shortDesc: 'Strengthening musculature to support and stabilize the hip joints.',
     fullDesc: 'A congenital condition where the hip socket fails to fully cover the ball portion of the upper thighbone. Specialized targeted exercise regimens build gluteal and pelvic stabilization muscles, drastically reducing bone-on-bone friction.',
@@ -49,6 +61,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'post-surgical',
     title: 'Post Surgical Rehab',
+    seoH1: 'Post-surgical rehabilitation for dogs in Ahmedabad',
+    seoTitle: 'Post-Surgery Dog Physiotherapy (TPLO) in Ahmedabad',
+    seoDescription:
+      'Post-surgery rehab for dogs in Ahmedabad after TPLO, CCL, FHO or fracture repair. We work with your surgeon on swelling, strength and a natural gait.',
     category: 'post-op',
     shortDesc: 'Accelerated and safe recovery protocols following orthopedic procedures.',
     fullDesc: 'Essential care post-TPLO, CCL repair, FHO, or fracture repair. We work closely with your surgeon to control post-op edema, promote surgical site incisional healing, prevent muscle atrophy, and re-establish a natural symmetrical gait.',
@@ -62,6 +78,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'neurological-recovery',
     title: 'Neurological Recovery',
+    seoH1: 'Neurological recovery and paralysis rehab for dogs in Ahmedabad',
+    seoTitle: 'Dog Paralysis & Neurological Rehab in Ahmedabad',
+    seoDescription:
+      'Dog paralysis and neurological rehab in Ahmedabad: spinal stroke (FCE), degenerative myelopathy, ataxia and nerve injury. Exercise, stimulation, hydrotherapy.',
     category: 'neurological',
     shortDesc: 'Retraining pathways to restore balance, coordination, and mobility.',
     fullDesc: 'Targeted neurological rehab for spinal stroke (FCE), degenerative myelopathy (DM), cerebellar ataxia, and nerve trauma. We stimulate neuroplasticity using proprioceptive tracks, wobble boards, and aquatic buoyancy.',
@@ -75,6 +95,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'sports-injury',
     title: 'Sports Injury',
+    seoH1: 'Sports and working-dog injury rehabilitation in Ahmedabad',
+    seoTitle: 'Dog Sports Injury Physiotherapy in Ahmedabad',
+    seoDescription:
+      'Sports injury physiotherapy for dogs in Ahmedabad: strains, sprains and tendonitis in agility and working dogs. Biomechanical assessment, laser, recovery plan.',
     category: 'lifestyle',
     shortDesc: 'Targeted recovery plans to get your active dog back to peak performance.',
     fullDesc: 'Agility, flyball, working dogs, and energetic companions frequently suffer tendonitis, iliopsoas strains, and ligament sprains. Our biomechanical evaluation isolates subtle compensations and repairs tissue integrity.',
@@ -88,6 +112,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'senior-mobility',
     title: 'Senior Mobility',
+    seoH1: 'Mobility care for senior dogs and cats in Ahmedabad',
+    seoTitle: 'Senior Dog Mobility Care & Physio in Ahmedabad',
+    seoDescription:
+      'Senior dog mobility care in Ahmedabad: gentle massage, warm-water hydrotherapy, balance work and non-slip advice for older dogs and cats who are slowing down.',
     category: 'lifestyle',
     shortDesc: 'Gentle therapies designed to maintain independence and comfort in older age.',
     fullDesc: 'Aging pets deserve dignity, comfort, and vital motion. Our senior care plans safely boost endurance, maintain core muscle tone, ease stiff spinal joints, and enhance mental engagement in a low-stress environment.',
@@ -101,6 +129,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'obesity-rehab',
     title: 'Obesity Rehab',
+    seoH1: 'Weight loss and obesity rehabilitation for dogs in Ahmedabad',
+    seoTitle: 'Dog Obesity & Weight Loss Programme in Ahmedabad',
+    seoDescription:
+      'Dog obesity and weight-loss rehab in Ahmedabad: low-impact swimming in our indoor pool, structured exercise and weight milestones for overweight dogs and cats.',
     category: 'lifestyle',
     shortDesc: 'Safe, structured exercise programs for healthy weight management.',
     fullDesc: 'Excess weight severely compounds joint stress, heart strain, and diabetes risk. Swimming in our indoor pool lets your pet work without the joint impact of walking on hard ground, thanks to the buoyancy of the water.',
@@ -117,6 +149,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'indoor-physiotherapy',
     title: 'Indoor Physiotherapy',
+    seoH1: 'Indoor physiotherapy for dogs and cats at our Shilaj clinic',
+    seoTitle: 'Indoor Dog & Cat Physiotherapy Clinic in Shilaj, Ahmedabad',
+    seoDescription:
+      'Indoor physiotherapy at our Shilaj clinic in Ahmedabad: residential care for dogs and cats from outside the city, with supervised food, hygiene and rehab.',
     icon: 'night_shelter',
     shortDesc: 'Residential care for patients travelling from outside the city.',
     fullDesc: 'For patients coming from out of the city: your pet stays at the clinic for their course of physiotherapy.',
@@ -132,6 +168,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'manual-therapy',
     title: 'Manual Therapy',
+    seoH1: 'Manual therapy and massage for dogs and cats',
+    seoTitle: 'Manual Therapy & Massage for Dogs in Ahmedabad',
+    seoDescription:
+      'Hands-on manual therapy for dogs and cats in Ahmedabad: massage, therapeutic exercise, strength training and acupressure, adjusted for each pet in the session.',
     icon: 'front_hand',
     shortDesc: 'Hands-on treatment delivered directly by a clinician.',
     fullDesc: 'Hands-on treatment delivered directly by a clinician, selected and adjusted for each animal during the session.',
@@ -142,6 +182,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'electrophysical',
     title: 'Electro-physical Therapy',
+    seoH1: 'Laser and electrotherapy for dogs and cats',
+    seoTitle: 'Laser & Electrotherapy for Dogs in Ahmedabad',
+    seoDescription:
+      'Class IV laser, PEMF, ultrasound, TENS, NMES and electro-acupuncture for dogs and cats in Ahmedabad, applied under clinical supervision as recovery progresses.',
     icon: 'bolt',
     shortDesc: 'Equipment-assisted therapies applied under clinical supervision.',
     fullDesc: 'Equipment-assisted therapies applied under clinical supervision, chosen to suit the animal and the stage of their recovery.',
@@ -158,7 +202,11 @@ export const SERVICES: ServiceItem[] = [
   },
   {
     id: 'specialised',
-    title: 'Specialised',
+    title: 'Acupuncture & Hydrotherapy',
+    seoH1: 'Acupuncture and hydrotherapy for dogs and cats in Ahmedabad',
+    seoTitle: 'Acupuncture & Hydrotherapy for Dogs in Ahmedabad',
+    seoDescription:
+      'Acupuncture and indoor hydrotherapy for dogs and cats in Ahmedabad: veterinary acupuncture and a lukewarm indoor pool, planned and assessed for each pet.',
     icon: 'star',
     shortDesc: 'Acupuncture and our indoor hydrotherapy pool.',
     fullDesc: 'Acupuncture, and hydrotherapy in an indoor swimming pool kept at lukewarm temperature.',
@@ -169,6 +217,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'home-care',
     title: 'Home Care',
+    seoH1: 'Home-visit pet physiotherapy across Ahmedabad',
+    seoTitle: 'Dog Physiotherapy at Home in Ahmedabad | The Pet Physio Vet',
+    seoDescription:
+      'Dog and cat physiotherapy at home in Ahmedabad: a home exercise programme, massage and surface guidance so care continues between your pet\'s clinic visits.',
     icon: 'home',
     shortDesc: 'A programme to continue your pet\'s care at home.',
     fullDesc: 'A home exercise programme and supporting guidance, so care continues between visits to the clinic.',

@@ -33,7 +33,7 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
               {condition.category} condition
             </span>
             <h1 style={{ ['--d' as string]: '280ms' }} className="hero-rise font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light leading-tight tracking-tight mb-6">
-              {condition.title} Rehabilitation
+              {condition.seoH1 ?? `${condition.title} Rehabilitation`}
             </h1>
             {/* Direct answer, first 100 words. */}
             <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
