@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  fetchBoardings, fetchBoardingMenu, updateBoardingStatus, createBoarding,
+  fetchBoardings, fetchBoardingMenu, updateBoardingStatus, createBoarding, convertBoarding,
   boardingQueryKey, Boarding, BoardingAction,
 } from '../api/boarding';
 import { useFlash } from '../lib/flash';
 import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
-import { friendlyDate, formatMoney } from '../lib/labels';
+import { ExternalLink } from '../components/ExternalLink';
+import { friendlyDate, formatMoney, REPORT_TYPES } from '../lib/labels';
 import { isValidAadhaar } from '../lib/aadhaar';
 
 /**
@@ -76,6 +77,15 @@ export const BoardingScreen: React.FC = () => {
     onError: () => addFlash('Could not update the booking.', 'error'),
   });
 
+  const convert = useMutation({
+    mutationFn: (reference: string) => convertBoarding(reference),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['boarding'] });
+      addFlash('Converted to patient.', 'success');
+    },
+    onError: (e: any) => addFlash(e?.detail || 'Could not convert to patient.', 'error'),
+  });
+
   const rows: Boarding[] = data?.results ?? [];
 
   return (
@@ -118,6 +128,8 @@ export const BoardingScreen: React.FC = () => {
             highlight={!!highlightRef && g.reference === highlightRef}
             busy={action.isPending && action.variables?.reference === g.reference}
             onAction={(act, intake) => action.mutate({ reference: g.reference, act, intake })}
+            converting={convert.isPending && convert.variables === g.reference}
+            onConvert={() => convert.mutate(g.reference)}
           />
         ))}
       </div>
@@ -139,7 +151,9 @@ const BoardingCard: React.FC<{
   busy: boolean;
   highlight?: boolean;
   onAction: (act: BoardingAction, intake?: Record<string, string>) => void;
-}> = ({ g, busy, highlight, onAction }) => {
+  converting: boolean;
+  onConvert: () => void;
+}> = ({ g, busy, highlight, onAction, converting, onConvert }) => {
   const actions = NEXT_ACTIONS[g.status] ?? [];
   const editable = actions.length > 0;
   const [intake, setIntake] = useState<Record<string, string>>({
@@ -182,6 +196,12 @@ const BoardingCard: React.FC<{
           <p className="page-sub" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
             {g.owner_name}<br /><a href={`tel:${g.owner_phone}`}>{g.owner_phone}</a>
           </p>
+          {g.emergency_contact_phone && (
+            <p className="page-sub" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+              <b>Emergency:</b> {g.emergency_contact_name ? `${g.emergency_contact_name} · ` : ''}
+              <a href={`tel:${g.emergency_contact_phone}`}>{g.emergency_contact_phone}</a>
+            </p>
+          )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontWeight: 700 }}>{g.duration_label}</div>
@@ -189,6 +209,8 @@ const BoardingCard: React.FC<{
           <div className="page-sub" style={{ fontSize: '0.72rem', marginTop: '2px' }}>{g.reference}</div>
         </div>
       </div>
+
+      <ClientMatch g={g} converting={converting} onConvert={onConvert} />
 
       <div className="page-sub" style={{ fontSize: '0.85rem', margin: 0 }}>
         <Icon name="clock" size={12} /> {friendlyDate(g.check_in)}
@@ -274,6 +296,50 @@ const BoardingCard: React.FC<{
   );
 };
 
+/* ---- Client match: badge, convert, previous reports ---- */
+
+const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () => void }> = ({ g, converting, onConvert }) => {
+  const status = g.pet_link_status ?? 'unlinked';
+  if (g.status === 'CANCELLED' && status === 'unlinked') return null;
+  const reports = g.previous_reports;
+  return (
+    <div style={{ display: 'grid', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {status === 'linked' && <span className="badge badge-confirmed">Existing client · {g.pet_name}</span>}
+        {status === 'owner_only' && <span className="badge badge-confirmed">Existing client · new pet</span>}
+        {status === 'unlinked' && <span className="badge badge-pending">New client</span>}
+        {status === 'linked' && g.pet_id && (
+          <Link to={`/patients/${g.pet_id}`} className="btn btn-ghost btn-sm">Open pet record</Link>
+        )}
+        {status !== 'linked' && (
+          <button type="button" className="btn btn-secondary btn-sm" disabled={converting} onClick={onConvert}>
+            {converting ? 'Converting…' : 'Convert to patient'}
+          </button>
+        )}
+      </div>
+      {reports && reports.length > 0 && (
+        <details style={{ fontSize: '0.82rem' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Previous reports ({reports.length})</summary>
+          <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '6px' }}>
+            {reports.map((r) => (
+              <li key={r.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className="badge badge-confirmed">
+                  {REPORT_TYPES.find((t) => t.value === r.report_type)?.label ?? r.report_type_display ?? r.report_type}
+                </span>
+                <span className="page-sub">{r.uploaded_at?.substring(0, 10) || '—'}</span>
+                {r.file_url && <ExternalLink href={r.file_url}>Open file</ExternalLink>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {reports && reports.length === 0 && status === 'linked' && (
+        <span className="page-sub" style={{ fontSize: '0.8rem' }}>No previous reports on file.</span>
+      )}
+    </div>
+  );
+};
+
 /* ---- Doctor's own "new boarding" form ---- */
 
 const WALKS = [
@@ -293,7 +359,7 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const { data: menu } = useQuery({ queryKey: ['boarding-menu'], queryFn: () => fetchBoardingMenu() });
   const today = todayISO();
   const [f, setF] = useState<Record<string, string>>({
-    petName: '', ownerName: '', ownerPhone: '', checkIn: today, duration: '',
+    petName: '', ownerName: '', ownerPhone: '', emergencyName: '', emergencyPhone: '', checkIn: today, duration: '',
     foodBy: 'owner', utensilsBy: 'owner', medicinesBy: 'owner', blanketBy: 'owner',
     foodPreference: '', aadhaar: '',
   });
@@ -304,6 +370,8 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     mutationFn: () =>
       createBoarding({
         petName: f.petName, ownerName: f.ownerName, ownerPhone: f.ownerPhone,
+        emergencyContactName: f.emergencyName.trim() || undefined,
+        emergencyContactPhone: f.emergencyPhone,
         checkIn: f.checkIn, duration: f.duration,
         foodBy: f.foodBy, utensilsBy: f.utensilsBy, medicinesBy: f.medicinesBy, blanketBy: f.blanketBy,
         foodPreference: f.foodPreference || undefined,
@@ -316,7 +384,7 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   });
 
   const aadhaarOk = !f.aadhaar || isValidAadhaar(f.aadhaar);
-  const canSave = f.petName.trim() && f.ownerName.trim() && f.ownerPhone.trim() && f.duration && aadhaarOk && !create.isPending;
+  const canSave = f.petName.trim() && f.ownerName.trim() && f.ownerPhone.trim() && f.emergencyPhone.trim() && f.duration && aadhaarOk && !create.isPending;
 
   return (
     <div className="glass-card" style={{ padding: '18px', marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -325,6 +393,8 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         <input className="input" placeholder="Pet's name *" value={f.petName} onChange={(e) => set('petName', e.target.value)} />
         <input className="input" placeholder="Owner name *" value={f.ownerName} onChange={(e) => set('ownerName', e.target.value)} />
         <input className="input" placeholder="Phone *" value={f.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} />
+        <input className="input" placeholder="Emergency contact name" aria-label="Emergency contact name" value={f.emergencyName} onChange={(e) => set('emergencyName', e.target.value)} />
+        <input className="input" placeholder="Emergency contact phone *" aria-label="Emergency contact phone" inputMode="tel" value={f.emergencyPhone} onChange={(e) => set('emergencyPhone', e.target.value)} />
         <input className="input" type="date" value={f.checkIn} min={today} onChange={(e) => set('checkIn', e.target.value)} />
         <select className="input" value={f.duration} onChange={(e) => set('duration', e.target.value)}>
           <option value="">Duration *</option>
