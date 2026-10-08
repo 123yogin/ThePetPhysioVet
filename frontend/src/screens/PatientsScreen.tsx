@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchPets } from '../api/pets';
 import { petEmoji } from '../lib/labels';
+import { PetAvatar } from '../components/PetAvatar';
 
 export const PatientsScreen: React.FC = () => {
   const [search, setSearch] = useState('');
@@ -74,7 +75,12 @@ export const PatientsScreen: React.FC = () => {
                 <tr key={pet.id}>
                   <td data-label="Patient Name" style={{ fontWeight: 700 }}>
                     <Link to={`/patients/${pet.id}`} className="table-link">
-                      {petEmoji(pet.species || pet.pet_type)} {pet.name}
+                      {pet.photo ? (
+                        <PetAvatar name={pet.name} species={pet.species || pet.pet_type} photo={pet.photo} size={28} />
+                      ) : (
+                        petEmoji(pet.species || pet.pet_type)
+                      )}{' '}
+                      {pet.name}
                     </Link>
                   </td>
                   <td data-label="Species / Breed">{pet.pet_type || pet.species} {pet.breed ? `(${pet.breed})` : ''}</td>

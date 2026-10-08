@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from '../components/ExternalLink';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPetDetail } from '../api/pets';
+import { fetchPetDetail, updatePetPhoto } from '../api/pets';
 import { fetchPetDiagnoses, createDiagnosis, deleteDiagnosis } from '../api/diagnoses';
 import { fetchPetTreatmentPlans, createTreatmentPlan, updateTreatmentPlan, addProgressNote, TreatmentPlanInput } from '../api/treatment';
 import { PlanBuilder } from '../components/rehab/PlanBuilder';
@@ -10,11 +10,12 @@ import { PlanGrid } from '../components/rehab/PlanGrid';
 import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
-import { uploadSizeError, uploadErrorMessage } from '../lib/uploads';
+import { uploadSizeError, uploadErrorMessage, petPhotoError, PET_PHOTO_ACCEPT } from '../lib/uploads';
+import { PetAvatar } from '../components/PetAvatar';
 import { Spinner } from '../components/Spinner';
 import { Icon } from '../components/Icon';
 import { ProgressChart } from '../components/ProgressChart';
-import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
+import { humanizeStatus, friendlyDate, REPORT_TYPES } from '../lib/labels';
 
 type TabKey = 'overview' | 'diagnoses' | 'treatment' | 'billing' | 'queries';
 
@@ -80,6 +81,9 @@ export const PetDetailScreen: React.FC = () => {
   const [measuresOpenPlanId, setMeasuresOpenPlanId] = useState<string | null>(null);
   const [measuresByPlan, setMeasuresByPlan] = useState<Record<string, Record<string, string>>>({});
 
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const [replyMessage, setReplyMessage] = useState('');
   const [replyFile, setReplyFile] = useState<File | null>(null);
   const [sendingReply, setSendingReply] = useState(false);
@@ -116,6 +120,27 @@ export const PetDetailScreen: React.FC = () => {
     queryFn: () => fetchPetQueries(petId),
     enabled: !!petId && activeTab === 'queries',
   });
+
+  const handlePhotoPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = '';
+    if (!file) return;
+    const err = petPhotoError(file);
+    if (err) {
+      addFlash(err, 'error');
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      await updatePetPhoto(petId, file);
+      await refetchPet();
+      addFlash('Photo updated.', 'success');
+    } catch (uploadErr) {
+      addFlash(uploadErrorMessage(uploadErr, 'Could not upload the photo. Please try again.'), 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleUploadDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,7 +308,37 @@ export const PetDetailScreen: React.FC = () => {
           <Link to="/patients" className="btn btn-ghost btn-sm" style={{ marginBottom: '8px' }}>
             &larr; Back to Patients
           </Link>
-          <h1 className="page-title">{petEmoji(pet.species || pet.pet_type)} {pet.name}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <PetAvatar
+              name={pet.name}
+              species={pet.species || pet.pet_type}
+              photo={pet.photo}
+              size={pet.photo ? 64 : 40}
+              radius={16}
+            />
+            <h1 className="page-title" style={{ margin: 0 }}>{pet.name}</h1>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept={PET_PHOTO_ACCEPT}
+              onChange={handlePhotoPicked}
+              style={{ display: 'none' }}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <>
+                  <Spinner /> Uploading…
+                </>
+              ) : pet.photo ? 'Change photo' : 'Add photo'}
+            </button>
+          </div>
           <p className="page-sub">
             {pet.pet_type || pet.species} &bull; Owner: {pet.owner_name} ({pet.owner_phone})
           </p>

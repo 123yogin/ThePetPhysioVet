@@ -518,6 +518,19 @@ def facility_booking_status_view(request, reference):
     if new_status not in allowed:
         return problem(400, "Invalid status", f"status must be one of {', '.join(sorted(allowed))}.")
 
+    if new_status == "COMPLETED":
+        # Only an honoured stay can be completed: every slot CONFIRMED, and the
+        # earliest one already started in clinic time (Asia/Kolkata) -- so a
+        # mis-tap cannot close out a booking before the pet has arrived.
+        rows = list(FacilityBooking.objects.filter(reference=reference).values("date", "slot", "status"))
+        if not rows:
+            return problem(404, "Not found", "That booking does not exist, or has been removed.")
+        if any(r["status"] != "CONFIRMED" for r in rows):
+            return problem(400, "Invalid status", "Only a confirmed booking can be marked completed.")
+        first = min(rows, key=lambda r: (r["date"], r["slot"]))
+        if not slot_has_started(first["date"], first["slot"]):
+            return problem(400, "Too early", "A booking can be marked completed once its slot has started.")
+
     updated = FacilityBooking.objects.filter(reference=reference).update(status=new_status)
     if updated == 0:
         return problem(404, "Not found", "That booking does not exist, or has been removed.")

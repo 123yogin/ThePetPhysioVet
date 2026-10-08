@@ -29,3 +29,15 @@ export function uploadErrorMessage(err: unknown, fallback: string): string {
   if (e?.status === 413) return 'This file is too large to upload. Please choose a smaller file.';
   return e?.message || fallback;
 }
+
+/** Pet photo formats the server accepts (it sniffs the bytes too). */
+export const PET_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+export const PET_PHOTO_ACCEPT = PET_PHOTO_TYPES.join(',');
+export const PET_PHOTO_TYPE_ERROR = 'Pet photo must be a JPEG, PNG, WebP or HEIC image.';
+
+/** An error message if `file` cannot be used as a pet photo, else null. */
+export function petPhotoError(file: File | null | undefined): string | null {
+  if (!file) return null;
+  if (!PET_PHOTO_TYPES.includes((file.type || '').toLowerCase())) return PET_PHOTO_TYPE_ERROR;
+  return uploadSizeError(file);
+}

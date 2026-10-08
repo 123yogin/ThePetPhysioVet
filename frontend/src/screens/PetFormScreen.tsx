@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPet } from '../api/pets';
 import { useFlash } from '../lib/flash';
+import { PetPhotoField } from '../components/PetPhotoField';
+import { Spinner } from '../components/Spinner';
+import { petPhotoError, uploadErrorMessage } from '../lib/uploads';
 
 export const PetFormScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -20,12 +23,16 @@ export const PetFormScreen: React.FC = () => {
   const [referredBy, setReferredBy] = useState('');
   const [loading, setLoading] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !ownerName || !ownerPhone) {
       return addFlash('Please fill in Pet Name, Owner Name, and Owner Phone', 'error');
     }
+
+    const photoErr = petPhotoError(photo);
+    if (photoErr) return addFlash(photoErr, 'error');
 
     setLoading(true);
     const formData = new FormData();
@@ -41,13 +48,14 @@ export const PetFormScreen: React.FC = () => {
     formData.append('owner_email', ownerEmail);
     formData.append('complaint', complaint);
     formData.append('referred_by', referredBy);
+    if (photo) formData.append('photo', photo);
 
     try {
       const newPet = await createPet(formData);
       addFlash(`Patient record created for ${newPet.name}`, 'success');
       navigate(`/patients/${newPet.id}`);
     } catch (err: any) {
-      addFlash(err.message || 'Failed to create patient', 'error');
+      addFlash(uploadErrorMessage(err, 'Failed to create patient'), 'error');
     } finally {
       setLoading(false);
     }
@@ -82,6 +90,13 @@ export const PetFormScreen: React.FC = () => {
             </select>
           </div>
         </div>
+
+        <PetPhotoField
+          file={photo}
+          onChange={setPhoto}
+          onError={(msg) => addFlash(msg, 'error')}
+          disabled={loading}
+        />
 
         <h3 style={{ margin: '24px 0 16px 0', fontSize: '16px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
           Owner Details
@@ -204,7 +219,13 @@ export const PetFormScreen: React.FC = () => {
 
         <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Saving Patient...' : 'Register Patient'}
+            {loading ? (
+              <>
+                <Spinner /> {photo ? 'Uploading photo…' : 'Saving Patient...'}
+              </>
+            ) : (
+              'Register Patient'
+            )}
           </button>
           <button type="button" onClick={() => navigate('/patients')} className="btn btn-ghost">
             Cancel
