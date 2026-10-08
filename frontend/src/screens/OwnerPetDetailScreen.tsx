@@ -11,16 +11,8 @@ import {
 } from '../api/owner';
 import { useFlash } from '../lib/flash';
 import { Icon, IconName } from '../components/Icon';
-import { humanizeStatus, petEmoji, friendlyDate } from '../lib/labels';
+import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
 
-const REPORT_TYPES: { value: string; label: string }[] = [
-  { value: 'XRAY', label: 'X-Ray' },
-  { value: 'MRI', label: 'MRI Scan' },
-  { value: 'CT', label: 'CT Scan' },
-  { value: 'ULTRASOUND', label: 'Ultrasound' },
-  { value: 'BLOOD', label: 'Blood Work' },
-  { value: 'OTHER', label: 'Other' },
-];
 
 const TABS: { key: 'treatment' | 'messages' | 'about'; label: string; icon: IconName }[] = [
   { key: 'treatment', label: 'Treatment', icon: 'activity' },

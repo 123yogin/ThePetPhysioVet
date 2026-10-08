@@ -26,7 +26,7 @@ class DiagnosticReport(models.Model):
         ("MRI", "MRI"),
         ("CT", "CT Scan"),
         ("ULTRASOUND", "Ultrasound"),
-        ("BLOOD", "Blood Work"),
+        ("BLOOD", "Blood Report"),
         ("OTHER", "Other"),
     )
 

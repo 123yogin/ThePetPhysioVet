@@ -11,7 +11,7 @@ import { useFlash } from '../lib/flash';
 import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { ProgressChart } from '../components/ProgressChart';
-import { humanizeStatus, petEmoji, friendlyDate } from '../lib/labels';
+import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
 
 type TabKey = 'overview' | 'diagnoses' | 'treatment' | 'billing' | 'queries';
 
@@ -337,11 +337,9 @@ export const PetDetailScreen: React.FC = () => {
                 <div className="field">
                   <label>Report Type</label>
                   <select value={diagType} onChange={(e) => setDiagType(e.target.value)} className="input-glass">
-                    <option value="XRAY">X-Ray Radiograph</option>
-                    <option value="MRI">MRI Scan</option>
-                    <option value="CT">CT Scan</option>
-                    <option value="ULTRASOUND">Ultrasound</option>
-                    <option value="OTHER">Other Report</option>
+                    {REPORT_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="field">
