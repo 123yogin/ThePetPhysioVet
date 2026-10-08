@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RehabSession } from '../../lib/types';
 import { todayISO } from '../../lib/dates';
+import { longDate } from '../../lib/rehabDates';
 import { useSessionActions } from './useSessionActions';
 
 interface Props {
@@ -19,6 +20,7 @@ export const SessionActions: React.FC<Props> = ({ session, onChanged }) => {
   const [reason, setReason] = useState('');
   const today = todayISO();
   const busy = actions.pending;
+  const future = session.planned_date > today;
   const uid = `sa-${session.id}`;
 
   if (session.status !== 'DUE') {
@@ -89,9 +91,13 @@ export const SessionActions: React.FC<Props> = ({ session, onChanged }) => {
 
   return (
     <div className="rehab-actions">
-      <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => actions.done(session.id)}>
-        {busy ? 'Saving…' : 'Done today'}
-      </button>
+      {future ? (
+        <span style={{ color: 'var(--brown-500)', fontSize: 14 }}>Scheduled for {longDate(session.planned_date)}</span>
+      ) : (
+        <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => actions.done(session.id)}>
+          {busy ? 'Saving…' : 'Done today'}
+        </button>
+      )}
       {session.planned_date < today && (
         <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setMode('on')}>
           Done on…

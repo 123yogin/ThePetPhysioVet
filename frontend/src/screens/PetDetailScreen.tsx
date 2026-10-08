@@ -63,6 +63,7 @@ export const PetDetailScreen: React.FC = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [creatingPlan, setCreatingPlan] = useState(false);
+  const [builderKey, setBuilderKey] = useState(0);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
 
   const [noteTextByPlan, setNoteTextByPlan] = useState<Record<string, string>>({});
@@ -155,6 +156,7 @@ export const PetDetailScreen: React.FC = () => {
     try {
       await createTreatmentPlan(petId, payload);
       addFlash('Treatment plan created', 'success');
+      setBuilderKey((k) => k + 1);
       refetchPlans();
     } catch (err: any) {
       addFlash(err.message || 'Failed to create plan', 'error');
@@ -445,7 +447,7 @@ export const PetDetailScreen: React.FC = () => {
         <div>
           <div className="glass-card" style={{ marginBottom: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Create New Physical Therapy Plan</h3>
-            <PlanBuilder submitting={creatingPlan} submitLabel="Save Treatment Plan" onSubmit={handleCreatePlan} />
+            <PlanBuilder key={builderKey} submitting={creatingPlan} submitLabel="Save Treatment Plan" onSubmit={handleCreatePlan} />
           </div>
 
           {plansError && (
