@@ -57,6 +57,12 @@ from .clinical import (  # noqa: F401
     pet_treatment_plans_view,
     treatment_plan_detail_view,
     treatment_plan_progress_notes_view,
+    treatment_plan_extend_view,
+    rehab_therapies_view,
+    rehab_today_view,
+    rehab_session_done_view,
+    rehab_session_skip_view,
+    rehab_session_undo_view,
 )
 from .scheduling import (  # noqa: F401
     appointments_view,

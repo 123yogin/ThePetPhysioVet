@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
@@ -6,10 +8,11 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
+from . import rehab
 from .validators import normalise_phone, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
+    TreatmentPlan, RehabSession, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
     Enquiry, FacilityBooking, BoardingBooking,
 )
@@ -490,18 +493,113 @@ class ProgressNoteSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class RehabSessionSerializer(serializers.ModelSerializer):
+    display_status = serializers.SerializerMethodField()
+    done_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RehabSession
+        fields = [
+            "id", "therapy", "planned_date", "status", "display_status",
+            "done_on", "done_by_name", "note", "skip_reason",
+        ]
+        read_only_fields = fields
+
+    def get_display_status(self, obj):
+        # Derived, never stored: MISSED = still DUE after its day; DONE_LATE =
+        # ticked on a different day than planned. "Today" is clinic-local.
+        if obj.status == "DUE" and obj.planned_date < timezone.localdate():
+            return "MISSED"
+        if obj.status == "DONE" and obj.done_on != obj.planned_date:
+            return "DONE_LATE"
+        return obj.status
+
+    def get_done_by_name(self, obj):
+        user = obj.done_by
+        if user is None:
+            return ""
+        return user.get_full_name().strip() or user.username
+
+
+class ScheduleEntrySerializer(serializers.Serializer):
+    therapy = serializers.CharField()
+    frequency = serializers.ChoiceField(choices=[f["code"] for f in rehab.FREQUENCIES])
+    weekdays = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6), required=False, default=list,
+    )
+
+    def validate_therapy(self, value):
+        if value not in rehab.ALL_THERAPIES:
+            raise serializers.ValidationError(f"Unknown therapy: {value}")
+        return value
+
+    def validate(self, attrs):
+        weekdays = attrs.get("weekdays", [])
+        need = rehab.WEEKDAYS_REQUIRED[attrs["frequency"]]
+        if len(set(weekdays)) != len(weekdays) or len(weekdays) != need:
+            raise serializers.ValidationError(
+                {"weekdays": f"{attrs['frequency']} needs exactly {need} distinct weekday(s)."}
+            )
+        attrs["weekdays"] = sorted(weekdays)
+        return attrs
+
+
 class TreatmentPlanSerializer(serializers.ModelSerializer):
     pet_id = serializers.UUIDField(source="pet.id", read_only=True)
     progress_notes = ProgressNoteSerializer(many=True, read_only=True)
+    sessions = RehabSessionSerializer(many=True, read_only=True)
     therapies = serializers.ListField(child=serializers.CharField(), default=list)
+    # ListField (not many=True) so DRF's nested-write guard doesn't reject a JSON column.
+    schedule = serializers.ListField(child=ScheduleEntrySerializer(), required=False)
 
     class Meta:
         model = TreatmentPlan
         fields = [
-            "id", "pet_id", "therapies", "frequency", "frequency_custom",
+            "id", "pet_id", "therapies", "schedule", "frequency", "frequency_custom",
             "duration", "duration_custom", "start_date", "end_date", "status",
-            "completed_at", "created_at", "updated_at", "progress_notes",
+            "completed_at", "created_at", "updated_at", "progress_notes", "sessions",
         ]
+
+    def validate_schedule(self, entries):
+        names = [e["therapy"] for e in entries]
+        if len(set(names)) != len(names):
+            raise serializers.ValidationError("Each therapy may appear only once.")
+        return entries
+
+    def validate(self, attrs):
+        inst = self.instance
+        start = attrs.get("start_date") or (inst.start_date if inst else None)
+        if "end_date" in attrs and attrs["end_date"] is not None:
+            end = attrs["end_date"]
+        elif inst is not None and inst.end_date is not None:
+            end = inst.end_date
+        else:
+            end = start + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1) if start else None
+        if start and end:
+            if end < start:
+                raise serializers.ValidationError({"end_date": "End date is before the start date."})
+            if (end - start).days + 1 > rehab.MAX_PLAN_DAYS:
+                raise serializers.ValidationError({"end_date": "A plan can span at most 366 days."})
+            attrs["end_date"] = end
+        schedule = attrs.get("schedule")
+        if schedule and not attrs.get("therapies"):
+            attrs["therapies"] = [e["therapy"] for e in schedule]
+        return attrs
+
+    def create(self, validated_data):
+        plan = super().create(validated_data)
+        rehab.sync_sessions(plan, timezone.localdate(), backfill_from=plan.start_date)
+        return plan
+
+    def update(self, instance, validated_data):
+        old_end = instance.end_date
+        plan = super().update(instance, validated_data)
+        grew = old_end is not None and plan.end_date and plan.end_date > old_end
+        rehab.sync_sessions(
+            plan, timezone.localdate(),
+            backfill_from=old_end + timedelta(days=1) if grew else None,
+        )
+        return plan
 
 
 class LineItemSerializer(serializers.ModelSerializer):
