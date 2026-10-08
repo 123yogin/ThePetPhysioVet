@@ -412,6 +412,19 @@ deletes the bytes on commit when the owning record is deleted. Abuse limits
 download token is bound to the `StoredFile` row, and **there is no `/media/` route** in
 Django or nginx — never add one back.
 
+## Uploads in Vercel Blob — 2026-10-08 (supersedes the bytes-in-Postgres part above)
+New uploads go to the **private** Vercel Blob store `petphysio-files` via
+`appointments/storage_blob.py::BlobStorage`, selected by `FILE_STORAGE=blob` or by
+`BLOB_READ_WRITE_TOKEN` being set with `FILE_STORAGE` unset (Vercel injects the token in
+Production, Preview and Development). `StoredFile` is now the **index** (name, size, type,
+uploader, `blob_url`; `content` NULL for Blob rows) — quota, ceiling and token binding work
+as before. Rows with bytes in `content` are still served from Postgres;
+`manage.py migrate_files_to_blob [--apply]` moves them. HTTP is stdlib urllib (10 s
+timeout, redirects refused, token never logged), calls copied from the `@vercel/blob`
+2.8.1 source — see the module docstring. Tests fake the opener
+(`tests/test_blob_storage.py::FakeBlob`); **never let a test reach the network.** A pulled
+`.env` contains the real token: set `FILE_STORAGE=filesystem` for local dev.
+
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`
   **`DEBUG=true` is now required locally** — without it (and without `SECRET_KEY`) Django

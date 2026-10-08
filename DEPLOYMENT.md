@@ -7,28 +7,50 @@ for now. £0/month, never sleeps.
 Everything in this repo is vendor-neutral Docker, so if Oracle's ARM capacity lottery
 defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any Docker host.
 
-> **Uploads live in Postgres on Vercel (2026-10-08).** Vercel's serverless filesystem is
-> read-only, so writing uploads to `MEDIA_ROOT` crashed every diagnostic-report, query
-> attachment and pet-photo upload with an HTML 500. When `VERCEL` is set (or
-> `FILE_STORAGE=db` anywhere else) the bytes are stored in the `StoredFile` table
-> (migration `0022`) and served by the signed `GET /api/v1/files/<token>` route. **They
-> count against Neon's storage quota (1 GB on the free plan)**: uploads are capped at
-> 4 MB each and deleting a report/attachment/photo deletes its bytes, but watch
-> `SELECT pg_size_pretty(sum(size)) FROM appointments_storedfile;` and plan an object
-> store before the clinic approaches the limit. A `pg_dump` now includes uploads. **Why
-> 4 MB:** Vercel caps a serverless function's request body at 4.5 MB and rejects anything
-> larger at its edge with a plain 413 that never reaches Django, so a larger cap would
-> only produce unexplained failures. 4 MB of file plus multipart overhead stays under the
-> limit, and the API's own 400 "File is too large (max 4 MB)." is what users see. Raising
-> it means moving uploads off the function (e.g. direct-to-object-store). **Abuse
-> limits:** 30 uploads/hour/user, 60/hour/IP, 100 MB per owner account (doctors exempt),
-> 10 signups/hour/IP, and a global ceiling — set `FILE_STORAGE_MAX_MB` (default 700) to
-> refuse uploads with a 503 before Neon's 1 GB fills; the server logs an error each time
-> it triggers. These counters need the shared cache (`REDIS_URL` or the database cache),
-> not per-process memory. Uploads are never served by path: there is no `/media/` route
-> in Django or nginx, only the signed `GET /api/v1/files/<token>`. The Coolify/Docker
-> topology below still uses the filesystem (`media_data` volume) unless you set
-> `FILE_STORAGE=db`.
+> **Uploads live in a private Vercel Blob store (2026-10-08).** Vercel's serverless
+> filesystem is read-only, so writing uploads to `MEDIA_ROOT` crashed every
+> diagnostic-report, query attachment and pet-photo upload with an HTML 500. New uploads now
+> go to the **private** Blob store **`petphysio-files`** (region `iad1`), which is connected
+> to the Vercel project; Vercel injects **`BLOB_READ_WRITE_TOKEN`** into Production, Preview
+> and Development, and its presence selects `appointments/storage_blob.py::BlobStorage`.
+> The `StoredFile` table stays as the index (name, size, type, uploader, blob URL; migration
+> `0025` made `content` nullable and added `blob_url`), so the owner quota and global
+> ceiling still sum `StoredFile.size`. Private blobs are never public URLs: the signed
+> `GET /api/v1/files/<token>` route fetches the blob server-side with the token and streams
+> it back (attachment + nosniff + original filename).
+>
+> **Storage selection** (`settings._default_storage_backend`): `FILE_STORAGE=blob`, or
+> `FILE_STORAGE` unset with `BLOB_READ_WRITE_TOKEN` set → Blob (explicit `blob` with no or
+> a malformed token refuses to boot); `FILE_STORAGE=db`, or unset on Vercel with no token →
+> Postgres (`DatabaseStorage`, the fallback); otherwise the local filesystem. A local
+> `.env` from `vercel env pull` contains the token and therefore writes to the real store —
+> set `FILE_STORAGE=filesystem` for local work. Rows written earlier by `DatabaseStorage`
+> keep their bytes in `StoredFile.content` and are still served from Postgres; move them
+> with `python manage.py migrate_files_to_blob` (dry run) then `--apply` (production had 0
+> stored files at the switch). A `pg_dump` no longer contains Blob-backed uploads — the
+> store is their only copy.
+>
+> **Vercel Blob Hobby limits** (vercel.com/docs/vercel-blob/usage-and-pricing, updated
+> 2026-09-23): 1 GB storage/month, 10,000 simple operations (cache-miss reads, `head`),
+> 2,000 advanced operations (`put`, `copy`, `list`), 10 GB Blob data transfer; `del` is
+> free. Exceeding a Hobby limit blocks Blob access until 30 days have passed — it is not
+> billed. Each upload is one advanced operation, so ~2,000 uploads/month is the ceiling;
+> `exists`/`size` answer from the `StoredFile` index instead of `head` to save operations.
+> Serving through the function also costs Fast Data Transfer on the way out.
+>
+> **Why 4 MB per file:** Vercel caps a serverless function's request body at 4.5 MB and
+> rejects anything larger at its edge with a plain 413 that never reaches Django; uploads
+> still pass through the function, so the cap stays. Lifting it means client-direct uploads
+> (browser → Blob with a short-lived client token, `@vercel/blob/client` `upload()` /
+> `handleUpload`), which would need a new token-issuing endpoint plus an upload-completed
+> step to create the `StoredFile` row. **Abuse limits:** 30 uploads/hour/user, 60/hour/IP,
+> 100 MB per owner account (doctors exempt), 10 signups/hour/IP, and a global ceiling —
+> `FILE_STORAGE_MAX_MB` (default 700, under Blob's 1 GB Hobby storage and Neon's 1 GB) →
+> 503, with a server error log each time it triggers. These counters need the shared cache
+> (`REDIS_URL` or the database cache), not per-process memory. Uploads are never served by
+> path: there is no `/media/` route in Django or nginx, only the signed
+> `GET /api/v1/files/<token>`. The Coolify/Docker topology below still uses the filesystem
+> (`media_data` volume) unless you set `FILE_STORAGE=db` or `blob`.
 
 ---
 

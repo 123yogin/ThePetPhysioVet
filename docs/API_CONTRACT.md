@@ -323,7 +323,12 @@ Moves `status: "Pending"` → `"Confirmed"`.
 Validate upload: max 4 MB (amended 2026-10-08, was 10 MB), allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
 
-### Uploaded files — amended 2026-10-08 (uploads stored in Postgres)
+### Uploaded files — amended 2026-10-08 (uploads stored in Postgres, then Vercel Blob)
+The 2026-10-08 move of upload bytes to a private Vercel Blob store changed **no part of
+this contract**: same routes, limits, problem bodies, token format and download headers.
+The bytes are read server-side and streamed back by `/files/:token`; no Blob URL is ever
+returned to a client. A Blob outage on upload is the same `503` below.
+
 | GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability**. `Content-Disposition: attachment` carries the uploader's original filename (sanitised; RFC 5987 `filename*` for non-ASCII) when the token was issued with one, else the storage key's basename |
 
 **Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
@@ -342,7 +347,7 @@ its leading bytes; anything else is `400` problem+json,
 changed.
 
 **Storage failures are a 503, never an HTML 500.** If the upload backend cannot write
-(read-only filesystem, database error), the route answers `503` problem+json,
+(read-only filesystem, database error, Vercel Blob unreachable), the route answers `503` problem+json,
 `detail: "Upload storage unavailable, please try again."`, and nothing is left behind
 (the record and its file are written in one transaction).
 
