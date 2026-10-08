@@ -480,7 +480,7 @@ class DiagnosticReportSerializer(serializers.ModelSerializer):
     def get_file_url(self, obj):
         # Signed, 15-minute link (appointments/storage.py): only rendered for
         # callers already allowed to see the pet, so the token is the grant.
-        return signed_file_url(obj.file, self.context.get("request"))
+        return signed_file_url(obj.file, self.context.get("request"), obj.original_filename)
 
     def get_is_dicom(self, obj):
         return obj.mime == "application/dicom" or obj.original_filename.lower().endswith(".dcm")
@@ -773,7 +773,7 @@ class QueryAttachmentSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         # Signed, 15-minute link -- see DiagnosticReportSerializer.get_file_url.
-        return signed_file_url(obj.file, self.context.get("request"))
+        return signed_file_url(obj.file, self.context.get("request"), obj.original_filename)
 
     def validate_file(self, value):
         return _validate_upload(value)
