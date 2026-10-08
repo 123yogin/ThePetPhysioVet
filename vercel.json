@@ -11,6 +11,10 @@
     "api/index.py": { "maxDuration": 30, "memory": 1024 }
   },
 
+  "crons": [
+    { "path": "/api/v1/cron/sms-reminders", "schedule": "30 3 * * *" }
+  ],
+
   "redirects": [
     { "source": "/treatments/specialised", "destination": "/treatments/hydrotherapy", "statusCode": 301 },
     { "source": "/treatments/specialised/", "destination": "/treatments/hydrotherapy", "statusCode": 301 }

@@ -27,6 +27,7 @@ from ._shared import (
     require_doctor,
 )
 from ..notify import notify_doctor
+from ..sms import triggers as sms_triggers
 
 # Same rationale/shape as the password-reset rate limits above: two
 # independent fixed windows (IP, email) so neither a targeted spam run
@@ -295,6 +296,8 @@ def enquiry_convert_view(request, pk):
         enquiry.actioned_at = timezone.now()
         enquiry.save()
 
+    # After the commit: a text must never be sent for a booking that rolled back.
+    sms_triggers.appointment_confirmed(appt)
     return Response(EnquirySerializer(enquiry).data)
 
 

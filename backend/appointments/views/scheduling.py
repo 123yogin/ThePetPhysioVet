@@ -20,6 +20,7 @@ from ..models import (
     Appointment,
 )
 from ..permissions import IsDoctor
+from ..sms import triggers as sms_triggers
 from ..serializers import (
     AppointmentSerializer,
 )
@@ -129,6 +130,7 @@ def appointment_confirm_view(request, pk):
         )
     appt.status = "Confirmed"
     appt.save()
+    sms_triggers.appointment_confirmed(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
