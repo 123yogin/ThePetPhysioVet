@@ -98,3 +98,14 @@ export function formatMoney(amount?: number | string | null, currency = 'INR'): 
   });
   return symbol ? `${symbol}${digits}` : `${currency} ${digits}`;
 }
+
+/** Diagnostic report types, shared by the staff and owner upload forms.
+ *  Values match DiagnosticReport.REPORT_TYPES on the backend. */
+export const REPORT_TYPES: { value: string; label: string }[] = [
+  { value: 'XRAY', label: 'X-Ray' },
+  { value: 'MRI', label: 'MRI Scan' },
+  { value: 'CT', label: 'CT Scan' },
+  { value: 'ULTRASOUND', label: 'Ultrasound' },
+  { value: 'BLOOD', label: 'Blood Report' },
+  { value: 'OTHER', label: 'Other' },
+];
