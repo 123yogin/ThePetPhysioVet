@@ -27,6 +27,7 @@ import { SpecialistsSection } from '../components/SpecialistsSection';
 import { SplitDoorsReveal } from '../components/SplitDoorsReveal';
 import { GallerySection } from '../components/GallerySection';
 import { FaqSection } from '../components/FaqSection';
+import { FindUs } from '../components/FindUs';
 import { Footer } from '../components/Footer';
 
 // An image viewer -- the one overlay this page still owns. The booking form
@@ -131,6 +132,16 @@ export const HomePage: React.FC = () => {
             who had decided and the thing they decided to do. Questions belong
             after the ask, for the people who still have one. */}
         <FaqSection />
+
+        {/* Where the clinic is, in crawlable text: address, landmark, map,
+            phone, WhatsApp and hours, all from siteConfig. Local searchers
+            ("pet physio Shilaj", "vet near Thaltej") need the place before
+            anything else. */}
+        <div id="find-us" className="bg-(--c-bg) py-16 sm:py-20 scroll-mt-24">
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
+            <FindUs />
+          </div>
+        </div>
       </main>
 
       {/* No <NapBlock /> here, deliberately.
