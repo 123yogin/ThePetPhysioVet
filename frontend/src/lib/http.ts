@@ -128,6 +128,23 @@ function withTimeout(ms: number): { signal: AbortSignal; done: () => void } {
   return { signal: controller.signal, done: () => clearTimeout(timer) };
 }
 
+// A stored access token past its `exp` is certain to 401. Sending it anyway
+// put a red "401 /auth/me" in the console on the first load after the token
+// aged out, before the refresh-and-retry below recovered. Read `exp` locally
+// and refresh first instead; an unreadable token is treated as live, so the
+// server (and the 401 path) stays the authority.
+function isExpired(jwt: string): boolean {
+  try {
+    const part = jwt.split('.')[1];
+    if (!part) return false;
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+    const { exp } = JSON.parse(json) as { exp?: number };
+    return typeof exp === 'number' && exp * 1000 <= Date.now() + 5000;
+  } catch {
+    return false;
+  }
+}
+
 export async function http<T = any>(
   endpoint: string,
   options: RequestInit & { data?: any } = {},
@@ -145,7 +162,10 @@ export async function http<T = any>(
   // attempt. The server-side fix is `authentication_classes([])` on those views;
   // this is the other half, and it is what the request should have looked like
   // regardless — a login is not an authenticated call.
-  const token = isAuthExemptPath(endpoint) ? null : getAccessToken();
+  let token = isAuthExemptPath(endpoint) ? null : getAccessToken();
+  if (token && !_isRetry && getRefreshToken() && isExpired(token)) {
+    token = await refreshAccessToken();
+  }
   const headers: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(customHeaders as Record<string, string>),
