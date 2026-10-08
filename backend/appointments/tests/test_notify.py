@@ -84,7 +84,8 @@ class DoctorNotifyTests(ApiTestCase):
         self.anon().post(
             f"{API}/facility/boarding",
             {"petName": "Coco", "ownerName": "O", "ownerPhone": "9000000002",
-             "checkIn": _tomorrow(), "duration": BOARDING_DURATION_KEYS[0], "termsAccepted": True},
+             "checkIn": _tomorrow(), "duration": BOARDING_DURATION_KEYS[0], "termsAccepted": True,
+             "emergencyContactPhone": "9000000099"},
             format="json",
         )
         self.assertIn("https://www.thepetphysiovet.com/app/boarding",
@@ -96,7 +97,7 @@ class DoctorNotifyTests(ApiTestCase):
             {
                 "petName": "Coco", "ownerName": "Owner Two", "ownerPhone": "9000000002",
                 "checkIn": _tomorrow(), "duration": BOARDING_DURATION_KEYS[0],
-                "termsAccepted": True,
+                "termsAccepted": True, "emergencyContactPhone": "9000000099",
             },
             format="json",
         )

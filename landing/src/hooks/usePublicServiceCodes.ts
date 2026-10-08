@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 // Same origin in production; overridable in local dev, matching BookingForm.
-import { CLINIC_API } from '../lib/clinicApi';
+import { getJson } from '../lib/clinicApi';
 
 /**
  * Visit-type codes the clinic currently offers the public, from its own API.
@@ -19,8 +19,7 @@ export function usePublicServiceCodes(): string[] {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${CLINIC_API}/appointment-options`)
-      .then((response) => (response.ok ? response.json() : null))
+    getJson('/appointment-options')
       .then((data) => {
         if (cancelled || !data?.visit_types) return;
         setCodes(

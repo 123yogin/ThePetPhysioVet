@@ -326,7 +326,75 @@ Reject anything else with 400. Store `original_filename`, `size`, `mime` from th
 | GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
 | POST | `/pets/:id/treatment-plans` | plan body | `TreatmentPlan` — same scoping as `GET` |
 | GET | `/treatment-plans/:id` | | `TreatmentPlan` — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up) |
+| PATCH | `/treatment-plans/:id` | partial plan body (incl. `schedule`) | `TreatmentPlan` — doctor-scoped; rebuilds only future DUE sessions, never DONE/SKIPPED; never invents an `end_date` |
+| POST | `/treatment-plans/:id/extend` | `{days?: 1..366 = 7}` | `TreatmentPlan` — `end_date += days`, cadence continues from original `start_date`; doctor-scoped |
 | POST | `/treatment-plans/:id/progress-notes` | `{session_no?, notes}` | `ProgressNote` — same scoping |
+
+`TreatmentPlan` gains (2026-10-08, rehab checklist): `schedule` = `[{therapy, frequency, weekdays}]`
+(therapy from the catalogue; frequency one of `EVERYDAY|ALTERNATE_DAY|TWICE_WEEKLY|WEEKLY|BIWEEKLY`;
+weekdays 0=Mon..6=Sun, exactly 0/0/2/1/1 of them) and read-only `sessions` =
+`[{id, therapy, planned_date, status DUE|DONE|SKIPPED, display_status (adds MISSED, DONE_LATE),
+done_on, done_by_name, note, skip_reason}]`. On **create** only: no `end_date` and no `duration`
+-> `end_date = start_date + 6`; a parseable `duration` ("4WK", "10 days") -> derived end date.
+Max span 366 days. The owner `GET /owner/pets/:id` payload carries both, read-only, with `done_by_name` always `null` (owners never see staff identity).
+
+### Rehab checklist
+| GET | `/rehab/therapies` | | `{groups:[{group, therapies[]}], frequencies:[{code,label,weekdays_required}]}` — any authenticated user |
+| GET | `/rehab/today` | | `{today, due:[Session+{pet:{id,name}, plan:{id,start_date,end_date}}], pending:[...]}` — doctor-scoped; `due` = all sessions planned today (any status), `pending` = DUE before today; ACTIVE plans only |
+| POST | `/rehab/sessions/:id/done` | `{done_on?, note?}` | `Session` — `planned_date <= done_on <= today` else 400; default today; idempotent |
+| POST | `/rehab/sessions/:id/skip` | `{reason?}` | `Session` |
+| POST | `/rehab/sessions/:id/undo` | | `Session` back to DUE (clears done_on/done_by/skip_reason) |
+
+Session routes are doctor-only: owner 403, another practice's session 404.
+
+Plan lifecycle (amended 2026-10-08, final review):
+- `PATCH /treatment-plans/:id {status}`: moving away from `ACTIVE` (`COMPLETED` / `PAUSED`) deletes the plan's
+  `DUE` sessions with `planned_date >= today` (so they can never turn MISSED); DONE/SKIPPED and past DUE rows
+  stay. Moving back to `ACTIVE` regenerates future sessions from today (no past backfill). `completed_at` is
+  set when the status becomes `COMPLETED` and cleared when it returns to `ACTIVE`.
+- `POST /treatment-plans/:id/extend {days}`: `new_end = max(old_end, today - 1) + days`; sessions are created
+  only from that base + 1 (a lapsed plan never gets past MISSED rows). Cadence stays anchored on the original
+  `start_date`.
+- `PATCH` with a `start_date` different from the stored one is **400** (`errors.start_date`) once the plan has
+  any sessions. Re-sending the same value is accepted.
+- Plan creation (plan row + sessions) is atomic.
+
+### Boarding (indoor-facility stays) — amended 2026-10-08
+Six beds, counted per date over a stay's range across active stays **and unexpired holds**. Expired holds
+never count (lazy expiry, no sweeper). Check + insert run under a Postgres advisory lock, so two visitors
+racing for the last bed get one 201 and one 409.
+
+| Auth | Method | Path | Body | Response |
+|---|---|---|---|---|
+| public | POST | `/facility/boarding/holds` | `{check_in, duration}` | 201 `{reference, expires_at, check_out, price}`; 409 full; 400 bad date/duration; **429** (same message) when the IP has had 15 *successful* holds in the hour (409/400 attempts do not count) or already has 2 unexpired holds. Honeypot returns the same shape (computed `expires_at`/`check_out`/`price`), nothing stored. Holds `FACILITY_HOLD_SECONDS` (600 s). |
+| public | POST | `/facility/boarding/holds/:ref/confirm` | intake body below (`checkIn`/`duration` ignored — fixed by the hold) | 201 same shape as direct create (`{reference, check_in, check_out, duration, price, status:"PENDING", detail}`); **410** `Hold expired` (also when the held check-in date is already past); **404** unknown or not `HELD`; 400 invalid |
+| public / doctor | POST | `/facility/boarding` | intake body below | 201 as above (doctor token: status `CONFIRMED`, `source:"doctor"`); 409 full |
+| doctor | GET | `/facility/boarding?status=&include_held=1` | | `{results: Booking[], pending_count}`; `HELD` rows hidden unless `include_held=1`, which returns only *unexpired* holds |
+| doctor | POST | `/facility/boarding/:ref/status` | `{action}` | unchanged; a `HELD` row is 404 |
+| doctor | POST | `/facility/boarding/:ref/convert` | | 200 `Booking` with `owner_id`, `pet_id` set. **409** problem `Several clients share this phone — open the right client and link manually.` when more than one OWNER account has the phone and the email does not pick one (nothing created). 404 unknown/HELD; owner role 403 |
+
+Intake body (camelCase): `petName, ownerName, ownerPhone, ownerEmail?, checkIn, duration, foodBy?, utensilsBy?,
+medicinesBy?, blanketBy?, foodPreference?, walkTimes?, aadhaar?, termsAccepted, website?(honeypot)` plus
+**`emergencyContactPhone` (REQUIRED for every new booking, incl. holds-confirm and doctor-entered)** and
+`emergencyContactName?` (<=150). Both phones go through `normalise_phone`; if the emergency number is the same
+number as `ownerPhone` after normalisation (spacing, `+91`, leading `0` ignored) -> 400
+`emergencyContactPhone: Emergency contact must be a different number`. Existing rows default to `""`.
+
+Doctor `Booking` JSON adds: `emergency_contact_name`, `emergency_contact_phone`, `owner_id` (uuid|null),
+`pet_id` (uuid|null), `pet_link_status` (`"linked"` pet set | `"owner_only"` owner set, pet null | `"unlinked"`),
+`previous_reports` (null when no pet linked; else the linked pet's `DiagnosticReport` JSON — same serializer as
+the pet page, newest first: `id, report_type, report_type_display, uploaded_at, file_url, ...` — and `[]` when
+the pet belongs to another doctor's practice), `expires_at` (HELD only), status may be `HELD`. `aadhaar` is **masked** on every staff response (`"XXXX XXXX 1234"`, last four only; `""` when none) — the full number never leaves the server.
+
+Matching (server-side, on create / confirm): the normalised `ownerPhone` equals exactly one OWNER's account
+phone or a pet's `owner_phone` (compared ignoring spacing and `+91`) -> `owner`; that owner has exactly one pet
+named `petName` (case-insensitive, trimmed) -> `pet`. Any ambiguity leaves the link empty. **Privacy:** the
+public create/confirm responses are the same shape and template text for known and unknown phones; owner/pet/report
+data appear only on doctor routes.
+
+Convert: find-or-create owner (existing matched owner, else phone, else email; new owners get an unusable
+password) and pet (by name under that owner), link both. Idempotent and serialised: a second call, or a stay already
+auto-linked to a pet, creates nothing. The owner-portal `GET /owner/bookings` excludes `HELD` rows.
 
 ### Billing
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |

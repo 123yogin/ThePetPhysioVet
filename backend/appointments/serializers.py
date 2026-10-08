@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
@@ -6,10 +8,11 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .validators import normalise_phone, validate_aadhaar as _validate_aadhaar
+from . import rehab
+from .validators import normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
+    TreatmentPlan, RehabSession, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
     Enquiry, FacilityBooking, BoardingBooking,
 )
@@ -490,18 +493,144 @@ class ProgressNoteSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class RehabSessionSerializer(serializers.ModelSerializer):
+    display_status = serializers.SerializerMethodField()
+    done_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RehabSession
+        fields = [
+            "id", "therapy", "planned_date", "status", "display_status",
+            "done_on", "done_by_name", "note", "skip_reason",
+        ]
+        read_only_fields = fields
+
+    def get_display_status(self, obj):
+        # Derived, never stored: MISSED = still DUE after its day; DONE_LATE =
+        # ticked on a different day than planned. "Today" is clinic-local.
+        if obj.status == "DUE" and obj.planned_date < timezone.localdate():
+            return "MISSED"
+        if obj.status == "DONE" and obj.done_on != obj.planned_date:
+            return "DONE_LATE"
+        return obj.status
+
+    def get_done_by_name(self, obj):
+        # Owners must not learn which staff member did a session (E2E D1).
+        if self.context.get("hide_staff"):
+            return None
+        user = obj.done_by
+        if user is None:
+            return ""
+        return user.get_full_name().strip() or user.username
+
+
+class ScheduleEntrySerializer(serializers.Serializer):
+    therapy = serializers.CharField()
+    frequency = serializers.ChoiceField(choices=[f["code"] for f in rehab.FREQUENCIES])
+    weekdays = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6), required=False, default=list,
+    )
+
+    def validate_therapy(self, value):
+        if value not in rehab.ALL_THERAPIES:
+            raise serializers.ValidationError(f"Unknown therapy: {value}")
+        return value
+
+    def validate(self, attrs):
+        weekdays = attrs.get("weekdays", [])
+        need = rehab.WEEKDAYS_REQUIRED[attrs["frequency"]]
+        if len(set(weekdays)) != len(weekdays) or len(weekdays) != need:
+            raise serializers.ValidationError(
+                {"weekdays": f"{attrs['frequency']} needs exactly {need} distinct weekday(s)."}
+            )
+        attrs["weekdays"] = sorted(weekdays)
+        return attrs
+
+
 class TreatmentPlanSerializer(serializers.ModelSerializer):
     pet_id = serializers.UUIDField(source="pet.id", read_only=True)
     progress_notes = ProgressNoteSerializer(many=True, read_only=True)
+    sessions = RehabSessionSerializer(many=True, read_only=True)
     therapies = serializers.ListField(child=serializers.CharField(), default=list)
+    # ListField (not many=True) so DRF's nested-write guard doesn't reject a JSON column.
+    schedule = serializers.ListField(child=ScheduleEntrySerializer(), required=False)
 
     class Meta:
         model = TreatmentPlan
         fields = [
-            "id", "pet_id", "therapies", "frequency", "frequency_custom",
+            "id", "pet_id", "therapies", "schedule", "frequency", "frequency_custom",
             "duration", "duration_custom", "start_date", "end_date", "status",
-            "completed_at", "created_at", "updated_at", "progress_notes",
+            "completed_at", "created_at", "updated_at", "progress_notes", "sessions",
         ]
+
+    def validate_schedule(self, entries):
+        names = [e["therapy"] for e in entries]
+        if len(set(names)) != len(names):
+            raise serializers.ValidationError("Each therapy may appear only once.")
+        return entries
+
+    def validate(self, attrs):
+        inst = self.instance
+        start = attrs.get("start_date") or (inst.start_date if inst else None)
+        end = attrs.get("end_date")
+        if end is None and inst is not None:
+            end = inst.end_date  # never invent an end_date on update
+        if end is None and inst is None and start:
+            # Create only: derive from `duration` ("4WK", "10 days") when it
+            # parses, leave it open for other free text, else default 7 days.
+            duration = (attrs.get("duration") or "").strip()
+            if not duration:
+                end = start + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1)
+            else:
+                days = rehab.parse_duration_days(duration)
+                if days:
+                    end = start + timedelta(days=days - 1)
+            if end is not None:
+                attrs["end_date"] = end
+        if start and end:
+            if end < start:
+                raise serializers.ValidationError({"end_date": "End date is before the start date."})
+            if (end - start).days + 1 > rehab.MAX_PLAN_DAYS:
+                raise serializers.ValidationError({"end_date": "A plan can span at most 366 days."})
+        if (inst is not None and attrs.get("start_date") not in (None, inst.start_date)
+                and inst.sessions.exists()):
+            raise serializers.ValidationError({
+                "start_date": "Start date can't be changed once the plan has sessions; "
+                              "create a new plan instead.",
+            })
+        schedule = attrs.get("schedule")
+        if schedule and not attrs.get("therapies"):
+            attrs["therapies"] = [e["therapy"] for e in schedule]
+        return attrs
+
+    def create(self, validated_data):
+        plan = super().create(validated_data)
+        rehab.sync_sessions(plan, timezone.localdate(), backfill_from=plan.start_date)
+        return plan
+
+    def update(self, instance, validated_data):
+        old_end = instance.end_date
+        old_status = instance.status
+        new_status = validated_data.get("status", old_status)
+        if new_status != old_status:
+            if new_status == "COMPLETED":
+                validated_data["completed_at"] = timezone.now()
+            elif new_status == "ACTIVE":
+                validated_data["completed_at"] = None
+        plan = super().update(instance, validated_data)
+        today = timezone.localdate()
+        if plan.status != "ACTIVE":
+            # Not being worked: drop future DUE rows so they can't turn MISSED.
+            # Re-assert status/date in the DELETE (a tick may race in).
+            if old_status == "ACTIVE":
+                plan.sessions.filter(status="DUE", planned_date__gte=today).delete()
+            return plan
+        grew = old_end is not None and plan.end_date and plan.end_date > old_end
+        rehab.sync_sessions(
+            plan, timezone.localdate(),
+            backfill_from=old_end + timedelta(days=1) if grew else None,
+        )
+        return plan
 
 
 class LineItemSerializer(serializers.ModelSerializer):
@@ -921,9 +1050,29 @@ class BoardingCreateSerializer(serializers.Serializer):
     termsAccepted = serializers.BooleanField(source="terms_accepted")
     website = serializers.CharField(required=False, allow_blank=True, default="")
 
+    # Emergency contact: the phone is REQUIRED on every new booking.
+    emergencyContactName = serializers.CharField(
+        source="emergency_contact_name", max_length=150, required=False, allow_blank=True,
+        default="", trim_whitespace=True,
+    )
+    emergencyContactPhone = serializers.CharField(
+        source="emergency_contact_phone", max_length=50, trim_whitespace=True,
+    )
+
+    def validate_ownerPhone(self, value):
+        return normalise_phone(value) or _blank_phone_error()
+
+    def validate_emergencyContactPhone(self, value):
+        return normalise_phone(value) or _blank_phone_error()
+
+    def validate(self, attrs):
+        a, b = attrs.get("owner_phone"), attrs.get("emergency_contact_phone")
+        if a and b and phone_key(a) == phone_key(b):
+            raise serializers.ValidationError({"emergencyContactPhone": "Emergency contact must be a different number"})
+        return attrs
+
     def validate_checkIn(self, value):
-        from datetime import date as _date
-        if value < _date.today():
+        if value < timezone.localdate():
             raise serializers.ValidationError("Choose today or a future date.")
         return value
 
@@ -938,17 +1087,51 @@ class BoardingCreateSerializer(serializers.Serializer):
         return _validate_aadhaar(value)
 
 
+def _blank_phone_error():
+    raise serializers.ValidationError("This field may not be blank.")
+
+
+class BoardingHoldSerializer(serializers.Serializer):
+    """PUBLIC ``POST /facility/boarding/holds`` -- dates only, no personal data."""
+
+    check_in = serializers.DateField()
+    duration = serializers.ChoiceField(choices=list(BOARDING_DURATION_KEYS))
+    website = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_check_in(self, value):
+        if value < timezone.localdate():
+            raise serializers.ValidationError("Choose today or a future date.")
+        return value
+
+
+class BoardingConfirmSerializer(BoardingCreateSerializer):
+    """Intake for ``POST /facility/boarding/holds/<ref>/confirm``. Same body as
+    the direct create, but the dates/duration were fixed by the hold, so any
+    `checkIn`/`duration` sent is ignored rather than trusted."""
+
+    checkIn = None
+    duration = None
+
+
 class BoardingSerializer(serializers.ModelSerializer):
     """Doctor-facing read of one boarding stay (snake_case, this app's internal
     convention). Derived fields (duration label, price) come along so the portal
     needs no pricing table of its own."""
 
     duration_label = serializers.SerializerMethodField()
+    owner_id = serializers.UUIDField(read_only=True)
+    pet_id = serializers.UUIDField(read_only=True)
+    pet_link_status = serializers.SerializerMethodField()
+    previous_reports = serializers.SerializerMethodField()
+    # Staff see only the last four digits; the full number never leaves the server.
+    aadhaar = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardingBooking
         fields = [
             "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
+            "emergency_contact_name", "emergency_contact_phone",
+            "owner_id", "pet_id", "pet_link_status", "previous_reports", "expires_at",
             "check_in", "check_out", "duration", "duration_label", "price",
             "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
             "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
@@ -957,3 +1140,24 @@ class BoardingSerializer(serializers.ModelSerializer):
 
     def get_duration_label(self, obj):
         return duration_label(obj.duration)
+
+    def get_aadhaar(self, obj):
+        return f"XXXX XXXX {obj.aadhaar[-4:]}" if len(obj.aadhaar) >= 4 else ""
+
+    def get_pet_link_status(self, obj):
+        if obj.pet_id:
+            return "linked"
+        return "owner_only" if obj.owner_id else "unlinked"
+
+    def get_previous_reports(self, obj):
+        """The linked pet's diagnostic reports (same serializer as the pet page);
+        None when no pet is linked. Doctor-scoped like every report route: a pet
+        that belongs to ANOTHER doctor's practice contributes nothing."""
+        if not obj.pet_id:
+            return None
+        doctor = self.context.get("doctor")
+        if obj.pet.doctor_id is not None and (doctor is None or doctor.id != obj.pet.doctor_id):
+            return []
+        return DiagnosticReportSerializer(
+            obj.pet.diagnostic_reports.all(), many=True, context=self.context,
+        ).data

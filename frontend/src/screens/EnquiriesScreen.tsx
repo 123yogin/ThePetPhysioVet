@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchEnquiries, convertEnquiry, dismissEnquiry, enquiriesQueryKey } from '../api/enquiries';
 import { fetchAppointmentOptions } from '../api/appointments';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { humanizeStatus, friendlyDate } from '../lib/labels';
 import { Enquiry } from '../lib/types';
@@ -151,7 +152,7 @@ export const EnquiriesScreen: React.FC = () => {
     // row has to reveal it — and the owner's reason is worth seeing while
     // you pick the slot.
     setExpandedIds((prev) => new Set(prev).add(enq.id));
-    setConvertDate(enq.preferred_date || new Date().toISOString().slice(0, 10));
+    setConvertDate(enq.preferred_date || todayISO());
     setConvertTime('10:00');
     // Start from what the owner actually asked for on the website. This used
     // to default to the first option -- Initial Consultation -- for every

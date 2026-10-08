@@ -10,6 +10,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'arthritis',
     title: 'Arthritis',
+    seoH1: 'Arthritis in dogs and cats: physiotherapy and pain management in Ahmedabad',
+    seoTitle: 'Dog Arthritis Treatment & Physiotherapy in Ahmedabad',
+    seoDescription:
+      'Arthritis physiotherapy for dogs and cats in Ahmedabad: laser, hydrotherapy, massage, acupuncture and TENS to ease stiffness and rebuild muscle support.',
     category: 'degenerative',
     shortDesc: 'Managing pain and improving joint mobility for aging companions.',
     fullDesc: 'Osteoarthritis is a progressive joint disease affecting cartilage and surrounding bones. Our multi-modal rehabilitation targets stiffness, restores range of motion, and rebuilds muscular support without heavy pharmacological side effects.',
@@ -23,6 +27,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'ivdd',
     title: 'IVDD',
+    seoH1: 'IVDD (slipped disc) in dogs: rehabilitation in Ahmedabad',
+    seoTitle: 'IVDD in Dogs: Slipped Disc Physiotherapy in Ahmedabad',
+    seoDescription:
+      'IVDD rehab for dogs in Ahmedabad: electro-acupuncture, TENS, laser and supported swimming in our indoor pool for slipped disc, back pain and weak hind legs.',
     category: 'neurological',
     shortDesc: 'Specialized neurological rehabilitation for spinal conditions.',
     fullDesc: 'Intervertebral Disc Disease affects the spinal column, leading to pain, weakness, or paralysis. Our conservative and post-op spinal protocol focuses on neural stimulation, spinal alignment, proprioceptive re-education, and supported swimming in our indoor pool.',
@@ -36,6 +44,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'hip-dysplasia',
     title: 'Hip Dysplasia',
+    seoH1: 'Hip dysplasia in dogs: physiotherapy and rehab in Ahmedabad',
+    seoTitle: 'Hip Dysplasia Treatment for Dogs & Puppies in Ahmedabad',
+    seoDescription:
+      'Hip dysplasia physiotherapy for dogs in Ahmedabad: targeted exercise, peanut-ball work, indoor pool swimming and laser to steady the hips and build muscle.',
     category: 'degenerative',
     shortDesc: 'Strengthening musculature to support and stabilize the hip joints.',
     fullDesc: 'A congenital condition where the hip socket fails to fully cover the ball portion of the upper thighbone. Specialized targeted exercise regimens build gluteal and pelvic stabilization muscles, drastically reducing bone-on-bone friction.',
@@ -43,12 +55,16 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Physiotherapy', 'Therapeutic Exercise (Peanut Ball)', 'Indoor Swimming Pool', 'Cryotherapy & Heat Modalities', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '6 to 8 weeks for baseline stabilization',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCWOALUCpPzB5Y48NeeAIMH1krV-26VzLU8CBjGtyCfSCsGVwNbQxlr4cpMbTK7jpQEGpgrgvhghtk_NSM9ysyH0tIvZHm4l7TR25RxG6dzG5DxBZawa37qGWu9G3rs3uLlIDHEy251XixCQs8R61E6sSOYMiT7PX1AozXa7K-NMA0rWEZ7W99P8gf-o7AZLJBT8AYyZX822P_PI0jPyCppt9M4qJDXlb_Z8zKfhIwNskreTHLNrYuj',
+      '/photos/conditions/hip-dysplasia.webp',
     altText: 'Golden Retriever doing core stabilization on a peanut ball',
   },
   {
     id: 'post-surgical',
     title: 'Post Surgical Rehab',
+    seoH1: 'Post-surgical rehabilitation for dogs in Ahmedabad',
+    seoTitle: 'Post-Surgery Dog Physiotherapy (TPLO) in Ahmedabad',
+    seoDescription:
+      'Post-surgery rehab for dogs in Ahmedabad after TPLO, CCL, FHO or fracture repair. We work with your surgeon on swelling, strength and a natural gait.',
     category: 'post-op',
     shortDesc: 'Accelerated and safe recovery protocols following orthopedic procedures.',
     fullDesc: 'Essential care post-TPLO, CCL repair, FHO, or fracture repair. We work closely with your surgeon to control post-op edema, promote surgical site incisional healing, prevent muscle atrophy, and re-establish a natural symmetrical gait.',
@@ -62,6 +78,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'neurological-recovery',
     title: 'Neurological Recovery',
+    seoH1: 'Neurological recovery and paralysis rehab for dogs in Ahmedabad',
+    seoTitle: 'Dog Paralysis, Ataxia & Neurological Rehab in Ahmedabad',
+    seoDescription:
+      'Dog paralysis and neurological rehab in Ahmedabad: spinal stroke (FCE), degenerative myelopathy, ataxia and nerve injury. Exercise, stimulation, hydrotherapy.',
     category: 'neurological',
     shortDesc: 'Retraining pathways to restore balance, coordination, and mobility.',
     fullDesc: 'Targeted neurological rehab for spinal stroke (FCE), degenerative myelopathy (DM), cerebellar ataxia, and nerve trauma. We stimulate neuroplasticity using proprioceptive tracks, wobble boards, and aquatic buoyancy.',
@@ -75,6 +95,10 @@ export const CONDITIONS: ConditionItem[] = [
   {
     id: 'sports-injury',
     title: 'Sports Injury',
+    seoH1: 'Sports and working-dog injury rehabilitation in Ahmedabad',
+    seoTitle: 'Dog Sports Injury Physiotherapy & Recovery in Ahmedabad',
+    seoDescription:
+      'Sports injury physiotherapy for dogs in Ahmedabad: strains, sprains and tendonitis in agility and working dogs. Biomechanical assessment, laser, recovery plan.',
     category: 'lifestyle',
     shortDesc: 'Targeted recovery plans to get your active dog back to peak performance.',
     fullDesc: 'Agility, flyball, working dogs, and energetic companions frequently suffer tendonitis, iliopsoas strains, and ligament sprains. Our biomechanical evaluation isolates subtle compensations and repairs tissue integrity.',
@@ -82,12 +106,16 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['High-Power Laser', 'Myofascial Trigger Point Release', 'Aquatic Conditioning', 'Plyometric Strength Building', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '4 to 10 weeks to return to agility & outdoor sports',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBtr-022SXsB1NTBRLaXQRGaW7oir_XGpluV1e2iB7vsWYKAaKjYVUIbJH9h4D1SfHb0ip1XzWp_O1wrnKVxvIf8R6lLS28qeLBlhGSQyb-97-HOzcgXIOaA00mPnNytYgzQP6ujWDsk9ywdvWtnhTkCtROhjYS5hWQOKpPSmn7ZsYzIpP6L-YbtcWGHWVyuvxvYc6N9CNRq41IRDecnDU3MlbPcSU8xttqjgpEcB-amjmxckgXCCs8',
+      '/photos/conditions/sports-injury.webp',
     altText: 'Athletic agility dog training and undergoing injury conditioning',
   },
   {
     id: 'senior-mobility',
     title: 'Senior Mobility',
+    seoH1: 'Mobility care for senior dogs and cats in Ahmedabad',
+    seoTitle: 'Senior Dog Mobility Care & Arthritis Physio in Ahmedabad',
+    seoDescription:
+      'Senior dog mobility care in Ahmedabad: gentle massage, warm-water hydrotherapy, balance work and non-slip advice for older dogs and cats who are slowing down.',
     category: 'lifestyle',
     shortDesc: 'Gentle therapies designed to maintain independence and comfort in older age.',
     fullDesc: 'Aging pets deserve dignity, comfort, and vital motion. Our senior care plans safely boost endurance, maintain core muscle tone, ease stiff spinal joints, and enhance mental engagement in a low-stress environment.',
@@ -95,12 +123,16 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Gentle Massage', 'Warm Water Hydrotherapy Walk', 'Low-Impact Balance Matting', 'Nonslip Assistive Gear Consultation', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: 'Continuous weekly or bi-weekly comfort care program',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBKF6FGM81GUAtKVIRXHExNqGYjoBmY1_dX3XI9ywDCPlO6OTk-_xo-ysi6LHjXx9f3BGBU9ZAd_y-eewRU_wVWAt5PGf48yFZO_PJsXsgmdUmiHsBjYoOZSx68zuKATGHpJqfO9JYxKE_Zk9s02qUzelrLdYME86vhydM-DOO_0P6l82WlWKJixoe_6KestRf_W80gEt9XaWgIX2GK7JAB7d8MfbyJ172-wMMXgQjVCOGwuCurClCf',
+      '/photos/conditions/senior-mobility.webp',
     altText: 'Senior dog comfortably resting in a warm rehabilitation clinic',
   },
   {
     id: 'obesity-rehab',
     title: 'Obesity Rehab',
+    seoH1: 'Weight loss and obesity rehabilitation for dogs in Ahmedabad',
+    seoTitle: 'Dog Obesity & Weight Loss Programme in Shilaj, Ahmedabad',
+    seoDescription:
+      'Dog obesity and weight-loss rehab in Ahmedabad: low-impact swimming in our indoor pool, structured exercise and weight milestones for overweight dogs and cats.',
     category: 'lifestyle',
     shortDesc: 'Safe, structured exercise programs for healthy weight management.',
     fullDesc: 'Excess weight severely compounds joint stress, heart strain, and diabetes risk. Swimming in our indoor pool lets your pet work without the joint impact of walking on hard ground, thanks to the buoyancy of the water.',
@@ -108,7 +140,7 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Indoor Pool Swimming Sessions', 'Targeted Metabolic Caloric Plan', 'Land Resistance Walks', 'Progressive Weight Milestones', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 16 weeks target body condition restoration',
     imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAmDWgI1fS9Ph9ngrwa3L9PHwN7DzI3mZPsCTEiQO_-9yP6lAPBlmU6muhXOSQ0zpEmw8rR0watnXCvI31JOoyPBeYciqUA3x1eapZE6h5E1XCxrUWM5uDitc5G2Jj_K57z7Dly70y3co2fBZyFTpU5YtQlBVZgSOwnUkRC5XsqGnXRurn3qa8r-hZAPxTy_nZlIg3yKW01Qf1z0EbUr1xuUOu5pPz_JBpuTT0t65K9HDSHh5B_h108',
+      '/photos/conditions/obesity-rehab.webp',
     altText: 'Dog swimming in the indoor hydrotherapy pool during weight management rehabilitation',
   }
 ];
@@ -117,6 +149,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'indoor-physiotherapy',
     title: 'Indoor Physiotherapy',
+    seoH1: 'Residential physiotherapy for dogs and cats at our Shilaj clinic',
+    seoTitle: 'Residential Pet Physiotherapy in Shilaj, Ahmedabad',
+    seoDescription:
+      'Residential physiotherapy in Shilaj, Ahmedabad for dogs and cats from out of town: your pet stays for their course, with special care for food and hygiene.',
     icon: 'night_shelter',
     shortDesc: 'Residential care for patients travelling from outside the city.',
     fullDesc: 'For patients coming from out of the city: your pet stays at the clinic for their course of physiotherapy.',
@@ -132,6 +168,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'manual-therapy',
     title: 'Manual Therapy',
+    seoH1: 'Manual therapy and massage for dogs and cats',
+    seoTitle: 'Manual Therapy & Soft Tissue Massage for Dogs in Ahmedabad',
+    seoDescription:
+      'Hands-on manual therapy for dogs and cats in Ahmedabad: massage, therapeutic exercise, strength training and acupressure, adjusted for each pet in the session.',
     icon: 'front_hand',
     shortDesc: 'Hands-on treatment delivered directly by a clinician.',
     fullDesc: 'Hands-on treatment delivered directly by a clinician, selected and adjusted for each animal during the session.',
@@ -142,6 +182,10 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'electrophysical',
     title: 'Electro-physical Therapy',
+    seoH1: 'Laser and electrotherapy for dogs and cats',
+    seoTitle: 'Laser & Electrotherapy for Dog Arthritis Pain in Ahmedabad',
+    seoDescription:
+      'Class IV laser, PEMF, ultrasound, TENS, NMES and electro-acupuncture for dogs and cats in Ahmedabad, applied under clinical supervision as recovery progresses.',
     icon: 'bolt',
     shortDesc: 'Equipment-assisted therapies applied under clinical supervision.',
     fullDesc: 'Equipment-assisted therapies applied under clinical supervision, chosen to suit the animal and the stage of their recovery.',
@@ -157,18 +201,68 @@ export const SERVICES: ServiceItem[] = [
     duration: 'Assessed per pet'
   },
   {
-    id: 'specialised',
-    title: 'Specialised',
+    id: 'hydrotherapy',
+    title: 'Hydrotherapy',
+    seoH1: 'Hydrotherapy for dogs in Ahmedabad',
+    seoTitle: 'Dog Hydrotherapy in Ahmedabad | The Pet Physio Vet',
+    seoDescription:
+      'Dog hydrotherapy in Ahmedabad: supported swimming in our lukewarm indoor pool with a hydrotherapist alongside. For IVDD, post-surgery, arthritis, weight loss.',
     icon: 'star',
-    shortDesc: 'Acupuncture and our indoor hydrotherapy pool.',
-    fullDesc: 'Acupuncture, and hydrotherapy in an indoor swimming pool kept at lukewarm temperature.',
-    benefits: ['Acupuncture', 'Hydrotherapy — indoor swimming pool (lukewarm water)'],
-    suitableFor: [],
+    shortDesc: 'Supported swimming in our indoor, lukewarm pool.',
+    fullDesc: 'Hydrotherapy in an indoor swimming pool kept at lukewarm temperature (29-31\u00b0C), with a dedicated hydrotherapist in the water alongside your pet.',
+    benefits: [
+      'Indoor swimming pool, clean and filtered',
+      'Lukewarm water, kept at 29-31\u00b0C (84-88\u00b0F)',
+      'A dedicated hydrotherapist in the water with your pet',
+      'Flotation aid where it helps',
+      'Gradual introduction, with treats and praise',
+      'Under the observation of the vet'
+    ],
+    suitableFor: [
+      'IVDD and spinal conditions',
+      'Recovery after orthopaedic surgery',
+      'Overweight dogs',
+      'Senior dogs with stiff joints',
+      'Arthritis and hip dysplasia',
+      'Neurological recovery',
+      'Active and sporting dogs'
+    ],
+    duration: 'Assessed per pet'
+  },
+  {
+    id: 'acupuncture',
+    title: 'Acupuncture',
+    seoH1: 'Veterinary acupuncture for dogs and cats in Ahmedabad',
+    seoTitle: 'Dog & Cat Acupuncture in Ahmedabad | The Pet Physio Vet',
+    seoDescription:
+      "Veterinary acupuncture and electro-acupuncture for dogs and cats in Ahmedabad with Dr. Dhanvi Patel (CVA), alongside the rest of your pet's rehab.",
+    icon: 'sparkles',
+    shortDesc: 'Acupuncture and electro-acupuncture, with a certified veterinary acupuncturist.',
+    fullDesc: 'Acupuncture and electro-acupuncture, used alongside the rest of your pet\'s rehabilitation plan. Dr. Dhanvi Patel holds a CVA, Certified Veterinary Acupuncturist, from Chi University, U.S.A.',
+    benefits: [
+      'Acupuncture',
+      'Electro-acupuncture',
+      'Certified Veterinary Acupuncturist (CVA), Chi University, U.S.A.',
+      'Combined with laser, hydrotherapy and manual therapy as needed'
+    ],
+    suitableFor: [
+      'Arthritis',
+      'IVDD and spinal conditions',
+      'Hip dysplasia',
+      'Post-surgical recovery',
+      'Neurological recovery',
+      'Sports injury',
+      'Senior mobility'
+    ],
     duration: 'Assessed per pet'
   },
   {
     id: 'home-care',
     title: 'Home Care',
+    seoH1: 'Home-visit pet physiotherapy across Ahmedabad',
+    seoTitle: 'Dog Physiotherapy at Home in Ahmedabad | The Pet Physio Vet',
+    seoDescription:
+      'Dog and cat physiotherapy at home in Ahmedabad: a home exercise programme, massage and surface guidance so care continues between your pet\'s clinic visits.',
     icon: 'home',
     shortDesc: 'A programme to continue your pet\'s care at home.',
     fullDesc: 'A home exercise programme and supporting guidance, so care continues between visits to the clinic.',
@@ -190,7 +284,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   {
     number: '01',
     title: 'Assessment',
-    desc: 'Comprehensive evaluation of mobility and condition.',
+    desc: 'A full evaluation of mobility and condition.',
     details: 'A thorough 60-minute consultation including gait analysis, muscle mass girth measurement, joint range-of-motion testing, and neurological reflex check.',
     whatToExpect: ['Medical history review', 'Symmetrical stance inspection', 'Goniometer joint range testing', 'Initial pain & comfort scoring']
   },
@@ -204,7 +298,7 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   {
     number: '03',
     title: 'Personalized Therapy',
-    desc: 'A tailored plan utilizing various modalities.',
+    desc: 'A plan built from the therapies that suit your pet — hydrotherapy, laser, manual therapy, and acupuncture as needed.',
     details: 'Crafting a dedicated multi-week therapy schedule blending indoor pool hydrotherapy, Class IV laser, manual joint mobilization, and acupuncture as needed.',
     whatToExpect: ['Hands-on therapeutic sessions', 'Gentle, zero-fear approach', 'Immediate post-treatment icing/heat', 'Customized treatment frequency (1-3x/week)']
   },
@@ -224,33 +318,66 @@ export const JOURNEY_STEPS: JourneyStep[] = [
   }
 ];
 
+/**
+ * The clinic's current Google Business Profile rating, shown above the
+ * reviews on the homepage (not emitted as schema — see seo/schema.ts). The clinic's owner manages that profile directly, so this
+ * is confirmed from the live listing rather than scraped or estimated.
+ *
+ * MUST BE KEPT IN SYNC BY HAND with the live profile
+ * (https://maps.google.com/?cid=16829298020285027612) — there is no API
+ * wired up to pull this automatically, so it will drift as new reviews come
+ * in until someone updates it. Last confirmed 2026-10-07: 5.0 stars, 24
+ * reviews (also 5.0 / 23 on Justdial).
+ */
+export const GOOGLE_RATING = {
+  ratingValue: '5',
+  bestRating: '5',
+  reviewCount: 24,
+};
+
+/**
+ * Genuine excerpts from the clinic's Google Business Profile (5.0 stars, 24
+ * reviews), published at the business owner's direction — the owner manages
+ * that profile and gave these specifically to replace the template fiction
+ * this array used to hold ("Sarah & James M." on an invented dog named
+ * Bella, "Elena R." on an invented IVDD case — fabricated clients quoted by
+ * name about fabricated patients on a real veterinary practice's homepage,
+ * the same template defect as the three fabricated clinicians SPECIALISTS
+ * once carried).
+ *
+ * Each `quote` is verbatim from the profile (only a leading "& " / "..." may
+ * be trimmed) — never paraphrased, never invented. No reviewer gave a full
+ * name on the profile, so `ownerName` is "Google review" rather than a
+ * guessed one; `petName`, `breed`, `condition` and `storyDetails` are left
+ * out entirely because none of these three reviewers stated them — the
+ * `SuccessStory` type makes those fields optional for exactly this case.
+ *
+ * They are shown on the page only. They are NOT emitted as Review /
+ * AggregateRating schema: Google treats a business's own reviews of itself
+ * as self-serving (see the header of seo/schema.ts).
+ */
 export const SUCCESS_STORIES: SuccessStory[] = [
-  // Empty on purpose — see the note below. Add real, permissioned stories and
-  // the "Success Stories" section and its nav link reappear automatically.
-  //
-  // This list used to hold two testimonials that were template fiction:
-  // "Sarah & James M." on Bella, a Golden Retriever recovering from TPLO
-  // surgery, and "Elena R." on an IVDD recovery — invented clients quoted by
-  // name about invented patients, describing clinical outcomes on a real
-  // veterinary practice's homepage. They arrived with the same site template
-  // that supplied three fabricated clinicians (see SPECIALISTS above).
-  //
-  // They were display-only rather than emitted as Review/AggregateRating
-  // schema, which is the one thing that kept this out of Google's structured
-  // data. seo/schema.ts deliberately emits neither, and it must stay that way
-  // until there are real reviews to point at.
-  //
-  // The clinic HAS real reviews — 24 of them on its Google Business Profile —
-  // and those are what belongs here. They could not be pulled automatically:
-  // the profile is not indexed by the available search tools, and reading
-  // review text needs the Google Places API plus the clinic's place_id.
-  // Writing stand-ins in the meantime would have recreated the exact defect
-  // this removal exists to fix, so the section renders nothing instead.
-  //
-  // To restore: paste each real review as one entry. `quote` and `ownerName`
-  // come straight from the review; `petName`, `breed`, `condition` and
-  // `storyDetails` only if the reviewer actually stated them — leave them out
-  // rather than filling the shape.
+  {
+    id: 'google-review-1',
+    quote: 'They also recently added Class 4 Laser therapy, which is unique in such a setup.',
+    ownerName: 'Google review',
+    rating: 5,
+    source: 'Google',
+  },
+  {
+    id: 'google-review-2',
+    quote: 'Her clinic itself is a great environment for all pets.',
+    ownerName: 'Google review',
+    rating: 5,
+    source: 'Google',
+  },
+  {
+    id: 'google-review-3',
+    quote: 'Dr Dhanvi is a blessing, such a healing soul and such loving hands.',
+    ownerName: 'Google review',
+    rating: 5,
+    source: 'Google',
+  },
 ];
 
 export const SPECIALISTS: Specialist[] = [
@@ -281,12 +408,16 @@ export const SPECIALISTS: Specialist[] = [
   // with avian and exotic experience. Clinic visits at Shilaj, Ahmedabad,
   // Road, and home visits across Ahmedabad." Nothing is added to it.
   //
-  // `experienceYears` and `imageUrl` stay empty because no source states them,
-  // and a guessed number of years in practice or a stock photograph of someone
-  // else is exactly the failure this replacement exists to undo.
+  // `experienceYears` was left at 0 because no source stated a number at the
+  // time; the doctor has since confirmed 2+ years of clinical practice before
+  // this website existed (the clinic predates the site), so it is now set to
+  // 2 -- a stated fact, not a guess. Both photos below are her own, supplied
+  // by the clinic -- never a stock photograph of someone else.
   {
     id: 'dhanvi-patel',
     name: 'Dr. Dhanvi Patel',
+    seoTitle: 'Dr. Dhanvi Patel, Veterinary Physiotherapist, Ahmedabad',
+    seoH1: 'Dr. Dhanvi Patel, veterinary physiotherapist',
     role: 'Veterinary Physiotherapist',
     // Supplied by the clinic, 2026-09-18. Separated by ';' because two of
     // these contain commas of their own.
@@ -315,13 +446,18 @@ export const SPECIALISTS: Specialist[] = [
       'Avian and exotic patients',
       'Home visits across Ahmedabad',
     ],
-    experienceYears: 0,
+    experienceYears: 2,
     // Her own photograph, supplied by the clinic 2026-09-19. Identity is not
     // assumed: the scrub embroidery in the same set reads "Thepetphysio /
     // Dr. Dhanvi Pa... / Veterinary Physio...", which is her own uniform.
     imageUrl: '/photos/dhanvi-patel.webp',
     altText:
       'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
+    // Formal standalone portrait, used only on the dedicated profile page; the
+    // homepage "about" card keeps the warmer beagle photo above.
+    portraitUrl: '/photos/dhanvi-portrait.webp',
+    portraitAlt:
+      'Dr. Dhanvi Patel, veterinary physiotherapist and acupuncturist, in her The Pet Physio Vet clinic scrub',
   },
 ];
 
@@ -429,13 +565,13 @@ export const FAQS: FAQItem[] = [
     id: 'faq1',
     category: 'General',
     question: 'Do I need a referral from my regular vet?',
-    answer: 'Yes, in most cases we require a referral from your primary care veterinarian to ensure we have your pet\'s complete medical history, surgical reports, X-rays, and can coordinate their care safely and effectively.'
+    answer: 'Yes, in most cases we require a referral from your primary care veterinarian to ensure we have your pet\'s complete medical history, surgical reports, X-rays, and can coordinate their care safely and effectively. No referral? Call us and we\'ll advise you on the next step.'
   },
   {
     id: 'faq2',
     category: 'Sessions',
     question: 'How long is a typical rehabilitation session?',
-    answer: 'Initial comprehensive assessments take 60 minutes. Follow-up treatment sessions typically last between 30 to 45 minutes, depending on your pet\'s specific needs, condition, and stamina.'
+    answer: 'Initial assessments take 60 minutes. Follow-up treatment sessions typically last between 30 to 45 minutes, depending on your pet\'s specific needs, condition, and stamina.'
   },
   {
     id: 'faq3',
@@ -447,7 +583,7 @@ export const FAQS: FAQItem[] = [
     id: 'faq4',
     category: 'Insurance',
     question: 'Does pet insurance cover physiotherapy?',
-    answer: 'Many comprehensive pet insurance policies (such as Trupanion, Nationwide, Healthy Paws, and Petplan) cover veterinary rehabilitation and hydrotherapy when prescribed by a veterinarian. We provide itemized receipts for easy reimbursement.'
+    answer: 'Some pet insurance policies cover physiotherapy and hydrotherapy when your vet recommends it — check your policy. We provide itemised receipts you can submit to your insurer.'
   },
   {
     id: 'faq5',
@@ -477,6 +613,8 @@ export function servicesForCondition(condition: ConditionItem): ServiceItem[] {
       const t = therapy.toLowerCase();
       const title = service.title.toLowerCase();
       const firstWord = t.split(' ')[0];
+      // Pool/aquatic/swimming therapies are hydrotherapy even when the word is not used.
+      if (service.id === 'hydrotherapy' && /\b(pool|aquatic|swimming|swim)\b/.test(t)) return true;
       return t.includes(title) || (firstWord !== '' && title.includes(firstWord));
     }),
   );

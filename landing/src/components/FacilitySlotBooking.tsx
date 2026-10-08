@@ -22,7 +22,7 @@ import { CalendarCheck, Check, Loader2, Clock, AlertCircle } from 'lucide-react'
  * — this is a reservation, not a paid ticket, and the copy says so.
  */
 
-import { CLINIC_API, isoDate } from '../lib/clinicApi';
+import { CLINIC_API, addDays, getJson, isoDate } from '../lib/clinicApi';
 
 interface Slot {
   slot: number;
@@ -31,6 +31,8 @@ interface Slot {
   label: string;
   capacity: number;
   available: number;
+  /** True once the slot has started — it can no longer be booked. */
+  past?: boolean;
 }
 
 interface Availability {
@@ -58,6 +60,7 @@ interface Props {
 /** YYYY-MM-DD for a date `offsetDays` from today, in the visitor's own zone. */
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
+import { pad2 } from '../lib/format';
 
 export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) => {
   type Phase = 'select' | 'confirm' | 'done';
@@ -69,6 +72,9 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   const [avail, setAvail] = React.useState<Availability | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [chosen, setChosen] = React.useState<number[]>([]);
+  // Auto-advance past an exhausted day only until the visitor picks a date themselves.
+  const userPickedDate = React.useRef(false);
+  const [advancedFrom, setAdvancedFrom] = React.useState<string | null>(null);
 
   const [hold, setHold] = React.useState<Hold | null>(null);
   const [secondsLeft, setSecondsLeft] = React.useState(0);
@@ -83,8 +89,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   // ---- Step 1: availability -------------------------------------------------
   const loadAvailability = React.useCallback((forDate: string) => {
     setLoading(true);
-    return fetch(`${CLINIC_API}/facility/availability?date=${forDate}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    return getJson(`/facility/availability?date=${forDate}`)
       .then((d: Availability) => setAvail(d))
       .catch(() => setAvail(null))
       .finally(() => setLoading(false));
@@ -96,15 +101,22 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
     setError('');
     let cancelled = false;
     setLoading(true);
-    fetch(`${CLINIC_API}/facility/availability?date=${date}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: Availability) => !cancelled && setAvail(d))
+    getJson(`/facility/availability?date=${date}`)
+      .then((d: Availability) => {
+        if (cancelled) return;
+        setAvail(d);
+        // Nothing bookable left (all started or full): move on to the next day.
+        if (!userPickedDate.current && date < maxDate && d.slots.every((s) => s.past || s.available <= 0)) {
+          setAdvancedFrom((prev) => prev ?? date);
+          setDate(addDays(date, 1));
+        }
+      })
       .catch(() => !cancelled && setAvail(null))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [date, phase]);
+  }, [date, phase, maxDate]);
 
   // ---- The countdown --------------------------------------------------------
   React.useEffect(() => {
@@ -116,12 +128,10 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   }, [phase, hold]);
 
   const expired = phase === 'confirm' && secondsLeft <= 0;
-  const mmss = `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(
-    secondsLeft % 60,
-  ).padStart(2, '0')}`;
+  const mmss = `${pad2(Math.floor(secondsLeft / 60))}:${pad2(secondsLeft % 60)}`;
 
-  const toggleSlot = (slot: number, available: number) => {
-    if (available <= 0) return;
+  const toggleSlot = (slot: number, available: number, past?: boolean) => {
+    if (past || available <= 0) return;
     setChosen((prev) => {
       if (prev.includes(slot)) return prev.filter((s) => s !== slot);
       // One slot per booking: picking another simply replaces the choice.
@@ -145,7 +155,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
       const data = await res.json();
       if (!res.ok) {
         setError(data.detail || 'Those slots could not be held. Please try another time.');
-        if (res.status === 409) {
+        if (res.status === 409 || (res.status === 400 && data.title === 'Slot has started')) {
           loadAvailability(date);
           setChosen([]);
         }
@@ -357,9 +367,19 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
         value={date}
         min={minDate}
         max={maxDate}
-        onChange={(e) => setDate(e.target.value || minDate)}
-        className={`${field} mb-6`}
+        onChange={(e) => {
+          userPickedDate.current = true;
+          setAdvancedFrom(null);
+          setDate(e.target.value || minDate);
+        }}
+        className={`${field} ${advancedFrom ? 'mb-2' : 'mb-6'}`}
       />
+      {advancedFrom && (
+        <p role="status" className="text-xs text-(--c-accent) mb-6">
+          No times left {advancedFrom === minDate ? 'today' : 'on that day'} — showing{' '}
+          {new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+        </p>
+      )}
 
       <span className={labelCls}>
         Time slot{' '}
@@ -377,20 +397,28 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
           Could not load availability. Please call the clinic to book.
         </p>
       ) : (
+        <>
+        {avail.slots.every((s) => s.past || s.available <= 0) && (
+          <p role="status" className="text-sm text-(--c-accent) py-2">
+            No times left on this day
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3 mb-6">
           {avail.slots.map((s) => {
             const isChosen = chosen.includes(s.slot);
-            const full = s.available <= 0;
+            const started = !!s.past;
+            const full = !started && s.available <= 0;
+            const unavailable = started || full;
             const blocked = !isChosen && chosen.length >= maxSlots;
             return (
               <button
                 key={s.slot}
                 type="button"
-                disabled={full}
+                disabled={unavailable}
                 aria-pressed={isChosen}
-                onClick={() => toggleSlot(s.slot, s.available)}
+                onClick={() => toggleSlot(s.slot, s.available, s.past)}
                 className={`relative text-left p-3 border transition-colors ${
-                  full
+                  unavailable
                     ? 'border-(--c-line)/40 bg-(--c-surface-2) text-(--c-mute-2) cursor-not-allowed'
                     : isChosen
                       ? 'border-(--c-ink) bg-(--c-ink) text-white'
@@ -402,12 +430,13 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
                 {isChosen && <Check className="absolute top-2 right-2 w-4 h-4" />}
                 <span className="block font-medium text-sm">{s.label}</span>
                 <span className={`block text-xs mt-1 ${isChosen ? 'text-white/80' : 'text-(--c-accent)'}`}>
-                  {full ? 'Full' : `${s.available} of ${s.capacity} left`}
+                  {started ? 'Started' : full ? 'Full' : `${s.available} of ${s.capacity} left`}
                 </span>
               </button>
             );
           })}
         </div>
+        </>
       )}
 
       {/* Honeypot */}

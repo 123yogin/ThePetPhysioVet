@@ -19,13 +19,16 @@ this data reaches a phone dialler.
 """
 import re
 
-from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 # Separators people actually type: spaces, hyphens, dots, brackets, non-breaking
 # spaces pasted out of a browser.
 _SEPARATORS = re.compile(r"[\s\-.() ]")
 _VALID = re.compile(r"^\+?\d{10,15}$")
+
+
+def _strip_separators(value):
+    return _SEPARATORS.sub("", str(value)).strip()
 
 MESSAGE = (
     "Enter a phone number the clinic can call — 10 to 15 digits, "
@@ -41,7 +44,7 @@ def normalise_phone(value):
     """
     if value is None:
         return value
-    cleaned = _SEPARATORS.sub("", str(value)).strip()
+    cleaned = _strip_separators(value)
     if not cleaned:
         return ""
     if not _VALID.match(cleaned):
@@ -49,17 +52,23 @@ def normalise_phone(value):
     return cleaned
 
 
-def validate_phone_model(value):
-    """The same rule for model-level `validators=[...]`.
-
-    Model validators run under `full_clean()`, which the admin calls, so a
-    number typed into Django admin is held to the rule the API enforces.
-    """
-    if not value:
-        return
-    cleaned = _SEPARATORS.sub("", str(value)).strip()
+def phone_key(value):
+    """Comparison key for "is this the same phone?": separators stripped, and an
+    Indian number written with +91 / 91 / 0 in front folds to its ten digits, so
+    "+91 98765-43210" and "98765 43210" collide. Used ONLY to compare two numbers
+    (emergency-vs-owner check, client matching); never stored or shown. Returns
+    "" for anything that is not a plausible phone."""
+    cleaned = _strip_separators(value or "")
     if not _VALID.match(cleaned):
-        raise DjangoValidationError(MESSAGE)
+        return ""
+    digits = cleaned.lstrip("+")
+    if len(digits) == 14 and digits.startswith("0091"):
+        return digits[4:]
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits[2:]
+    if len(digits) == 11 and digits.startswith("0"):
+        return digits[1:]
+    return digits
 
 
 # ---------------------------------------------------------------- Aadhaar ----
@@ -99,7 +108,7 @@ AADHAAR_MESSAGE = "Enter a valid 12-digit Aadhaar number."
 def is_valid_aadhaar(value):
     """True iff `value` is a 12-digit string with a correct Verhoeff checksum
     and a leading digit of 2-9. No network, no storage of anything derived."""
-    s = _SEPARATORS.sub("", str(value or "")).strip()
+    s = _strip_separators(value or "")
     if len(s) != 12 or not s.isdigit() or s[0] in "01":
         return False
     c = 0
@@ -111,7 +120,7 @@ def is_valid_aadhaar(value):
 def validate_aadhaar(value):
     """Serializer-friendly: return the cleaned 12 digits, or raise a 400.
     Empty is allowed (the caller decides whether the field is required)."""
-    s = _SEPARATORS.sub("", str(value or "")).strip()
+    s = _strip_separators(value or "")
     if not s:
         return ""
     if not is_valid_aadhaar(s):

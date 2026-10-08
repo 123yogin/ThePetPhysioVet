@@ -29,7 +29,7 @@ from rest_framework import status as http_status
 
 from ..models import (
     FacilityBooking, FACILITY_BEDS, FACILITY_MAX_SLOTS_PER_BOOKING,
-    FACILITY_HOLD_SECONDS, FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label,
+    FACILITY_HOLD_SECONDS, FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label, slot_has_started,
 )
 from ..serializers import (
     FacilityBookingCreateSerializer, FacilityBookingSerializer,
@@ -79,13 +79,23 @@ def _validate_slots(data):
         )
     if [s for s in slots if s not in FACILITY_SLOT_INDEXES]:
         return None, problem(400, "Unknown slot", "One or more chosen slots are not offered.")
-    if data["date"] < date_cls.today():
+    # Clinic time (TIME_ZONE), not the server's: a UTC host is a day behind IST
+    # for 5.5 hours every night.
+    if data["date"] < timezone.localdate():
         return None, problem(400, "Date in the past", "Choose today or a future date.")
+    now = timezone.now()
+    if any(slot_has_started(data["date"], s, now) for s in slots):
+        return None, problem(
+            400, "Slot has started",
+            "That time has already begun today — choose a later slot or another day.",
+        )
     return slots, None
 
 
 def _availability_payload(date_value):
     counts = _slot_counts(date_value)
+    now = timezone.now()
+    started = {s["slot"]: slot_has_started(date_value, s["slot"], now) for s in FACILITY_SLOTS}
     return {
         "date": date_value.isoformat(),
         "capacity": FACILITY_BEDS,
@@ -97,7 +107,9 @@ def _availability_payload(date_value):
                 "end": s["end"],
                 "label": slot_label(s["slot"]),
                 "capacity": FACILITY_BEDS,
-                "available": max(0, FACILITY_BEDS - counts.get(s["slot"], 0)),
+                "past": started[s["slot"]],
+                "available": 0 if started[s["slot"]]
+                else max(0, FACILITY_BEDS - counts.get(s["slot"], 0)),
             }
             for s in FACILITY_SLOTS
         ],

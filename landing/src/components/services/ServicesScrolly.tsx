@@ -3,6 +3,7 @@ import { SERVICES } from '../../data/clinicData';
 import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { prefersReducedMotion } from '../../motion/engine';
+import { pad2 } from '../../lib/format';
 
 /**
  * One photo per service. There are no per-service photographs, so each is
@@ -22,9 +23,13 @@ const PHOTO: Record<string, { src: string; alt: string }> = {
     src: '/photos/therapy-platform.webp',
     alt: 'A Labrador supported upright in a harness, front paws resting on a raised platform, during a supported exercise at the clinic',
   },
-  specialised: {
+  hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported by a harness',
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',
@@ -91,9 +96,9 @@ const ServicesScrolly: React.FC = () => {
           <div className="mt-8 flex items-end justify-between gap-8 w-full max-w-[420px]">
             <span className="font-(family-name:--f-display) leading-none">
               <span className="acc-italic text-6xl text-(--c-accent)">
-                {String(active + 1).padStart(2, '0')}
+                {pad2(active + 1)}
               </span>
-              <span className="text-2xl text-(--c-body)/50">/{String(total).padStart(2, '0')}</span>
+              <span className="text-2xl text-(--c-body)/50">/{pad2(total)}</span>
             </span>
 
             {/* Vertical progress bar: fill height reflects which chapter is active. */}
@@ -144,7 +149,7 @@ const ServicesScrolly: React.FC = () => {
                 </div>
 
                 <span className="hidden lg:block font-(family-name:--f-display) italic text-3xl text-(--c-accent)/40 mb-3 leading-none">
-                  {String(i + 1).padStart(2, '0')}
+                  {pad2(i + 1)}
                 </span>
 
                 <h3 className="font-(family-name:--f-display) text-2xl sm:text-3xl lg:text-4xl text-(--c-ink) font-medium mb-4 group-hover:text-(--c-accent) transition-colors">

@@ -1,4 +1,5 @@
 import { http } from '../lib/http';
+import type { Diagnosis } from '../lib/types';
 
 /**
  * Indoor-facility BOARDING (duration-priced stays) — doctor side.
@@ -31,6 +32,13 @@ export interface Boarding {
   status: string;
   source: string;
   created_at: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  owner_id?: string | null;
+  pet_id?: string | null;
+  pet_link_status?: 'linked' | 'owner_only' | 'unlinked';
+  /** null when no pet is linked; [] when the pet belongs to another practice. */
+  previous_reports?: Diagnosis[] | null;
 }
 
 export interface BoardingListResponse {
@@ -113,5 +121,12 @@ export async function createBoarding(payload: Record<string, unknown>) {
   return http<{ reference: string; status: string; price: number }>(`/facility/boarding`, {
     method: 'POST',
     data: payload,
+  });
+}
+
+/** Find-or-create the owner + pet for a stay and link them (idempotent). */
+export async function convertBoarding(reference: string) {
+  return http<Boarding>(`/facility/boarding/${encodeURIComponent(reference)}/convert`, {
+    method: 'POST',
   });
 }

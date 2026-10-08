@@ -21,7 +21,7 @@
  *
  * Bump VERSION to drop every cache on the next visit.
  */
-const VERSION = 'pp-landing-v2';
+const VERSION = 'pp-landing-v4';
 const STATIC = `${VERSION}-static`;
 const RUNTIME = `${VERSION}-runtime`;
 const PAGES = `${VERSION}-pages`;
@@ -41,8 +41,6 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim()),
   );
 });
-
-const isFont = (url) => url.hostname === 'fonts.gstatic.com' || url.hostname === 'fonts.googleapis.com';
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -69,9 +67,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (isFont(url)) {
-    event.respondWith(cacheFirst(req, STATIC));
-  }
+  // Cross-origin requests are left to the network: fonts are self-hosted under
+  // /assets/ now and covered by the cache-first branch above.
 });
 
 async function cacheFirst(req, name) {

@@ -353,7 +353,10 @@ class TreatmentPlanContractTests(ApiTestCase):
     REQUIRED = ["id", "pet_id", "therapies", "frequency", "duration",
                 "start_date", "status", "created_at", "updated_at",
                 "progress_notes"]
-    OPTIONAL = ["frequency_custom", "duration_custom", "end_date", "completed_at"]
+    # schedule/sessions: rehab checklist (2026-10-08); frontend/src/lib/types.ts
+    # gains them in the staff-frontend task.
+    OPTIONAL = ["frequency_custom", "duration_custom", "end_date", "completed_at",
+                "schedule", "sessions"]
 
     def test_plan_shape_and_therapies_is_a_list(self):
         self.auth(self.doctor)

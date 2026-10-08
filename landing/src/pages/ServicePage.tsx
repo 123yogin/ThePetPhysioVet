@@ -1,21 +1,39 @@
 import React from 'react';
 import type { ServiceItem } from '../types';
-import { CONDITIONS, SERVICES } from '../data/clinicData';
+import { CONDITIONS, SERVICES, servicesForCondition } from '../data/clinicData';
+import { TREATMENT_CONTENT } from '../data/treatmentContent';
 import { PageShell, DetailCta, FactList } from './PageShell';
 import { Link } from '../seo/router';
 import { conditionPath, servicePath } from '../seo/routes';
 
+/** Render prose containing [[label|/path]] inline links as real, crawlable anchors. */
+const RichText: React.FC<{ text: string }> = ({ text }) => {
+  const parts = text.split(/(\[\[[^|\]]+\|[^\]]+\]\])/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^\[\[([^|\]]+)\|([^\]]+)\]\]$/);
+        return m ? (
+          <Link key={i} to={m[2]} className="text-(--c-accent) underline underline-offset-2 hover:text-(--c-ink)">
+            {m[1]}
+          </Link>
+        ) : (
+          <React.Fragment key={i}>{part}</React.Fragment>
+        );
+      })}
+    </>
+  );
+};
+
 /** Treatment modality detail page. */
 export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => {
+  // Same matcher as the condition pages and the JSON-LD, so the two directions agree.
   const treatedConditions = CONDITIONS.filter((condition) =>
-    condition.recommendedTherapies.some(
-      (therapy) =>
-        therapy.toLowerCase().includes(service.title.toLowerCase()) ||
-        service.title.toLowerCase().includes(therapy.split(' ')[0].toLowerCase()),
-    ),
+    servicesForCondition(condition).some((item) => item.id === service.id),
   );
+  const content = TREATMENT_CONTENT[service.id];
 
-  const otherServices = SERVICES.filter((item) => item.id !== service.id).slice(0, 3);
+  const otherServices = SERVICES.filter((item) => item.id !== service.id);
 
   return (
     <PageShell>
@@ -25,7 +43,7 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
             Treatment modality
           </span>
           <h1 style={{ ['--d' as string]: '280ms' }} className="hero-rise font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light leading-tight tracking-tight mb-6">
-            {service.title}
+            {service.seoH1 ?? service.title}
           </h1>
           <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
             {service.shortDesc}
@@ -38,6 +56,19 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
             <dd className="font-(family-name:--f-body) text-sm text-(--c-ink)">{service.duration}</dd>
           </dl>
         </header>
+
+        {content?.sections.map((section, i) => (
+          <section key={section.heading} aria-labelledby={`sec-${i}`} className="max-w-3xl mb-12">
+            <h2 id={`sec-${i}`} className="font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-4">
+              {section.heading}
+            </h2>
+            {section.paragraphs.map((paragraph) => (
+              <p key={paragraph} className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed mb-4">
+                <RichText text={paragraph} />
+              </p>
+            ))}
+          </section>
+        ))}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16 mb-16">
           <FactList title="What&rsquo;s included" items={service.benefits} />
@@ -74,6 +105,22 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
                     </p>
                   </div>
                 </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {content && content.faqs.length > 0 && (
+          <section aria-labelledby="service-faqs" className="border-t border-(--c-line)/30 mt-16 pt-12">
+            <h2 id="service-faqs" className="font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-8">
+              Common questions about {service.title.toLowerCase()}
+            </h2>
+            <div className="grid grid-cols-1 gap-8 max-w-[820px]">
+              {content.faqs.map((faq) => (
+                <div key={faq.q}>
+                  <h3 className="font-(family-name:--f-display) text-lg sm:text-xl text-(--c-ink) font-medium mb-2">{faq.q}</h3>
+                  <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed"><RichText text={faq.a} /></p>
+                </div>
               ))}
             </div>
           </section>

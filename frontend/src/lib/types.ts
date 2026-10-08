@@ -88,6 +88,46 @@ export interface ProgressNote {
   created_at: string;
 }
 
+export type RehabFrequency = 'EVERYDAY' | 'ALTERNATE_DAY' | 'TWICE_WEEKLY' | 'WEEKLY' | 'BIWEEKLY';
+
+export interface ScheduleEntry {
+  therapy: string;
+  frequency: RehabFrequency;
+  /** 0 = Mon .. 6 = Sun */
+  weekdays: number[];
+}
+
+export type RehabSessionStatus = 'DUE' | 'DONE' | 'SKIPPED';
+export type RehabDisplayStatus = RehabSessionStatus | 'MISSED' | 'DONE_LATE';
+
+export interface RehabSession {
+  id: string;
+  therapy: string;
+  planned_date: string;
+  status: RehabSessionStatus;
+  display_status: RehabDisplayStatus;
+  done_on: string | null;
+  done_by_name: string | null;
+  note: string;
+  skip_reason: string;
+}
+
+export interface RehabTodaySession extends RehabSession {
+  pet: { id: string; name: string };
+  plan: { id: string; start_date: string; end_date: string | null };
+}
+
+export interface RehabToday {
+  today: string;
+  due: RehabTodaySession[];
+  pending: RehabTodaySession[];
+}
+
+export interface RehabCatalogue {
+  groups: { group: string; therapies: string[] }[];
+  frequencies: { code: RehabFrequency; label: string; weekdays_required: number }[];
+}
+
 export interface TreatmentPlan {
   id: string;
   pet_id: string;
@@ -103,6 +143,8 @@ export interface TreatmentPlan {
   created_at: string;
   updated_at: string;
   progress_notes: ProgressNote[];
+  schedule?: ScheduleEntry[];
+  sessions?: RehabSession[];
 }
 
 export interface LineItem {
@@ -145,16 +187,6 @@ export interface Invoice {
   package?: Package | null;
   amount_paid: number;
   balance_due: number;
-}
-
-export interface NotificationItem {
-  id: string;
-  type: string;
-  type_display?: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
-  link?: string;
 }
 
 export interface QueryAttachment {

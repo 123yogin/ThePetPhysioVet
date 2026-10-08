@@ -13,7 +13,9 @@ tests.
 
 Traceability: CLAUDE.md rules 4 and 7.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from unittest import mock
+from zoneinfo import ZoneInfo
 
 from django.utils import timezone
 from appointments.models import (
@@ -317,3 +319,63 @@ class FacilityBedConstraintTests(ApiTestCase):
         self.assertEqual(
             FacilityBooking.objects.filter(date=self._tomorrow(), slot=0).count(), 1
         )
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _freeze(test, now):
+    """Freeze django's clock at an aware datetime for the rest of the test."""
+    patcher = mock.patch("django.utils.timezone.now", return_value=now)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    return now
+
+
+class FacilityStartedSlotTests(ApiTestCase):
+    """A slot that has already begun (clinic time, IST) is neither offered nor bookable."""
+
+    HOLD = f"{API}/facility/holds"
+
+    def _today_at(self, hour, minute=0):
+        return _freeze(self, datetime(2026, 10, 7, hour, minute, tzinfo=IST))
+
+    def _book(self, slots, d="2026-10-07"):
+        return self.anon().post(BOOK, {
+            "petName": "Rex", "ownerName": "Owner", "ownerPhone": "9000000001",
+            "date": d, "slots": slots,
+        }, format="json")
+
+    def test_a_started_slot_today_is_refused(self):
+        self._today_at(10, 0)
+        res = self._book([0])  # 09:30 began half an hour ago
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data["title"], "Slot has started")
+        self.assertEqual(FacilityBooking.objects.count(), 0)
+        self.assertEqual(self._book([1]).status_code, 201)  # 10:30 is still ahead
+
+    def test_hold_refuses_a_started_slot(self):
+        self._today_at(10, 0)
+        res = self.anon().post(self.HOLD, {"date": "2026-10-07", "slots": [0]}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data["title"], "Slot has started")
+        self.assertEqual(FacilityBooking.objects.count(), 0)
+        ok = self.anon().post(self.HOLD, {"date": "2026-10-07", "slots": [1]}, format="json")
+        self.assertEqual(ok.status_code, 201)
+
+    def test_availability_marks_started_slots_past(self):
+        self._today_at(11, 15)
+        slots = self.anon().get(AVAIL, {"date": "2026-10-07"}).data["slots"]
+        for s in slots[:2]:
+            self.assertTrue(s["past"])
+            self.assertEqual(s["available"], 0)
+        for s in slots[2:]:
+            self.assertFalse(s["past"])
+            self.assertEqual(s["available"], FACILITY_BEDS)
+
+    def test_today_is_the_clinic_date_not_the_server_date(self):
+        # 20:00 UTC on 10-07 is 01:30 IST on 10-08: the clinic's "today" is 10-08.
+        _freeze(self, datetime(2026, 10, 7, 20, 0, tzinfo=ZoneInfo("UTC")))
+        res = self._book([1], d="2026-10-07")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data["title"], "Date in the past")

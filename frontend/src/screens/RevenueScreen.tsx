@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRevenueStats } from '../api/billing';
 import { Icon } from '../components/Icon';
+import { formatMoney } from '../lib/labels';
 
 export const RevenueScreen: React.FC = () => {
   const [range, setRange] = useState('month');
@@ -10,9 +11,6 @@ export const RevenueScreen: React.FC = () => {
     queryKey: ['revenueStats', range],
     queryFn: () => fetchRevenueStats(range),
   });
-
-  const formatMoney = (value: unknown) =>
-    Number(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
   return (
     <div>
@@ -59,7 +57,7 @@ export const RevenueScreen: React.FC = () => {
               Total Revenue ({range})
             </div>
             <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--brown-900)', marginTop: '8px' }}>
-              {isLoading ? '...' : `₹${formatMoney(revData?.total_revenue)}`}
+              {isLoading ? '...' : formatMoney(revData?.total_revenue)}
             </div>
           </div>
 
@@ -68,7 +66,7 @@ export const RevenueScreen: React.FC = () => {
               Collected Payments
             </div>
             <div style={{ fontSize: '32px', fontWeight: '800', color: '#1b5e20', marginTop: '8px' }}>
-              {isLoading ? '...' : `₹${formatMoney(revData?.collected)}`}
+              {isLoading ? '...' : formatMoney(revData?.collected)}
             </div>
           </div>
 
@@ -77,7 +75,7 @@ export const RevenueScreen: React.FC = () => {
               Pending Balances
             </div>
             <div style={{ fontSize: '32px', fontWeight: '800', color: '#b71c1c', marginTop: '8px' }}>
-              {isLoading ? '...' : `₹${formatMoney(revData?.pending)}`}
+              {isLoading ? '...' : formatMoney(revData?.pending)}
             </div>
           </div>
         </div>

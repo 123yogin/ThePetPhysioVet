@@ -18,6 +18,7 @@ const NAV_BY_ROLE: Record<'DOCTOR' | 'OWNER', NavItem[]> = {
   DOCTOR: [
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { to: '/appointments', label: 'Appointments', icon: 'calendar' },
+    { to: '/rehab/today', label: "Today's Rehab", icon: 'activity' },
     { to: '/patients', label: 'Patients', icon: 'paw' },
     { to: '/invoices', label: 'Invoices & Billing', icon: 'invoice' },
     { to: '/revenue', label: 'Revenue', icon: 'chart' },

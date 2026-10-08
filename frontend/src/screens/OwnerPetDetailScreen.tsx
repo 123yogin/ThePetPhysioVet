@@ -10,17 +10,10 @@ import {
   sendOwnerQueryMessage,
 } from '../api/owner';
 import { useFlash } from '../lib/flash';
+import { PlanGrid } from '../components/rehab/PlanGrid';
 import { Icon, IconName } from '../components/Icon';
-import { humanizeStatus, petEmoji, friendlyDate } from '../lib/labels';
+import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
 
-const REPORT_TYPES: { value: string; label: string }[] = [
-  { value: 'XRAY', label: 'X-Ray' },
-  { value: 'MRI', label: 'MRI Scan' },
-  { value: 'CT', label: 'CT Scan' },
-  { value: 'ULTRASOUND', label: 'Ultrasound' },
-  { value: 'BLOOD', label: 'Blood Work' },
-  { value: 'OTHER', label: 'Other' },
-];
 
 const TABS: { key: 'treatment' | 'messages' | 'about'; label: string; icon: IconName }[] = [
   { key: 'treatment', label: 'Treatment', icon: 'activity' },
@@ -300,13 +293,24 @@ export const OwnerPetDetailScreen: React.FC = () => {
                   <p style={{ color: 'var(--brown-600)', fontSize: '12px', marginTop: '4px' }}>
                     Started {friendlyDate(plan.start_date)}
                   </p>
-                  <p style={{ color: 'var(--brown-800)', marginTop: '10px', fontSize: '14px' }}>
-                    <strong>What's happening:</strong> {plan.therapies?.join(', ') || '—'}
-                  </p>
-                  <p style={{ color: 'var(--brown-700)', marginTop: '4px', fontSize: '14px' }}>
-                    <strong>How often:</strong> {plan.frequency_custom || plan.frequency || '—'} &bull;{' '}
-                    <strong>For how long:</strong> {plan.duration_custom || plan.duration || '—'}
-                  </p>
+                  {plan.schedule?.length ? (
+                    <div style={{ marginTop: '12px' }}>
+                      <h5 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--brown-900)', margin: '0 0 8px' }}>
+                        Rehab checklist
+                      </h5>
+                      <PlanGrid plan={plan} readOnly />
+                    </div>
+                  ) : (
+                    <>
+                      <p style={{ color: 'var(--brown-800)', marginTop: '10px', fontSize: '14px' }}>
+                        <strong>What's happening:</strong> {plan.therapies?.join(', ') || '—'}
+                      </p>
+                      <p style={{ color: 'var(--brown-700)', marginTop: '4px', fontSize: '14px' }}>
+                        <strong>How often:</strong> {plan.frequency_custom || plan.frequency || '—'} &bull;{' '}
+                        <strong>For how long:</strong> {plan.duration_custom || plan.duration || '—'}
+                      </p>
+                    </>
+                  )}
 
                   {plan.progress_notes && plan.progress_notes.length > 0 && (
                     <div style={{ marginTop: '12px', background: 'rgba(255,255,255,0.6)', padding: '12px', borderRadius: '8px' }}>

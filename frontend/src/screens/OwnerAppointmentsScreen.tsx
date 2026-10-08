@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchOwnerAppointments, acceptOwnerAppointment, requestOwnerReschedule, cancelOwnerAppointment } from '../api/owner';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Appointment } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { humanizeStatus, petEmoji, friendlyDate, friendlyTime } from '../lib/labels';
@@ -84,7 +85,7 @@ export const OwnerAppointmentsScreen: React.FC = () => {
     }
   };
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
   const all = appointments ?? [];
   const sortKey = (a: Appointment) => `${a.date}T${a.time || '00:00'}`;
   const upcoming = all

@@ -16,7 +16,7 @@ re-exported here, so no call site had to change.
 from .accounts import UserProfile, PasswordResetToken  # noqa: F401
 from .pets import Pet  # noqa: F401
 from .scheduling import Appointment  # noqa: F401
-from .clinical import DiagnosticReport, TreatmentPlan, ProgressNote  # noqa: F401
+from .clinical import DiagnosticReport, TreatmentPlan, RehabSession, ProgressNote  # noqa: F401
 from .billing import Invoice, LineItem, Payment, Package  # noqa: F401
 from .notifications import Notification, NotificationPref  # noqa: F401
 from .messaging import QueryThread, QueryMessage, QueryAttachment  # noqa: F401
@@ -24,7 +24,7 @@ from .enquiries import Enquiry  # noqa: F401
 from .facility import (  # noqa: F401
     FacilityBooking, FACILITY_BEDS, FACILITY_MAX_SLOTS_PER_BOOKING,
     FACILITY_HOLD_SECONDS,
-    FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label,
+    FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label, slot_has_started,
 )
 from .boarding import (  # noqa: F401
     BoardingBooking, BOARDING_BEDS, BOARDING_DURATIONS, BOARDING_DURATION_KEYS,

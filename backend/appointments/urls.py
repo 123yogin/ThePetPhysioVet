@@ -12,6 +12,8 @@ from .views import (
     pet_diagnoses_view, diagnostic_report_detail_view,
     # Treatment plans
     pet_treatment_plans_view, treatment_plan_detail_view, treatment_plan_progress_notes_view,
+    treatment_plan_extend_view, rehab_therapies_view, rehab_today_view,
+    rehab_session_done_view, rehab_session_skip_view, rehab_session_undo_view,
     # Appointments
     appointments_view, appointment_detail_view, appointment_reschedule_view,
     appointment_complete_view, appointment_reschedule_approve_view,
@@ -33,6 +35,7 @@ from .views import (
     facility_availability_view, facility_bookings_view, facility_booking_status_view,
     facility_hold_view, facility_confirm_view,
     boarding_availability_view, boarding_view, boarding_status_view, boarding_ending_soon_view,
+    boarding_hold_view, boarding_hold_confirm_view, boarding_convert_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -70,6 +73,15 @@ urlpatterns = [
         treatment_plan_progress_notes_view,
         name="treatment-plan-progress-notes",
     ),
+
+    path("treatment-plans/<uuid:pk>/extend", treatment_plan_extend_view, name="treatment-plan-extend"),
+
+    # --- Rehab checklist ---
+    path("rehab/therapies", rehab_therapies_view, name="rehab-therapies"),
+    path("rehab/today", rehab_today_view, name="rehab-today"),
+    path("rehab/sessions/<uuid:pk>/done", rehab_session_done_view, name="rehab-session-done"),
+    path("rehab/sessions/<uuid:pk>/skip", rehab_session_skip_view, name="rehab-session-skip"),
+    path("rehab/sessions/<uuid:pk>/undo", rehab_session_undo_view, name="rehab-session-undo"),
 
     # --- Appointments ---
     path("appointments", appointments_view, name="appointments"),
@@ -141,6 +153,9 @@ urlpatterns = [
     path("facility/holds/<str:reference>/confirm", facility_confirm_view, name="facility-confirm"),
     path("facility/boarding/availability", boarding_availability_view, name="boarding-availability"),
     path("facility/boarding/ending-soon", boarding_ending_soon_view, name="boarding-ending-soon"),
+    path("facility/boarding/holds", boarding_hold_view, name="boarding-hold"),
+    path("facility/boarding/holds/<str:reference>/confirm", boarding_hold_confirm_view, name="boarding-hold-confirm"),
     path("facility/boarding", boarding_view, name="boarding"),
+    path("facility/boarding/<str:reference>/convert", boarding_convert_view, name="boarding-convert"),
     path("facility/boarding/<str:reference>/status", boarding_status_view, name="boarding-status"),
 ]

@@ -256,6 +256,19 @@ export const SITE: SiteConfig = {
     'Veterinary physiotherapy and rehabilitation care in Ahmedabad, coordinated with your pet\u2019s primary veterinarian.',
 };
 
+/**
+ * wa.me deep link derived from the clinic's published phone number, so the
+ * Call and WhatsApp buttons can never point at different numbers. Strips
+ * everything but digits (`+91 72840 73241` → `917284073241`); the number is
+ * already stored with the 91 country code in `contact.phone`. An optional
+ * pre-filled message is appended as the standard `?text=` query param.
+ */
+export function whatsappHref(message?: string): string {
+  const digits = SITE.contact.phone.replace(/\D/g, '');
+  const base = `https://wa.me/${digits}`;
+  return message ? `${base}?text=${encodeURIComponent(message)}` : base;
+}
+
 /** Join an origin-relative path onto the configured origin. */
 export function absoluteUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -272,21 +285,6 @@ export function formattedAddress(): string {
 /** Primary service city, used to localise titles and descriptions. */
 export function primaryLocality(): string {
   return SITE.address.addressLocality;
-}
-
-/**
- * One-line opening-hours summary for inline copy, e.g.
- * "Mon–Fri 08:00–18:00 | Sat 09:00–14:00".
- *
- * Derived from the same array that produces the openingHoursSpecification in the
- * JSON-LD, so the visible hours and the marked-up hours cannot disagree.
- */
-export function serviceHoursSummary(): string {
-  const h = SITE.serviceHours;
-  if (!h.window) return '';
-  const parts = [h.label ? `${h.label} ${h.window}` : h.window];
-  if (h.appointmentOnly) parts.push('by appointment only');
-  return parts.join(' \u00b7 ');
 }
 
 export function openingHoursSummary(): string {

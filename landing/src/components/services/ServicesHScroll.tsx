@@ -3,6 +3,7 @@ import { SERVICES } from '../../data/clinicData';
 import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { onFrame, track, prefersReducedMotion, type Box } from '../../motion/engine';
+import { pad2 } from '../../lib/format';
 
 /**
  * "hscroll" variant of the services section body: a pinned horizontal-scroll
@@ -29,9 +30,13 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
     src: '/photos/therapy-platform.webp',
     alt: 'A Labrador supported upright in a sling harness on a raised therapy platform at the clinic',
   },
-  specialised: {
+  hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, held at the poolside by a flotation harness',
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
   },
   'home-care': {
     src: '/photos/senior-beagle.webp',
@@ -39,7 +44,6 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
   },
 };
 const FALLBACK_PHOTO = { src: '/photos/home-visit-indie.webp', alt: 'A dog with Dr. Dhanvi Patel during a home visit' };
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 interface CardProps {
   id: string;

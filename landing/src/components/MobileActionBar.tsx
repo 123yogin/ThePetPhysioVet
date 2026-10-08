@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Phone, Calendar } from 'lucide-react';
+import { Phone, Calendar, MessageCircle } from 'lucide-react';
 import { useRouter } from '../seo/router';
 import { bookingHref } from './BookingPanel';
-import { SITE } from '../seo/siteConfig';
+import { SITE, whatsappHref } from '../seo/siteConfig';
 import { onFrame } from '../motion/engine';
 
 /**
@@ -70,6 +70,16 @@ export const MobileActionBar: React.FC = () => {
       >
         <Phone className="w-4 h-4" aria-hidden="true" />
         Call
+      </a>
+      <a
+        href={whatsappHref()}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Chat on WhatsApp"
+        className="flex-1 inline-flex items-center justify-center gap-2 h-12 rounded-full border border-(--c-ink)/30 text-(--c-ink) text-xs uppercase tracking-widest font-medium"
+      >
+        <MessageCircle className="w-4 h-4" aria-hidden="true" />
+        WhatsApp
       </a>
       <a
         href={bookingHref(path)}
