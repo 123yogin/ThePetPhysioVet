@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchEnquiries, convertEnquiry, dismissEnquiry, confirmEnquiryClient, enquiriesQueryKey } from '../api/enquiries';
 import { fetchAppointmentOptions } from '../api/appointments';
 import { useFlash } from '../lib/flash';
-import { todayISO } from '../lib/dates';
+import { nextFreeSlot } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { humanizeStatus, friendlyDate } from '../lib/labels';
 import { Enquiry } from '../lib/types';
@@ -152,8 +152,10 @@ export const EnquiriesScreen: React.FC = () => {
     // row has to reveal it — and the owner's reason is worth seeing while
     // you pick the slot.
     setExpandedIds((prev) => new Set(prev).add(enq.id));
-    setConvertDate(enq.preferred_date || todayISO());
-    setConvertTime('10:00');
+    // Never default into the past: today 10:00 at 3pm used to be offered.
+    const slot = nextFreeSlot(enq.preferred_date);
+    setConvertDate(slot.date);
+    setConvertTime(slot.time);
     // Start from what the owner actually asked for on the website. This used
     // to default to the first option -- Initial Consultation -- for every
     // enquiry, so a request for Grooming or Hydrotherapy silently became a

@@ -9,7 +9,7 @@ import { useFlash } from '../lib/flash';
 import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { ExternalLink } from '../components/ExternalLink';
-import { friendlyDate, formatMoney, REPORT_TYPES, boardingDeparture, boardingProvidesLine } from '../lib/labels';
+import { friendlyDate, formatMoney, REPORT_TYPES, boardingStayLabel, boardingProvidesLine } from '../lib/labels';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { isValidAadhaar } from '../lib/aadhaar';
 
@@ -44,6 +44,12 @@ const NEXT_ACTIONS: Record<string, { action: BoardingAction; label: string; prim
   CONFIRMED: [{ action: 'check_in', label: 'Check in', primary: true }, { action: 'cancel', label: 'Cancel' }],
   CHECKED_IN: [{ action: 'complete', label: 'Complete', primary: true }],
 };
+
+/** Today's date in the browser's local zone as YYYY-MM-DD. */
+function localIsoDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export const BoardingScreen: React.FC = () => {
   const qc = useQueryClient();
@@ -258,12 +264,9 @@ const BoardingCard: React.FC<{
       />
 
       <div className="page-sub" style={{ fontSize: '0.85rem', margin: 0 }}>
-        {/* check_out is the last bed-night; show the day the pet goes home (D4). */}
+        {/* check_out is the last bed-night, the pet goes home the day after (D4). */}
         <Icon name="clock" size={12} /> Arrives {friendlyDate(g.check_in)}
-        {(() => {
-          const leaves = boardingDeparture(g.check_in, g.check_out, g.duration);
-          return leaves === g.check_in ? ' · goes home the same day' : ` · goes home ${friendlyDate(leaves)}`;
-        })()}
+        <div style={{ marginTop: '2px' }}>{boardingStayLabel(g.check_in, g.check_out, g.duration)}</div>
       </div>
 
       {/* Intake — the clinic records this here (owner vs clinic per item), it is
@@ -325,17 +328,25 @@ const BoardingCard: React.FC<{
 
       {actions.length > 0 && (
         <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-          {actions.map((a) => (
+          {actions.map((a) => {
+            // The API refuses these before the stay's first day (400); mirror it.
+            const notStarted = (a.action === 'check_in' || a.action === 'complete') && g.check_in > localIsoDate();
+            return (
             <button
               key={a.action}
               type="button"
               className={`btn btn-sm ${a.primary ? 'btn-primary' : 'btn-ghost'}`}
-              disabled={busy}
-              onClick={() => onAction(a.action, a.action === 'cancel' ? undefined : intake)}
+              disabled={busy || notStarted}
+              title={notStarted ? `Available from ${friendlyDate(g.check_in)}` : undefined}
+              onClick={() => {
+                if (a.action === 'complete' && !window.confirm(`Complete ${g.pet_name}'s stay? This marks the pet as gone home.`)) return;
+                onAction(a.action, a.action === 'cancel' ? undefined : intake);
+              }}
             >
               {a.primary && <Icon name="check" size={14} />} {a.label}
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -353,14 +364,18 @@ const ClientMatch: React.FC<{
     if (focusRecord) recordLink.current?.focus();
   }, [focusRecord, g.pet_id]);
   const status = g.pet_link_status ?? 'unlinked';
-  if (g.status === 'CANCELLED' && status === 'unlinked') return null;
+  // The API can already carry a matched account while the stay is not yet
+  // converted (pet_link_status 'unlinked'); that is still an existing client.
+  const matched = status !== 'unlinked' || !!g.owner_account;
+  if (g.status === 'CANCELLED' && !matched) return null;
   const reports = g.previous_reports;
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         {status === 'linked' && <span className="badge badge-confirmed">Matches existing client · {g.pet_name}</span>}
         {status === 'owner_only' && <span className="badge badge-confirmed">Matches existing client · new pet</span>}
-        {status === 'unlinked' && <span className="badge badge-pending">New client</span>}
+        {status === 'unlinked' && g.owner_account && <span className="badge badge-confirmed">Matches existing client · new pet</span>}
+        {!matched && <span className="badge badge-pending">New client</span>}
         {status === 'linked' && g.pet_id && (
           <Link ref={recordLink} to={`/patients/${g.pet_id}`} className="btn btn-ghost btn-sm">Open pet record</Link>
         )}

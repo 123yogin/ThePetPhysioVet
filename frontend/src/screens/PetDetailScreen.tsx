@@ -441,7 +441,7 @@ export const PetDetailScreen: React.FC = () => {
                     <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                       {d.file_url && (
                         <ExternalLink href={d.file_url} className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          <Icon name="paperclip" size={13} /> View File ({d.original_filename})
+                          <Icon name="paperclip" size={13} /> Open file{d.original_filename ? ` · ${d.original_filename}` : ""}
                         </ExternalLink>
                       )}
                       {confirmDeleteId === d.id ? (

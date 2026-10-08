@@ -44,7 +44,7 @@ interface Props {
 
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
-import { rupee, boardingHomeDate, shortDate } from '../lib/format';
+import { rupee, stayDatesLabel } from '../lib/format';
 import { friendlyApiError, isPlausiblePhone, PHONE_HINT } from '../lib/errors';
 
 export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
@@ -71,7 +71,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
   const [holding, setHolding] = React.useState(false);
   const [holdNote, setHoldNote] = React.useState('');
   const [secondsLeft, setSecondsLeft] = React.useState(0);
-  const [booked, setBooked] = React.useState<{ reference: string; detail: string } | null>(null);
+  const [booked, setBooked] = React.useState<{ reference: string; detail: string; stay: string } | null>(null);
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -219,7 +219,12 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
         setError(friendlyApiError(data.detail, 'We could not book that stay. Please try again.'));
         return;
       }
-      setBooked({ reference: data.reference, detail: data.detail });
+      setBooked({
+        reference: data.reference,
+        detail: data.detail,
+        stay: data.check_in && data.check_out && data.duration
+          ? stayDatesLabel(data.check_in, data.check_out, data.duration) : '',
+      });
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -235,6 +240,9 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
         </div>
         <h4 className="font-(family-name:--f-display) text-2xl text-(--c-ink) font-light mb-3">Stay requested</h4>
         <p className="font-(family-name:--f-body) text-sm text-(--c-body) leading-relaxed mb-5">{booked.detail}</p>
+        {booked.stay && (
+          <p className="font-(family-name:--f-body) text-sm text-(--c-ink) font-medium mb-5">{booked.stay}</p>
+        )}
         <p className="text-xs uppercase tracking-widest text-(--c-accent) font-semibold mb-6">
           Reference {booked.reference} · Pay at the clinic
         </p>
@@ -303,11 +311,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
           : selection
             ? full
               ? 'Fully booked for those dates — try another date or duration.'
-              : `${selection.available} of ${menu?.capacity ?? 6} beds free · ${(() => {
-                  // check_out is the last night; say the day the pet goes home (D4).
-                  const home = boardingHomeDate(selection.check_in, selection.check_out, selection.duration);
-                  return home === selection.check_in ? 'home the same day' : `home ${shortDate(home)}`;
-                })()} · ${rupee(selection.price)}`
+              : `${selection.available} of ${menu?.capacity ?? 6} beds free · ${stayDatesLabel(selection.check_in, selection.check_out, selection.duration)} · ${rupee(selection.price)}`
             : 'Pick a duration to see availability.'}
       </p>
 

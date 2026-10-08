@@ -116,6 +116,25 @@ export function boardingDeparture(checkIn: string, checkOut: string, duration: s
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+/** "2026-11-21" -> "Sat 21 Nov" (calendar date, never "Today"/"Tomorrow"). */
+export function plainDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const wd = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  const rest = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${wd} ${rest}`;
+}
+
+/**
+ * "Last night: Sat 21 Nov · Goes home: Sun 22 Nov". `check_out` from the API is
+ * the inclusive last bed-night, so both ends are spelled out (live QA R2).
+ */
+export function boardingStayLabel(checkIn: string, checkOut: string, duration: string): string {
+  const home = boardingDeparture(checkIn, checkOut, duration);
+  if (home === checkIn) return `Same-day stay · Goes home: ${plainDate(home)}`;
+  return `Last night: ${plainDate(checkOut)} · Goes home: ${plainDate(home)}`;
+}
+
 /**
  * "Owner brings: food, utensils · Clinic provides: blanket" from the four
  * boarding intake fields. Replaces "food owner, utensils owner, …" (live QA B6).

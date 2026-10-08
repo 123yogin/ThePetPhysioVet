@@ -324,7 +324,7 @@ Validate upload: max 4 MB (amended 2026-10-08, was 10 MB), allow `image/*` + `ap
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
 
 ### Uploaded files — amended 2026-10-08 (uploads stored in Postgres)
-| GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability** |
+| GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability**. `Content-Disposition: attachment` carries the uploader's original filename (sanitised; RFC 5987 `filename*` for non-ASCII) when the token was issued with one, else the storage key's basename |
 
 **Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
 /owner/pets/:id/diagnoses`, `POST /pets/:id/queries`, `POST /owner/pets/:id/queries`,
@@ -432,7 +432,10 @@ racing for the last bed get one 201 and one 409.
 | public | POST | `/facility/boarding/holds/:ref/confirm` | intake body below (`checkIn`/`duration` ignored — fixed by the hold) | 201 same shape as direct create (`{reference, check_in, check_out, duration, price, status:"PENDING", detail}`); **410** `Hold expired` (also when the held check-in date is already past); **404** unknown or not `HELD`; 400 invalid |
 | public / doctor | POST | `/facility/boarding` | intake body below | 201 as above (doctor token: status `CONFIRMED`, `source:"doctor"`); 409 full |
 | doctor | GET | `/facility/boarding?status=&include_held=1` | | `{results: Booking[], pending_count}`; `HELD` rows hidden unless `include_held=1`, which returns only *unexpired* holds |
-| doctor | POST | `/facility/boarding/:ref/status` | `{action}` | unchanged; a `HELD` row is 404 |
+| doctor | POST | `/facility/boarding/:ref/status` | `{action}` | a `HELD` row is 404. **400** problem when `check_in` or `complete` is sent before the stay's `check_in` date (clinic-local day): `This stay starts on Sat 21 Nov, so it cannot be checked in before then.` |
+
+**`check_out` is the LAST BED-NIGHT (inclusive), not the pickup day.** A 48 h stay from 20 Nov has `check_out = 2026-11-21` and the pet goes home on 22 Nov; a 24 h stay from the 8th has `check_out` = the 8th and goes home on the 9th; a stay shorter than a day has `check_out = check_in`. Capacity counts beds per date over `check_in..check_out` inclusive. UIs show it as "Last night: Sat 21 Nov · Goes home: Sun 22 Nov" (`departure_date()` on the model is the display-only pickup day).
+
 | doctor | POST | `/facility/boarding/:ref/convert` | | 200 `Booking` with `owner_id`, `pet_id` set. **409** problem `Several clients share this phone — open the right client and link manually.` when more than one OWNER account has the phone and the email does not pick one (nothing created). 404 unknown/HELD; owner role 403 |
 
 Intake body (camelCase): `petName, ownerName, ownerPhone, ownerEmail?, checkIn, duration, foodBy?, utensilsBy?,
@@ -598,7 +601,7 @@ SQLite.
 |---|---|---|---|---|
 | POST | `/enquiries` | **PUBLIC** (`AllowAny` + `authentication_classes([])`) | `{firstName, lastName, petName, speciesBreed, email, phone, reason, preferredDate?, preferredSpecialist?}` | `201 {id, reference, detail}` |
 | GET | `/enquiries?status=` | Doctor (`IsDoctor`) | — | `{results: Enquiry[], new_count}` |
-| POST | `/enquiries/:id/convert` | Doctor | `{date, time, visit_type}` | `Enquiry` (with nested `appointment`) |
+| POST | `/enquiries/:id/convert` | Doctor | `{date, time, visit_type}` | `Enquiry` (with nested `appointment`); **400** when `date`/`time` is unparseable or already in the past (clinic-local time) |
 | POST | `/enquiries/:id/dismiss` | Doctor | — | `Enquiry` |
 
 **`POST /enquiries` is the only unauthenticated write in this app**, and the sole

@@ -648,9 +648,12 @@ export const AppointmentsScreen: React.FC = () => {
                           </>
                         )}
 
-                        <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
-                          Share
-                        </Link>
+                        {/* Share sends the booking confirmation, so it only makes sense for a visit that is still going ahead. */}
+                        {isOpenVisit(appt.status) && (
+                          <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
+                            Share
+                          </Link>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -802,9 +805,12 @@ export const AppointmentsScreen: React.FC = () => {
                               )}
                             </>
                           )}
-                          <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
-                            Share
-                          </Link>
+                          {/* Share sends the booking confirmation, so it only makes sense for a visit that is still going ahead. */}
+                          {isOpenVisit(appt.status) && (
+                            <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
+                              Share
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>

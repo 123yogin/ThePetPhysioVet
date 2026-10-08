@@ -5,6 +5,8 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
+import datetime
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -200,6 +202,17 @@ def enquiry_convert_view(request, pk):
     visit_type = request.data.get("visit_type")
     if not date or not time or not visit_type:
         return problem(400, "date, time and visit_type are required.")
+
+    # Booking into the past is always a mistake (the form used to default to
+    # today 10:00 even at 3pm). Compared in the clinic's timezone.
+    try:
+        when_date = datetime.date.fromisoformat(str(date))
+        when_time = datetime.time.fromisoformat(str(time))
+    except ValueError:
+        return problem(400, "Invalid date or time.", "date must be YYYY-MM-DD and time HH:MM.")
+    when = timezone.make_aware(datetime.datetime.combine(when_date, when_time.replace(tzinfo=None)))
+    if when < timezone.now():
+        return problem(400, "That time has already passed.", "Pick a date and time in the future.")
 
     # Never a new hardcoded vocabulary — see Appointment.VISIT_TYPES'
     # docstring (B1/B2) for the history of why three independent hardcoded

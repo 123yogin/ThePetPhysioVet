@@ -88,27 +88,37 @@ def _uuid_from_name(name):
     return uuid.UUID(match.group(1)) if match else None
 
 
-def file_token(name, storage=None):
-    """Signed, timestamped token naming one stored file (and its row)."""
+def file_token(name, storage=None, filename=None):
+    """Signed, timestamped token naming one stored file (and its row).
+
+    `filename` is the uploader's original name; it rides in the signed payload
+    only so the download can offer it as the save-as name."""
     storage = storage or default_storage
     row_id = storage.row_id(name) if hasattr(storage, "row_id") else None
-    return _signer().sign_object([name, row_id.hex if row_id else None])
+    payload = [name, row_id.hex if row_id else None]
+    if filename:
+        payload.append(str(filename)[:255])
+    return _signer().sign_object(payload)
 
 
 def parse_file_token(token):
-    """`(name, row_id_hex_or_None)` from `token`, or None if forged/expired."""
+    """`(name, row_id_hex_or_None, original_filename_or_None)` from `token`, or
+    None if forged/expired."""
     try:
         payload = _signer().unsign_object(token, max_age=FILE_TOKEN_MAX_AGE)
     except (signing.BadSignature, ValueError):
         return None
-    if not (isinstance(payload, list) and len(payload) == 2):
+    if not (isinstance(payload, list) and len(payload) in (2, 3)):
         return None
-    name, row_id = payload
+    name, row_id = payload[0], payload[1]
+    original = payload[2] if len(payload) == 3 else None
+    if original is not None and not isinstance(original, str):
+        return None
     if not (isinstance(name, str) and name):
         return None
     if row_id is not None and not isinstance(row_id, str):
         return None
-    return name, row_id
+    return name, row_id, original
 
 
 # Spelled out rather than reverse()d: the app's routes are mounted at both
@@ -116,11 +126,11 @@ def parse_file_token(token):
 FILE_DOWNLOAD_PREFIX = "/api/v1/files/"
 
 
-def signed_file_path(name, storage=None):
-    return f"{FILE_DOWNLOAD_PREFIX}{file_token(name, storage)}"
+def signed_file_path(name, storage=None, filename=None):
+    return f"{FILE_DOWNLOAD_PREFIX}{file_token(name, storage, filename)}"
 
 
-def signed_file_url(field_file, request=None):
+def signed_file_url(field_file, request=None, filename=None):
     """Absolute signed download URL for a FieldFile, or None if empty.
 
     Works for any storage backend: the download view opens the file through
@@ -128,7 +138,7 @@ def signed_file_url(field_file, request=None):
     """
     if not field_file:
         return None
-    path = signed_file_path(field_file.name, field_file.storage)
+    path = signed_file_path(field_file.name, field_file.storage, filename)
     return request.build_absolute_uri(path) if request else path
 
 
