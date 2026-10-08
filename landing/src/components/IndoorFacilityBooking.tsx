@@ -54,6 +54,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
   const [date, setDate] = React.useState(minDate);
   const [selection, setSelection] = React.useState<Selection | null>(null);
   const [checking, setChecking] = React.useState(false);
+  const [availTick, setAvailTick] = React.useState(0); // bump to re-fetch availability
 
   const [form, setForm] = React.useState({
     petName: '', ownerName: '', ownerPhone: '', ownerEmail: '', aadhaar: '',
@@ -91,7 +92,10 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       .catch(() => !cancelled && setSelection(null))
       .finally(() => !cancelled && setChecking(false));
     return () => { cancelled = true; };
-  }, [duration, date]);
+  }, [duration, date, availTick]);
+
+  // A note about a previous hold attempt is stale once the dates change.
+  React.useEffect(() => { setHoldNote(''); }, [date, duration]);
 
   // A hold only applies to the exact dates it was placed for. Changing the date or
   // duration simply stops matching; the old hold lapses server-side on its own.
@@ -108,6 +112,10 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
 
   const expired = !!activeHold && secondsLeft <= 0;
   const holdLive = !!activeHold && !expired;
+  // One announcement per state change: text only changes at these thresholds.
+  const holdStatus = expired ? 'Your hold expired. Please hold again.'
+    : holdLive ? (secondsLeft <= 60 ? 'One minute left on your bed hold.' : 'Bed held for 10 minutes.')
+      : '';
   const mmss = `${pad2(Math.floor(secondsLeft / 60))}:${pad2(secondsLeft % 60)}`;
 
   const placeHold = async () => {
@@ -125,13 +133,17 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       if (res.status === 409) {
         setHold(null);
         setHoldNote('Just taken — pick another date.');
+        setAvailTick((n) => n + 1);
         return;
       }
-      if (!res.ok || !data.reference || !data.expires_at) {
+      const expiresAt = Date.parse(data.expires_at);
+      if (!res.ok || !data.reference || !Number.isFinite(expiresAt)) {
         setHoldNote(data.detail || 'We could not hold a bed. Please try again.');
         return;
       }
-      setHold({ reference: data.reference, expiresAt: Date.parse(data.expires_at), date, duration });
+      // Seed the countdown now so there is no one-frame "expired" flash.
+      setSecondsLeft(Math.max(0, Math.round((expiresAt - Date.now()) / 1000)));
+      setHold({ reference: data.reference, expiresAt, date, duration });
     } catch {
       setHoldNote('Something went wrong. Please try again.');
     } finally {
@@ -187,6 +199,11 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       if (res.status === 410) {
         setHold(null);
         setHoldNote('Your hold expired — hold again.');
+        return;
+      }
+      if (res.status === 404) {
+        setHold(null);
+        setHoldNote('That hold is no longer available — hold again.');
         return;
       }
       if (!res.ok) {
@@ -282,13 +299,14 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       </p>
 
       {/* Bed hold */}
-      <div className="mb-6" aria-live="polite">
+      <div className="mb-6">
+        <p className="sr-only" role="status" aria-live="polite">{holdStatus}</p>
         {holdLive ? (
           <div className="flex items-center justify-between px-4 py-3 border border-(--c-accent)/30 bg-(--c-surface)">
             <span className="flex items-center gap-2 text-sm text-(--c-ink)">
               <Clock className="w-4 h-4 text-(--c-accent)" /> Bed held for you
             </span>
-            <span className="font-mono text-lg font-semibold text-(--c-accent) tabular-nums">{mmss}</span>
+            <span role="timer" aria-live="off" className="font-mono text-lg font-semibold text-(--c-accent) tabular-nums">{mmss}</span>
           </div>
         ) : (
           <>
