@@ -9,6 +9,7 @@ export type SmsStatus =
   | 'FAILED'
   | 'SKIPPED_OPTOUT'
   | 'SKIPPED_LIMIT'
+  | 'SKIPPED_COUNTRY'
   | 'SKIPPED_DISABLED';
 
 export interface SmsLogEntry {

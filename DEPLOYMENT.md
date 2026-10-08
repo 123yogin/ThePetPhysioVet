@@ -321,7 +321,13 @@ the Cloud server and sends the SMS itself.
    optimisation. If the phone is offline, sends fail (`Gateway HTTP 503: phone offline…`) and
    the gateway drops anything older than 24 h.
 
-### 2. Set Vercel environment variables (Production)
+### 2. Set Vercel environment variables — **Production environment only**
+Scope `SMS_GATEWAY_USERNAME`, `SMS_GATEWAY_PASSWORD` and `CRON_SECRET` to **Production**, not
+Preview/Development: every preview deployment of a branch would otherwise hold the clinic's
+gateway login. Even if they leak into a preview, the gateway is only switched on
+automatically when `VERCEL_ENV=production` (set by Vercel); other environments stay
+`disabled` unless `SMS_BACKEND` is set explicitly.
+
 | Variable | Value |
 | --- | --- |
 | `SMS_BACKEND` | `android_gateway` |
@@ -329,19 +335,23 @@ the Cloud server and sends the SMS itself.
 | `SMS_GATEWAY_PASSWORD` | from the app's Cloud Server section |
 | `CRON_SECRET` | a random string of 16+ characters (e.g. `openssl rand -hex 24`). Vercel sends it as `Authorization: Bearer …` to the cron |
 | `SMS_DAILY_LIMIT` | optional, default `90` |
+| `SMS_PER_PHONE_DAILY_LIMIT` | optional, default `3` texts per number per day |
+| `SMS_ALLOWED_COUNTRY_CODES` | optional, default `+91`; comma-separated (e.g. `+91,+44`). Other numbers are recorded `SKIPPED_COUNTRY` |
 | `SMS_WEBHOOK_SIGNING_KEY` | optional; from the app's **Settings → Webhooks → Signing Key**, to enable delivery status |
 | `CLINIC_NAME` / `CLINIC_PHONE` | optional, default `Pet Physio Vet` / `+91 72840 73241` |
 | `SMS_GATEWAY_URL` | optional, default `https://api.sms-gate.app/3rdparty/v1` (must be https; change it only for a private gateway server) |
 
-If `SMS_BACKEND` is unset in production, SMS is **disabled** when the credentials are missing
-(each message is recorded as `SKIPPED_DISABLED`) and on when they are present.
+If `SMS_BACKEND` is unset, SMS is on only when the credentials are present **and**
+`VERCEL_ENV=production`; otherwise it is **disabled** (each message recorded as
+`SKIPPED_DISABLED`).
 `SMS_BACKEND=android_gateway` without credentials stops the deploy at boot, by design.
 Redeploy after changing variables. Then open **SMS Reminders** in the staff app: the mode
 should read *Android gateway (live)*. Use **Send test SMS** to your own phone.
 
-**Cron:** `vercel.json` schedules `GET /api/v1/cron/sms-reminders` daily at `30 3 * * *`
-(03:30 UTC = 09:00 IST). On the Hobby plan crons are daily-only and may fire any time
-within that hour. Vercel runs crons only on the production deployment. If a run reports
+**Cron:** `vercel.json` schedules `GET /api/v1/cron/sms-reminders` twice, at `30 3 * * *` and
+`30 4 * * *` (09:00 and 10:00 IST). The run is idempotent, so the second pass only sends what
+the first skipped, deferred or failed to send (e.g. the phone was briefly offline). On the
+Hobby plan each cron is daily-only and may fire any time within its hour. Vercel runs crons only on the production deployment. If a run reports
 `deferred` > 0 (phone offline), fix the phone and re-run it by hand:
 `curl -H "Authorization: Bearer $CRON_SECRET" https://thepetphysiovet.com/api/v1/cron/sms-reminders`.
 It is idempotent, so nobody is texted twice.
@@ -367,6 +377,11 @@ Requests are verified with the HMAC signing key. The endpoint returns 404 until
   **transactional** texts only: confirmations and reminders for something the owner booked.
   **Never add offers or promotions** to `backend/appointments/sms/templates.py`.
 - Owners who opted out on the SMS Reminders screen are never texted (`SKIPPED_OPTOUT`).
+- **Abuse limits:** reminders go only to visits a doctor booked, confirmed or moved (an owner
+  booking their own visit can never trigger a reminder); only `SMS_ALLOWED_COUNTRY_CODES`
+  are texted; one number gets at most `SMS_PER_PHONE_DAILY_LIMIT` texts a day. Visits booked
+  before this release have no doctor confirmation recorded, so they get **no reminder until a
+  doctor confirms, books or moves them**.
 
 ### 4. Swapping to a DLT-registered provider later
 All sending goes through `send_sms()` in `backend/appointments/sms/service.py`. Idempotency,

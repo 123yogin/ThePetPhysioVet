@@ -129,6 +129,7 @@ const MODE_LABEL: Record<SmsMode, string> = {
 
 const KIND_LABEL: Record<string, string> = {
   appointment_confirmed: 'Appointment confirmed',
+  appointment_moved: 'Appointment moved',
   appointment_reminder: 'Appointment reminder',
   boarding_confirmed: 'Boarding confirmed',
   boarding_checkout: 'Check-out reminder',
@@ -142,6 +143,7 @@ const STATUS_BADGE: Record<SmsStatus, string> = {
   FAILED: 'badge-failed',
   SKIPPED_OPTOUT: 'badge-neutral',
   SKIPPED_LIMIT: 'badge-warning',
+  SKIPPED_COUNTRY: 'badge-neutral',
   SKIPPED_DISABLED: 'badge-neutral',
 };
 
@@ -152,6 +154,7 @@ const STATUS_LABEL: Record<SmsStatus, string> = {
   FAILED: 'Failed',
   SKIPPED_OPTOUT: 'Opted out',
   SKIPPED_LIMIT: 'Daily limit',
+  SKIPPED_COUNTRY: 'Country blocked',
   SKIPPED_DISABLED: 'SMS off',
 };
 

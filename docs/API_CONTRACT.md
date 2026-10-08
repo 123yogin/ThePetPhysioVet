@@ -528,22 +528,34 @@ Server computes `subtotal` from line items, `total = subtotal + tax`,
 
 `SmsLogEntry = {id, created_at, sent_at, to, kind, status, error, provider}` — `to` is
 **masked except the last four digits** (`*********3210`). `kind` ∈ `appointment_confirmed`,
-`appointment_reminder`, `boarding_confirmed`, `boarding_checkout`, `test`. `status` ∈
-`QUEUED`, `SENT` (accepted by the provider), `DELIVERED`, `FAILED`, `SKIPPED_OPTOUT`,
-`SKIPPED_LIMIT`, `SKIPPED_DISABLED`. `mode` ∈ `android_gateway`, `console`, `disabled`.
+`appointment_moved`, `appointment_reminder`, `boarding_confirmed`, `boarding_checkout`, `test`.
+`status` ∈ `QUEUED`, `SENT` (accepted by the provider), `DELIVERED`, `FAILED`, `SKIPPED_OPTOUT`,
+`SKIPPED_LIMIT` (clinic-wide `SMS_DAILY_LIMIT` or `SMS_PER_PHONE_DAILY_LIMIT`, default 3, per
+number per day), `SKIPPED_COUNTRY` (calling code not in `SMS_ALLOWED_COUNTRY_CODES`, default
+`+91`), `SKIPPED_DISABLED`. A send that timed out without an answer stays `FAILED` but keeps
+`sent_at` (it may have gone out), so it counts toward both limits. `error` never contains a
+phone number (digit runs of 7+ are masked). `mode` ∈ `android_gateway`, `console`, `disabled`.
 The log follows the `_doctor_scoped` posture: texts about another doctor's appointment are
 not listed; clinic-level texts (boarding, tests) are.
 
 `Counts = {considered, sent, already_sent, skipped, failed, deferred}`. The cron run is
 idempotent (one row per kind + appointment/stay + date, enforced by a unique key), stops
 starting sends after ~20 s or 3 consecutive gateway failures (`deferred`), and a re-run
-retries FAILED/deferred ones. It reminds **tomorrow's** `Confirmed`/`Rescheduled` visits and
+retries FAILED/deferred ones. It reminds **tomorrow's** `Confirmed`/`Rescheduled` visits **that have a doctor and were booked,
+confirmed or moved by a doctor** (`Appointment.confirmed_at`/`confirmed_by`, migration 0024 —
+never set by an owner action) and
 sends check-out reminders for overnight stays (≥ 24 h, `CONFIRMED`/`CHECKED_IN`) whose
 departure day is **today**.
 
 Automatic texts are also sent on: `POST /appointments/:id/confirm`, `POST /enquiries/:id/convert`
 (Confirm & Book), `POST /facility/boarding/<ref>/status {action: "confirm"}` and a
-doctor-created stay. They never change the response of those routes — an SMS failure is
+doctor-created stay ("confirmed"), and on `POST /appointments/:id/reschedule` and
+`/reschedule-approve` ("moved to …", once per new date/time).
+
+**Amended 2026-10-08 (security review):** `POST /owner/appointments/:id/accept` only accepts a
+visit whose status is `Rescheduled` (a new time the clinic proposed); anything else → 400
+"Nothing to accept." It previously confirmed any appointment, including the owner's own
+Pending booking or reschedule request. They never change the response of those routes — an SMS failure is
 logged and recorded, never returned.
 
 ### Queries
