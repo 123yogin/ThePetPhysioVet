@@ -9,6 +9,10 @@ import { useFlash } from '../lib/flash';
 import { todayISO } from '../lib/dates';
 import { isValidAadhaar } from '../lib/aadhaar';
 import { Icon } from '../components/Icon';
+import { PetAvatar } from '../components/PetAvatar';
+import { PetPhotoField } from '../components/PetPhotoField';
+import { Spinner } from '../components/Spinner';
+import { petPhotoError, uploadErrorMessage } from '../lib/uploads';
 import { petEmoji, friendlyDate, friendlyTime } from '../lib/labels';
 import { Appointment } from '../lib/types';
 
@@ -92,6 +96,7 @@ export const OwnerHomeScreen: React.FC = () => {
 
   // New Pet State
   const [petName, setPetName] = useState('');
+  const [petPhoto, setPetPhoto] = useState<File | null>(null);
   const [species, setSpecies] = useState('Dog');
   const [breed, setBreed] = useState('');
   const [age, setAge] = useState('');
@@ -218,6 +223,8 @@ export const OwnerHomeScreen: React.FC = () => {
 
   const createPetMutation = useMutation({
     mutationFn: async () => {
+      const photoErr = petPhotoError(petPhoto);
+      if (photoErr) throw new Error(photoErr);
       const fd = new FormData();
       fd.append('name', petName);
       fd.append('species', species);
@@ -229,6 +236,7 @@ export const OwnerHomeScreen: React.FC = () => {
       if (needsContactPhone) {
         fd.append('owner_phone', contactPhone.trim());
       }
+      if (petPhoto) fd.append('photo', petPhoto);
       return createOwnerPet(fd);
     },
     onSuccess: (newPet) => {
@@ -243,9 +251,10 @@ export const OwnerHomeScreen: React.FC = () => {
       setWeight('');
       setComplaint('');
       setContactPhone('');
+      setPetPhoto(null);
     },
-    onError: (err: any) => {
-      addFlash(err?.message || 'Failed to add pet. Please try again.', 'error');
+    onError: (err: unknown) => {
+      addFlash(uploadErrorMessage(err, 'Failed to add pet. Please try again.'), 'error');
     },
   });
 
@@ -415,6 +424,15 @@ export const OwnerHomeScreen: React.FC = () => {
               </div>
             </div>
 
+            <div style={{ marginTop: '12px' }}>
+              <PetPhotoField
+                file={petPhoto}
+                onChange={setPetPhoto}
+                onError={(msg) => addFlash(msg, 'error')}
+                disabled={createPetMutation.isPending}
+              />
+            </div>
+
             {needsContactPhone && (
               <div className="field" style={{ marginTop: '12px' }}>
                 <label>Your Contact Number *</label>
@@ -503,13 +521,20 @@ export const OwnerHomeScreen: React.FC = () => {
                 onClick={() => {
                   setShowAddPet(false);
                   setShowMoreDetails(false);
+                  setPetPhoto(null);
                 }}
                 className="btn btn-ghost btn-sm"
               >
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary btn-sm" disabled={createPetMutation.isPending}>
-                {createPetMutation.isPending ? 'Saving...' : 'Save Pet'}
+                {createPetMutation.isPending ? (
+                  <>
+                    <Spinner /> {petPhoto ? 'Uploading photo…' : 'Saving...'}
+                  </>
+                ) : (
+                  'Save Pet'
+                )}
               </button>
             </div>
           </form>
@@ -878,8 +903,8 @@ export const OwnerHomeScreen: React.FC = () => {
             return (
               <div key={p.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '230px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--brown-900)' }}>
-                    {petEmoji(p.species)} {p.name}
+                  <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--brown-900)', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <PetAvatar name={p.name} species={p.species} photo={p.photo} size={p.photo ? 44 : 28} radius={12} /> {p.name}
                   </div>
                   <span className="badge badge-neutral">
                     {p.species || 'Pet'}

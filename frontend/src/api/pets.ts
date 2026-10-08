@@ -16,3 +16,13 @@ export async function createPet(formData: FormData): Promise<Pet> {
     data: formData,
   });
 }
+
+/** PATCH /pets/{id} with only a new photo (multipart). */
+export async function updatePetPhoto(id: string, photo: File): Promise<Pet> {
+  const formData = new FormData();
+  formData.append('photo', photo);
+  return http<Pet>(`/pets/${id}`, {
+    method: 'PATCH',
+    data: formData,
+  });
+}
