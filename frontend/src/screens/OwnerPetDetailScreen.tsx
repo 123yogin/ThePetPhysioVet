@@ -10,6 +10,8 @@ import {
   sendOwnerQueryMessage,
 } from '../api/owner';
 import { useFlash } from '../lib/flash';
+import { uploadSizeError, uploadErrorMessage } from '../lib/uploads';
+import { Spinner } from '../components/Spinner';
 import { PlanGrid } from '../components/rehab/PlanGrid';
 import { Icon, IconName } from '../components/Icon';
 import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
@@ -90,6 +92,8 @@ export const OwnerPetDetailScreen: React.FC = () => {
       if (!diagFile) {
         throw new Error('Please attach a file first.');
       }
+      const tooLarge = uploadSizeError(diagFile);
+      if (tooLarge) throw new Error(tooLarge);
       const fd = new FormData();
       fd.append('report_type', diagReportType);
       fd.append('notes', diagNotes);
@@ -103,8 +107,8 @@ export const OwnerPetDetailScreen: React.FC = () => {
       setDiagNotes('');
       setDiagFile(null);
     },
-    onError: (err: any) => {
-      addFlash(err?.message || 'Failed to add this report. Please try again.', 'error');
+    onError: (err: unknown) => {
+      addFlash(uploadErrorMessage(err, 'Failed to add this report. Please try again.'), 'error');
     },
   });
 
@@ -355,7 +359,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                     <div className="field">
                       <label>Type *</label>
-                      <select className="input-glass" value={diagReportType} onChange={(e) => setDiagReportType(e.target.value)}>
+                      <select className="input-glass" value={diagReportType} onChange={(e) => setDiagReportType(e.target.value)} disabled={addDiagMutation.isPending}>
                         {REPORT_TYPES.map((rt) => (
                           <option key={rt.value} value={rt.value}>
                             {rt.label}
@@ -368,7 +372,18 @@ export const OwnerPetDetailScreen: React.FC = () => {
                       <input
                         type="file"
                         className="input-glass"
-                        onChange={(e) => setDiagFile(e.target.files ? e.target.files[0] : null)}
+                        onChange={(e) => {
+                          const file = e.target.files ? e.target.files[0] : null;
+                          const tooLarge = uploadSizeError(file);
+                          if (tooLarge) {
+                            addFlash(tooLarge, 'error');
+                            e.target.value = '';
+                            setDiagFile(null);
+                            return;
+                          }
+                          setDiagFile(file);
+                        }}
+                        disabled={addDiagMutation.isPending}
                         required
                       />
                     </div>
@@ -382,15 +397,23 @@ export const OwnerPetDetailScreen: React.FC = () => {
                       value={diagNotes}
                       onChange={(e) => setDiagNotes(e.target.value)}
                       placeholder="Anything you'd like your vet to know about this..."
+                      disabled={addDiagMutation.isPending}
                     />
                   </div>
 
                   <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end' }}>
-                    <button type="button" onClick={() => setShowAddDiag(false)} className="btn btn-ghost btn-sm">
+                    <button type="button" onClick={() => setShowAddDiag(false)} className="btn btn-ghost btn-sm" disabled={addDiagMutation.isPending}>
                       Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={addDiagMutation.isPending}>
-                      {addDiagMutation.isPending ? 'Adding...' : 'Add Report'}
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={addDiagMutation.isPending}
+                      aria-busy={addDiagMutation.isPending}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      {addDiagMutation.isPending && <Spinner />}
+                      {addDiagMutation.isPending ? 'Uploading…' : 'Add Report'}
                     </button>
                   </div>
                 </form>

@@ -209,7 +209,8 @@ export async function http<T = any>(
     }
     const errorData = await response.json().catch(() => ({}));
     const message = errorData.detail || errorData.message || response.statusText;
-    throw new Error(message || 'Network request failed');
+    // `status` lets callers tell e.g. a gateway 413 (no JSON body) apart.
+    throw Object.assign(new Error(message || 'Network request failed'), { status: response.status });
   }
 
   if (response.status === 204) {
