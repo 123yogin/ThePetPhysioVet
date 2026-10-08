@@ -21,6 +21,27 @@ function slotCountLabel(n: number, status: string): string {
   return `${slots} held`;
 }
 
+/** True once the booking's earliest slot has started in clinic time
+ *  (Asia/Kolkata, UTC+05:30, no DST). Slot labels read "09:30 – 10:30". The
+ *  server enforces the same rule; this only decides whether to offer the button. */
+function hasStarted(g: FacilityBookingGroup, now: Date = new Date()): boolean {
+  const starts = g.slots
+    .map((s) => /^(\d{2}):(\d{2})/.exec(s.label))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => new Date(`${g.date}T${m[1]}:${m[2]}:00+05:30`).getTime())
+    .filter((t) => !Number.isNaN(t));
+  if (starts.length === 0) return false;
+  return now.getTime() >= Math.min(...starts);
+}
+
+type FacilityAction = 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+
+const SUCCESS_TEXT: Record<FacilityAction, string> = {
+  CONFIRMED: 'Booking confirmed.',
+  CANCELLED: 'Booking cancelled — beds freed.',
+  COMPLETED: 'Booking marked completed.',
+};
+
 /**
  * Day-care slot bookings the website has taken.
  *
@@ -30,11 +51,12 @@ function slotCountLabel(n: number, status: string): string {
  * so the public availability count corrects itself with no extra call here.
  */
 
-type StatusTab = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'ALL';
+type StatusTab = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'ALL';
 
 const TABS: { key: StatusTab; label: string }[] = [
   { key: 'PENDING', label: 'Pending' },
   { key: 'CONFIRMED', label: 'Confirmed' },
+  { key: 'COMPLETED', label: 'Completed' },
   { key: 'CANCELLED', label: 'Cancelled' },
   { key: 'ALL', label: 'All' },
 ];
@@ -58,22 +80,25 @@ export const FacilityBookingsScreen: React.FC = () => {
   });
 
   const mutation = useMutation({
-    mutationFn: ({ reference, status }: { reference: string; status: 'CONFIRMED' | 'CANCELLED' }) =>
+    mutationFn: ({ reference, status }: { reference: string; status: FacilityAction }) =>
       updateFacilityBookingStatus(reference, status),
     onSuccess: (_res, vars) => {
       // Every facility list is now stale — availability and counts changed.
       qc.invalidateQueries({ queryKey: ['facility-bookings'] });
-      addFlash(
-        vars.status === 'CONFIRMED' ? 'Booking confirmed.' : 'Booking cancelled — beds freed.',
-        'success',
-      );
+      addFlash(SUCCESS_TEXT[vars.status], 'success');
       if (vars.status === 'CANCELLED') setCancelTarget(null);
+      if (vars.status === 'COMPLETED') setCompleteTarget(null);
     },
-    onError: () => addFlash('Could not update the booking. Please try again.', 'error'),
+    onError: (err: unknown) =>
+      addFlash(
+        (err as { message?: string } | null)?.message || 'Could not update the booking. Please try again.',
+        'error',
+      ),
   });
 
   const groups: FacilityBookingGroup[] = data?.results ?? [];
   const [cancelTarget, setCancelTarget] = useState<FacilityBookingGroup | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<FacilityBookingGroup | null>(null);
 
   return (
     <div>
@@ -230,6 +255,17 @@ export const FacilityBookingsScreen: React.FC = () => {
                       <Icon name="check" size={14} /> Confirm
                     </button>
                   )}
+                  {g.status === 'CONFIRMED' && hasStarted(g) && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busy}
+                      onClick={() => setCompleteTarget(g)}
+                      style={{ marginTop: '10px' }}
+                    >
+                      <Icon name="check" size={14} /> Mark completed
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
@@ -261,6 +297,22 @@ export const FacilityBookingsScreen: React.FC = () => {
         busy={mutation.isPending}
         onConfirm={() => cancelTarget && mutation.mutate({ reference: cancelTarget.reference, status: 'CANCELLED' })}
         onClose={() => setCancelTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={completeTarget !== null}
+        title="Mark this booking completed?"
+        body={completeTarget && (
+          <>
+            {completeTarget.pet_name} ({completeTarget.owner_name}) on {friendlyDate(completeTarget.date)}. This
+            records the visit as honoured and closes the booking.
+          </>
+        )}
+        confirmLabel="Mark completed"
+        cancelLabel="Not yet"
+        busy={mutation.isPending}
+        onConfirm={() => completeTarget && mutation.mutate({ reference: completeTarget.reference, status: 'COMPLETED' })}
+        onClose={() => setCompleteTarget(null)}
       />
     </div>
   );
