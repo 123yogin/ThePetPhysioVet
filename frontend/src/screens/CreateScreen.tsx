@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createAppointment, fetchAppointmentOptions } from '../api/appointments';
 import { fetchPets } from '../api/pets';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 
 export const CreateScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ export const CreateScreen: React.FC = () => {
 
   const [petId, setPetId] = useState(defaultPetId);
   const [visitType, setVisitType] = useState('');
-  const [date, setDate] = useState(dateParam || new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(dateParam || todayISO());
   const [time, setTime] = useState('10:00');
   const [reasonNotes, setReasonNotes] = useState('');
   const [loading, setLoading] = useState(false);

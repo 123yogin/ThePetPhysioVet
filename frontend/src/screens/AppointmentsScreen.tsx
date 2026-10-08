@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchAppointments, completeAppointment, approveReschedule, rejectReschedule, confirmAppointment } from '../api/appointments';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { humanizeStatus, petEmoji } from '../lib/labels';
 
@@ -11,7 +12,7 @@ export const AppointmentsScreen: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('');
   const [ownerSearch, setOwnerSearch] = useState('');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(
-    new Date().toISOString().slice(0, 10)
+    todayISO()
   );
   
   // Current calendar month view state
@@ -119,7 +120,7 @@ export const AppointmentsScreen: React.FC = () => {
     const today = new Date();
     setCurrentYear(today.getFullYear());
     setCurrentMonth(today.getMonth());
-    setSelectedCalendarDate(today.toISOString().slice(0, 10));
+    setSelectedCalendarDate(todayISO());
   };
 
   // Generate matrix for month grid
@@ -150,7 +151,7 @@ export const AppointmentsScreen: React.FC = () => {
     });
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
 
   // Filtered appointments for list view or selected date view
   const selectedDateAppointments = selectedCalendarDate
