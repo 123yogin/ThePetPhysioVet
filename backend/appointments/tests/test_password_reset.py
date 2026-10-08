@@ -203,3 +203,47 @@ class PasswordResetConfirmTests(ApiTestCase):
 
         refreshed_b = self.anon().post(f"{API}/auth/refresh", {"refresh": b_refresh}, format="json")
         self.assertEqual(refreshed_b.status_code, 200, refreshed_b.content)
+
+
+class PasswordResetSendFailureTests(ApiTestCase):
+    """QA r4: an SMTP/config failure while sending the reset email surfaced as
+    an HTML 500 for known accounts only (unknown -> 200) -- both a broken flow
+    and an account-enumeration oracle."""
+
+    def _post(self, email):
+        return self.anon().post(
+            f"{API}/auth/password-reset/request", {"email": email}, format="json")
+
+    def test_send_failure_returns_the_same_generic_200_as_unknown_email(self):
+        from unittest import mock
+        import smtplib
+        with mock.patch("appointments.views.auth.send_mail",
+                        side_effect=smtplib.SMTPAuthenticationError(535, b"bad creds")), \
+                self.assertLogs("appointments.views.auth", level="ERROR") as logs:
+            r_known = self._post("a@example.com")
+        cache.clear()
+        r_unknown = self._post("nobody-here@example.com")
+        self.assertEqual(r_known.status_code, 200, r_known.content)
+        self.assertEqual(r_known.data, r_unknown.data)
+        joined = "\n".join(logs.output)
+        self.assertIn("Password reset email failed", joined)
+        self.assertNotIn("a@example.com", joined, "raw email address must not be logged")
+
+    def test_any_exception_from_send_is_swallowed(self):
+        from unittest import mock
+        with mock.patch("appointments.views.auth.send_mail", side_effect=OSError("conn refused")), \
+                self.assertLogs("appointments.views.auth", level="ERROR"):
+            r = self._post("a@example.com")
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def test_reset_url_has_no_double_slash_with_trailing_slash_base(self):
+        from django.test import override_settings
+        with override_settings(FRONTEND_BASE_URL="https://example.test/app/"):
+            self._post("a@example.com")
+        self.assertIn("https://example.test/app/reset-password?token=", mail.outbox[0].body)
+
+    def test_mask_email_helper(self):
+        from appointments.views.auth import _mask_email
+        self.assertEqual(_mask_email("alice@example.com"), "a***@example.com")
+        self.assertNotIn("alice", _mask_email("alice@example.com"))
+        self.assertEqual(_mask_email("bad"), "***")

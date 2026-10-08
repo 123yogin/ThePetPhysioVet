@@ -315,6 +315,13 @@ EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", default=True)
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+# Implicit TLS (port 465, e.g. many hosted SMTP providers). Mutually exclusive
+# with EMAIL_USE_TLS (STARTTLS, port 587); Django raises ValueError at send
+# time if both are on, and STARTTLS against a 465 listener hangs until
+# EMAIL_TIMEOUT -- both used to surface as a password-reset 500.
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL", default=False)
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False
 
 # Clinic notifications: email the practice when a new enquiry/booking/boarding
 # arrives, so leads are seen without logging into the portal. Off by default —
