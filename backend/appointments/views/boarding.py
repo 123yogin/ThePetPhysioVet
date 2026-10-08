@@ -23,6 +23,7 @@ import uuid as _uuid
 from datetime import date as date_cls, timedelta
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -253,7 +254,6 @@ def boarding_status_view(request, reference):
     # therefore the "ending soon" warning — is anchored to when the pet actually
     # arrived, not when it was booked.
     if action == "check_in" and booking.checked_in_at is None:
-        from django.utils import timezone
         booking.checked_in_at = timezone.now()
         updated.append("checked_in_at")
 
@@ -269,9 +269,6 @@ def boarding_ending_soon_view(request):
     """DOCTOR only. Checked-in stays that finish within the next 15 minutes, or
     are already past their end (overdue) — so the clinic can prepare the pickup
     / hand-off. Returns the list plus a count for the sidebar badge."""
-    from django.utils import timezone
-    from datetime import timedelta
-
     _user, err = _require_doctor(request)
     if err:
         return err

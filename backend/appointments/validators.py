@@ -26,6 +26,10 @@ from rest_framework import serializers
 _SEPARATORS = re.compile(r"[\s\-.() ]")
 _VALID = re.compile(r"^\+?\d{10,15}$")
 
+
+def _strip_separators(value):
+    return _SEPARATORS.sub("", str(value)).strip()
+
 MESSAGE = (
     "Enter a phone number the clinic can call — 10 to 15 digits, "
     "optionally starting with a country code like +91."
@@ -40,7 +44,7 @@ def normalise_phone(value):
     """
     if value is None:
         return value
-    cleaned = _SEPARATORS.sub("", str(value)).strip()
+    cleaned = _strip_separators(value)
     if not cleaned:
         return ""
     if not _VALID.match(cleaned):
@@ -85,7 +89,7 @@ AADHAAR_MESSAGE = "Enter a valid 12-digit Aadhaar number."
 def is_valid_aadhaar(value):
     """True iff `value` is a 12-digit string with a correct Verhoeff checksum
     and a leading digit of 2-9. No network, no storage of anything derived."""
-    s = _SEPARATORS.sub("", str(value or "")).strip()
+    s = _strip_separators(value or "")
     if len(s) != 12 or not s.isdigit() or s[0] in "01":
         return False
     c = 0
@@ -97,7 +101,7 @@ def is_valid_aadhaar(value):
 def validate_aadhaar(value):
     """Serializer-friendly: return the cleaned 12 digits, or raise a 400.
     Empty is allowed (the caller decides whether the field is required)."""
-    s = _SEPARATORS.sub("", str(value or "")).strip()
+    s = _strip_separators(value or "")
     if not s:
         return ""
     if not is_valid_aadhaar(s):
