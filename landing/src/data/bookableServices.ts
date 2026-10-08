@@ -38,7 +38,7 @@ export interface BookableService {
    * is still reserved as a one-hour slot and paid at the clinic; these are what
    * the options cost.
    */
-  priceList?: { label: string; price: number }[];
+  priceList?: { label: string; price: number; compareAt?: number }[];
   /**
    * Set to 'per-session' when `priceList` prices the SAME service at
    * different session-count tiers (e.g. Swimming's single/5-session/
@@ -47,8 +47,9 @@ export interface BookableService {
    *
    * Leave unset for services whose `priceList` prices separate, unrelated
    * things (e.g. Grooming's Shampooing / Nail trimming / Hair clipping) —
-   * there is no single baseline to discount against, so no badge should
-   * ever be computed there.
+   * there is no single baseline to discount against. A combo in such a list
+   * can still carry a badge by setting `compareAt` on that one entry: the sum
+   * of its parts' own prices, so the saving shown is real.
    */
   pricingMode?: 'per-session';
 }
@@ -111,7 +112,11 @@ export const BOOKABLE_SERVICES: BookableService[] = [
       { label: 'Shampooing', price: 1200 },
       { label: 'Nail trimming', price: 200 },
       { label: 'Hair clipping', price: 800 },
-      { label: 'Swim + groom + shampoo + dry', price: 2500 },
+      // compareAt = what the parts cost separately: Swimming single session
+      // (swim & dry) 1300 + Shampooing 1200 + Hair clipping 800 + Nail
+      // trimming 200 = 3500 ("groom" = clipping + nails, confirmed by the
+      // clinic 2026-10-08). Update it if any of those prices change.
+      { label: 'Swim + groom + shampoo + dry', price: 2500, compareAt: 3500 },
     ],
     icon: 'sparkles',
   },

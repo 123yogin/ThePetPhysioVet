@@ -16,7 +16,7 @@ import { CalendarCheck, Check, Loader2 } from 'lucide-react';
 import { isoDate, postEnquiry } from '../lib/clinicApi';
 import { BOOKABLE_SERVICES } from '../data/bookableServices';
 
-interface Package { label: string; price: number }
+interface Package { label: string; price: number; compareAt?: number }
 
 interface Props {
   onClose: () => void;
@@ -61,17 +61,18 @@ export const ServiceRequestBooking: React.FC<Props> = ({
 
   // Swimming's packages are volume-pricing tiers of one service (5/8
   // sessions discounted off the single-session rate); Grooming's priceList
-  // is unrelated services at their own prices, so it must never get a "Save
-  // X%" badge. `pricingMode` is read from the canonical service record
+  // is unrelated services at their own prices, so only an entry with its own
+  // `compareAt` (a combo, priced against its parts) gets a badge. `pricingMode` is read from the canonical service record
   // (bookableServices.ts) rather than hardcoded here, so the gate is
   // data-driven and keyed off whichever service this form was opened for.
   const isPerSessionTiers =
     BOOKABLE_SERVICES.find((s) => s.code === serviceCode)?.pricingMode === 'per-session';
   const baselinePrice =
     isPerSessionTiers && packages?.length ? Math.max(...packages.map((p) => p.price)) : null;
-  const discountPctFor = (price: number): number | null => {
-    if (baselinePrice === null || price >= baselinePrice) return null;
-    return Math.round(((baselinePrice - price) / baselinePrice) * 100);
+  const discountPctFor = (p: Package): number | null => {
+    const baseline = p.compareAt ?? baselinePrice;
+    if (baseline === null || p.price >= baseline) return null;
+    return Math.round(((baseline - p.price) / baseline) * 100);
   };
 
   const missingPackage = !!packages?.length && !pkg;
@@ -163,7 +164,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
           <div className="grid grid-cols-1 gap-2">
             {packages.map((p) => {
               const on = pkg?.label === p.label;
-              const discountPct = discountPctFor(p.price);
+              const discountPct = discountPctFor(p);
               return (
                 <button
                   key={p.label}

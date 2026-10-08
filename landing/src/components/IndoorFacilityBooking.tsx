@@ -147,11 +147,17 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
         Choose a stay
       </p>
 
-      {/* Duration + price */}
+      {/* Duration + price. Multi-day stays show their saving against booking
+          the 24-hour stay day after day (the 24-hour price x days). Hourly
+          stays under a day are a different product, so they get no badge. */}
       <span className={labelCls}>Duration</span>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
         {(menu?.durations ?? []).map((d) => {
           const on = duration === d.key;
+          const dayRate = menu?.durations.find((x) => x.key === '24h')?.price;
+          const fullPrice = dayRate && d.days > 1 ? dayRate * d.days : null;
+          const savePct =
+            fullPrice && d.price < fullPrice ? Math.round(((fullPrice - d.price) / fullPrice) * 100) : null;
           return (
             <button
               key={d.key}
@@ -164,6 +170,15 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
             >
               <span className="block font-medium text-sm">{d.label}</span>
               <span className={`block text-xs mt-1 ${on ? 'text-white/80' : 'text-(--c-accent)'}`}>{rupee(d.price)}</span>
+              {savePct !== null && (
+                <span
+                  className={`inline-flex w-fit items-center rounded-full border px-1.5 py-0.5 mt-1.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    on ? 'border-white text-white' : 'border-(--c-accent) text-(--c-accent)'
+                  }`}
+                >
+                  Save {savePct}%
+                </span>
+              )}
             </button>
           );
         })}
