@@ -466,7 +466,8 @@ export const PetDetailScreen: React.FC = () => {
       {/* Treatment Tab */}
       {activeTab === 'treatment' && (
         <div>
-          {createExpanded ? (
+          {/* Wait for the plan list so the card doesn't flash collapsed, then open. */}
+          {treatmentPlans === undefined && !plansError ? null : createExpanded ? (
             <div className="glass-card" style={{ marginBottom: '24px' }}>
               <div className="pb-card-head">
                 <h3 ref={createHeadingRef} tabIndex={-1}>Create New Physical Therapy Plan</h3>

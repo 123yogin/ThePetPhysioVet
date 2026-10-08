@@ -1195,14 +1195,21 @@ tr:hover td {
 .pb-field-note { margin-top: 4px; font-size: 12px; color: var(--brown-500); }
 .pb-field-note.error { color: #b71c1c; font-weight: 600; }
 .pb-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding-top: 14px; border-top: 1px solid var(--brown-100); }
-.pb-summary { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 14px; font-weight: 600; color: var(--brown-900); }
-.pb-dot { color: var(--brown-300); }
+.pb-summary { margin: 0; min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; color: var(--brown-900); }
+/* Separators sit in a negative margin, so a part that wraps to a new line has its "·" clipped. */
+.pb-summary-parts { display: flex; flex-wrap: wrap; row-gap: 2px; margin-left: -18px; }
+.pb-summary-part { position: relative; padding-left: 18px; }
+.pb-summary-part::before { content: '·'; position: absolute; left: 6px; color: var(--brown-300); }
 .pb-create-toggle { display: flex; justify-content: flex-start; margin-bottom: 24px; }
 .pb-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
 .pb-card-head h3 { margin: 0; font-size: 18px; }
 .pb-card-head h3:focus { outline: none; }
 @media (max-width: 1100px) {
   .pb-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Rows stack the weekday chips under the name from here: with the sidebar, one
+   row has no room for name + frequency + 7 chips below ~1280px. */
+@media (max-width: 1280px) {
   .pb-row { grid-template-columns: minmax(0, 1fr) minmax(170px, 220px) 44px; }
   .pb-row-name { grid-area: 1 / 1; }
   .pb-row .pb-row-freq { grid-area: 1 / 2; }
@@ -1211,7 +1218,11 @@ tr:hover td {
   .pb-row-days:empty { display: none; }
 }
 @media (max-width: 768px) {
+  .pb { padding-bottom: 72px; } /* clear the fixed drawer button (bottom-right) */
   .pb-dates { grid-template-columns: 1fr; }
+  .pb-row-days { display: grid; gap: 6px; }
+  .pb-chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; width: 100%; }
+  .pb-chip { min-width: 0; padding: 0; }
   .pb-row { grid-template-columns: minmax(0, 1fr) 44px; padding-left: 10px; }
   .pb-row .pb-row-freq { grid-area: 2 / 1 / 3 / -1; }
   .pb-row .pb-remove { grid-area: 1 / 2; }

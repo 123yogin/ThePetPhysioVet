@@ -269,7 +269,7 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
                             );
                           })}
                         </div>
-                        <span id={hintId} className={`pb-hint${err ? ' error' : have === need ? ' ok' : ''}`}>
+                        <span id={hintId} aria-live="polite" className={`pb-hint${err ? ' error' : have === need ? ' ok' : ''}`}>
                           {err && <Icon name="warning" size={13} />}
                           {have === need ? (
                             <><Icon name="check" size={13} /> {need === 1 ? 'Day set' : 'Days set'}</>
@@ -325,7 +325,11 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
                     value={d.value}
                     checked={duration === d.value}
                     disabled={submitting}
-                    onChange={() => setDuration(d.value)}
+                    onChange={() => {
+                      // Switching to Custom starts from the end date the preset was showing.
+                      if (d.value === 'custom' && duration !== 'custom') setCustomEnd(endDate);
+                      setDuration(d.value);
+                    }}
                   />
                   <span>{d.label}</span>
                 </label>
@@ -371,12 +375,11 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
 
       <div className="pb-footer">
         <p className="pb-summary" aria-live="polite">
-          {summaryParts.map((p, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && <span aria-hidden="true" className="pb-dot">·</span>}
-              <span>{p}</span>
-            </React.Fragment>
-          ))}
+          <span className="pb-summary-parts">
+            {summaryParts.map((p, i) => (
+              <span key={i} className="pb-summary-part">{p}</span>
+            ))}
+          </span>
         </p>
         <div className="rehab-actions">
           <button type="submit" className="btn btn-primary" disabled={submitting}>
