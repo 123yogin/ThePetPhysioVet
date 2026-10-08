@@ -9,7 +9,7 @@ import { prefersReducedMotion } from '../../motion/engine';
  * matched to whichever of the clinic's own photos most plausibly shows what
  * that service actually is -- alt text describes only what is in the frame.
  */
-const PHOTO: Record<string, { src: string; alt: string }> = {
+const PHOTO: Record<string, { src: string; alt: string; video?: string; poster?: string }> = {
   'indoor-physiotherapy': {
     src: '/photos/clinic-german-shepherd.webp',
     alt: 'Dr. Dhanvi Patel embracing a German Shepherd on the padded therapy mats at the Shilaj clinic',
@@ -24,7 +24,9 @@ const PHOTO: Record<string, { src: string; alt: string }> = {
   },
   hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
-    alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported by a harness',
+    alt: 'A dog swimming in the clinic indoor hydrotherapy pool, treat-guided by the therapist',
+    video: '/videos/hydrotherapy.mp4',
+    poster: '/videos/hydrotherapy-poster.jpg',
   },
   acupuncture: {
     src: '/photos/dhanvi-patel.webp',
@@ -38,6 +40,43 @@ const PHOTO: Record<string, { src: string; alt: string }> = {
 const FALLBACK_PHOTO = PHOTO[SERVICES[0]?.id] ?? { src: '/photos/clinic-german-shepherd.webp', alt: '' };
 
 const photoFor = (id: string) => PHOTO[id] ?? FALLBACK_PHOTO;
+
+type ServiceMediaData = { src: string; alt: string; video?: string; poster?: string };
+
+/** A service tile is an image unless it has a `video`, in which case it plays a
+ *  muted, looping clip (with the poster/photo as the still fallback). */
+const ServiceMedia: React.FC<{
+  photo: ServiceMediaData; className?: string; width: number; height: number;
+}> = ({ photo, className, width, height }) => {
+  if (photo.video) {
+    return (
+      <video
+        className={className}
+        src={photo.video}
+        poster={photo.poster ?? photo.src}
+        width={width}
+        height={height}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        aria-label={photo.alt}
+      />
+    );
+  }
+  return (
+    <img
+      src={photo.src}
+      alt={photo.alt}
+      width={width}
+      height={height}
+      loading="lazy"
+      decoding="async"
+      className={className}
+    />
+  );
+}
 
 const ServicesScrolly: React.FC = () => {
   const [active, setActive] = React.useState(0);
@@ -76,14 +115,11 @@ const ServicesScrolly: React.FC = () => {
             {SERVICES.map((service, i) => {
               const photo = photoFor(service.id);
               return (
-                <img
+                <ServiceMedia
                   key={service.id}
-                  src={photo.src}
-                  alt={photo.alt}
+                  photo={photo}
                   width={900}
                   height={1200}
-                  loading="lazy"
-                  decoding="async"
                   className={`absolute inset-0 w-full h-full object-cover ${transitionClass} ${
                     i === active ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
                   }`}
@@ -136,13 +172,10 @@ const ServicesScrolly: React.FC = () => {
                 {/* Inline photo, phones/tablets only -- the sticky arch is a
                     desktop device, so each chapter carries its own image here. */}
                 <div className="lg:hidden mb-6 aspect-4/3 w-full overflow-hidden rounded-t-[999px] bg-(--c-surface-2) border border-(--c-line)/30">
-                  <img
-                    src={photo.src}
-                    alt={photo.alt}
+                  <ServiceMedia
+                    photo={photo}
                     width={900}
                     height={675}
-                    loading="lazy"
-                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                 </div>

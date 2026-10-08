@@ -9,7 +9,7 @@ import { onFrame, track, prefersReducedMotion } from '../../motion/engine';
  * One photo per service, picked from the clinic's own photo set (there are no
  * per-service shoots). Alt text describes only what each frame actually shows.
  */
-const PHOTOS: Record<string, { src: string; alt: string }> = {
+const PHOTOS: Record<string, { src: string; alt: string; video?: string; poster?: string }> = {
   'indoor-physiotherapy': {
     src: '/photos/senior-beagle.webp',
     alt: 'Dr. Dhanvi Patel cradling a senior beagle during attentive residential care',
@@ -24,7 +24,9 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
   },
   hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
-    alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported by a harness',
+    alt: 'A dog swimming in the clinic indoor hydrotherapy pool, treat-guided by the therapist',
+    video: '/videos/hydrotherapy.mp4',
+    poster: '/videos/hydrotherapy-poster.jpg',
   },
   acupuncture: {
     src: '/photos/dhanvi-patel.webp',
@@ -37,6 +39,38 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
 };
 
 const num = (i: number) => String(i + 1).padStart(2, '0');
+
+/** A panel shows a still photo unless it has a `video`, which then autoplays
+ *  muted and looping (poster/photo is the fallback still). */
+const PanelMedia: React.FC<{
+  photo: { src: string; alt: string; video?: string; poster?: string };
+  className?: string; width: number; height: number;
+}> = ({ photo, className, width, height }) =>
+  photo.video ? (
+    <video
+      className={className}
+      src={photo.video}
+      poster={photo.poster ?? photo.src}
+      width={width}
+      height={height}
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      aria-label={photo.alt}
+    />
+  ) : (
+    <img
+      src={photo.src}
+      alt={photo.alt}
+      width={width}
+      height={height}
+      loading="lazy"
+      decoding="async"
+      className={className}
+    />
+  );
 
 /*
  * Scroll-driven mode (desktop, motion allowed): the row pins while the page
@@ -172,13 +206,10 @@ const ServicesPanels: React.FC = () => {
                 data-cursor="View"
                 className="absolute inset-0 block focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset"
               >
-                <img
-                  src={photo.src}
-                  alt={photo.alt}
+                <PanelMedia
+                  photo={photo}
                   width={800}
                   height={600}
-                  loading="lazy"
-                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-(--c-ink) via-(--c-ink)/35 to-(--c-ink)/5" />
@@ -265,13 +296,10 @@ const ServicesPanels: React.FC = () => {
                 onClick={() => setOpenMobile(isOpen ? -1 : i)}
                 className="relative block h-[88px] w-full cursor-pointer text-left"
               >
-                <img
-                  src={photo.src}
-                  alt={photo.alt}
+                <PanelMedia
+                  photo={photo}
                   width={800}
                   height={200}
-                  loading="lazy"
-                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-(--c-ink)/90 via-(--c-ink)/45 to-(--c-ink)/10" />
