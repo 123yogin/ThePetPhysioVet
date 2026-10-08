@@ -270,6 +270,8 @@ def enquiry_convert_view(request, pk):
                 owner_name=owner_name,
                 owner_phone=enquiry.phone,
                 owner_email=email,
+                # The enquiry never said; don't invent one (model default is Male).
+                sex="",
             )
 
         appt = Appointment.objects.create(

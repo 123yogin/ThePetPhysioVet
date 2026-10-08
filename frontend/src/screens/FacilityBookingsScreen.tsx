@@ -4,6 +4,7 @@ import {
   fetchFacilityBookings,
   updateFacilityBookingStatus,
   facilityQueryKey,
+  clock12,
   FacilityBookingGroup,
 } from '../api/facility';
 import { useFlash } from '../lib/flash';
@@ -78,7 +79,10 @@ export const FacilityBookingsScreen: React.FC = () => {
     <div>
       <h1 className="page-title">Facility Bookings</h1>
       <p className="page-sub">
-        Indoor-facility slot bookings from the website — six beds per hour, 9:30 AM to 1:30 PM
+        Indoor-facility slot bookings from the website
+        {data?.capacity != null && data.opens && data.closes
+          ? ` — up to ${data.capacity} per hour, ${clock12(data.opens)} to ${clock12(data.closes)}`
+          : ''}
       </p>
 
       {/* Status tabs */}

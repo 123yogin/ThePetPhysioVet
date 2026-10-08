@@ -161,3 +161,26 @@ export const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'BLOOD', label: 'Blood Report' },
   { value: 'OTHER', label: 'Other' },
 ];
+
+/**
+ * Mid-sentence "when" for a booking: "tomorrow, Fri 9 Oct at 9:00 AM",
+ * "Mon 12 Oct at 2:30 PM". Lower-case relative word (it follows "for"), always
+ * with the explicit date, and the time when known.
+ */
+export function bookingWhen(iso?: string | null, time?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso.slice(0, 10) + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  const wd = d.toLocaleDateString('en-GB', { weekday: 'short' }).replace(',', '');
+  const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+  const explicit = `${wd} ${d.getDate()} ${mon}`;
+  const rel = friendlyDate(iso.slice(0, 10));
+  const relative = ['Today', 'Tomorrow', 'Yesterday'].includes(rel) ? `${rel.toLowerCase()}, ` : '';
+  let at = '';
+  const m = time ? /^(\d{1,2}):(\d{2})/.exec(time) : null;
+  if (m) {
+    const h = Number(m[1]);
+    at = ` at ${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+  return `${relative}${explicit}${at}`;
+}

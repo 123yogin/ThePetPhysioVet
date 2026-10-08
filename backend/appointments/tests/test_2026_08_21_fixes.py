@@ -171,10 +171,10 @@ class DoctorRescheduleTests(ApiTestCase):
     def test_doctor_reschedule_moves_date_and_time_directly(self):
         self.auth(self.doctor)
         r = self.client.post(f"{API}/appointments/{self.appt_a.id}/reschedule",
-                             {"date": "2026-09-15", "time": "10:00"}, format="json")
+                             {"date": "2099-09-15", "time": "10:00"}, format="json")
         self.assertEqual(r.status_code, 200, r.content)
         self.appt_a.refresh_from_db()
-        self.assertEqual(str(self.appt_a.date), "2026-09-15")
+        self.assertEqual(str(self.appt_a.date), "2099-09-15")
         self.assertEqual(str(self.appt_a.time), "10:00:00")
 
     def test_doctor_reschedule_status_is_not_the_owner_pending_state(self):
@@ -183,7 +183,7 @@ class DoctorRescheduleTests(ApiTestCase):
         """
         self.auth(self.doctor)
         r = self.client.post(f"{API}/appointments/{self.appt_a.id}/reschedule",
-                             {"date": "2026-09-15", "time": "10:00"}, format="json")
+                             {"date": "2099-09-15", "time": "10:00"}, format="json")
         self.assertEqual(r.status_code, 200, r.content)
         self.assertNotEqual(r.data["status"], "Reschedule Requested")
         self.appt_a.refresh_from_db()
@@ -211,7 +211,7 @@ class DoctorRescheduleTests(ApiTestCase):
     def test_missing_date_or_time_still_rejected(self):
         self.auth(self.doctor)
         r = self.client.post(f"{API}/appointments/{self.appt_a.id}/reschedule",
-                             {"date": "2026-09-15"}, format="json")
+                             {"date": "2099-09-15"}, format="json")
         self.assertEqual(r.status_code, 400, r.content)
 
 
