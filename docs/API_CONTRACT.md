@@ -518,6 +518,34 @@ Server computes `subtotal` from line items, `total = subtotal + tax`,
 | GET | `/notification-prefs?owner_phone=` | | pref |
 | PUT | `/notification-prefs` | `{owner_phone, sms_opt_out}` | pref |
 
+### SMS — added 2026-10-08 (transactional texts via the Android gateway)
+| Method | Path | Auth | Body / query | Response |
+| --- | --- | --- | --- | --- |
+| GET | `/sms/log?page=&page_size=` | **doctor** | `page` ≥ 1 (default 1), `page_size` 1–100 (default 25); non-integers → 400 | `{mode, sent_today, daily_limit, count, page, page_size, results: SmsLogEntry[]}` |
+| POST | `/sms/test` | **doctor** | `{to}` (any phone `normalise_phone` accepts that folds to E.164) | 201 `SmsLogEntry` — sends "Pet Physio Vet test message"; **counts toward the daily cap**; 10/hour/doctor (429) |
+| GET | `/cron/sms-reminders` | `Authorization: Bearer $CRON_SECRET` (constant-time compare; anything else, including a user JWT or an unset secret → 401) | — | `{date, appointment_reminders: Counts, checkout_reminders: Counts}` |
+| POST | `/sms/webhook` | HMAC-SHA256: `X-Signature` = hex HMAC(`SMS_WEBHOOK_SIGNING_KEY`, raw body + `X-Timestamp`), timestamp within ±5 min → else 401; 404 while the key is unset | gateway event `{event, payload: {messageId, reason?}, ...}` | `{result: "updated" \| "ignored" \| "unknown"}` |
+
+`SmsLogEntry = {id, created_at, sent_at, to, kind, status, error, provider}` — `to` is
+**masked except the last four digits** (`*********3210`). `kind` ∈ `appointment_confirmed`,
+`appointment_reminder`, `boarding_confirmed`, `boarding_checkout`, `test`. `status` ∈
+`QUEUED`, `SENT` (accepted by the provider), `DELIVERED`, `FAILED`, `SKIPPED_OPTOUT`,
+`SKIPPED_LIMIT`, `SKIPPED_DISABLED`. `mode` ∈ `android_gateway`, `console`, `disabled`.
+The log follows the `_doctor_scoped` posture: texts about another doctor's appointment are
+not listed; clinic-level texts (boarding, tests) are.
+
+`Counts = {considered, sent, already_sent, skipped, failed, deferred}`. The cron run is
+idempotent (one row per kind + appointment/stay + date, enforced by a unique key), stops
+starting sends after ~20 s or 3 consecutive gateway failures (`deferred`), and a re-run
+retries FAILED/deferred ones. It reminds **tomorrow's** `Confirmed`/`Rescheduled` visits and
+sends check-out reminders for overnight stays (≥ 24 h, `CONFIRMED`/`CHECKED_IN`) whose
+departure day is **today**.
+
+Automatic texts are also sent on: `POST /appointments/:id/confirm`, `POST /enquiries/:id/convert`
+(Confirm & Book), `POST /facility/boarding/<ref>/status {action: "confirm"}` and a
+doctor-created stay. They never change the response of those routes — an SMS failure is
+logged and recorded, never returned.
+
 ### Queries
 | GET | `/queries/inbox` | | `{results: QueryThread[]}` — **doctor-scoped, messages-only** (amended 2026-08-21, D3 + L1) |
 | GET | `/pets/:id/queries` | | `QueryThread` — **doctor-scoped** (amended 2026-08-21, L1 follow-up: previously any doctor could read/post into another practice's patient conversation by pet ID) |
