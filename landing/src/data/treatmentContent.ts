@@ -177,6 +177,12 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
           'Residential physiotherapy is for pets that need a structured course and cannot easily attend as day patients, for example after spinal or orthopaedic surgery or during [[neurological recovery|/conditions/neurological-recovery]]. If your pet lives in Ahmedabad and can travel comfortably, day sessions at the Shilaj clinic or a home visit may be simpler. Ask us which fits.',
         ],
       },
+      {
+        heading: 'Residential physiotherapy or boarding?',
+        paragraphs: [
+          'Residential physiotherapy is a course of treatment. If your pet does not need rehab and only needs looking after while you are away or busy, see [[pet boarding and day care in Shilaj|/services/pet-boarding]] instead: supervised care round the clock in our Indoor Facility, booked by the hour, day, week or month.',
+        ],
+      },
     ],
     faqs: [
       {

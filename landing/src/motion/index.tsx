@@ -324,34 +324,20 @@ export const SmoothScroll: React.FC = () => {
 /* ------------------------------------------------------------ Intro exit -- */
 
 /**
- * Ends the intro overlay (static markup in index.html) as soon as the page is
- * ready. Its CSS exit animation already clears it on its own; this only makes
- * it leave sooner, and marks the session so it plays once.
+ * Clears the intro overlay (static markup in index.html). Its CSS animation
+ * already fades it out within ~0.55s with no JS at all, and the hero never
+ * waits for it; this only takes it out of the render tree afterwards and drops
+ * the html.intro class so later navigations are unaffected.
  */
 export const IntroController: React.FC = () => {
   useEffect(() => {
     const html = document.documentElement;
     const intro = document.getElementById('intro');
     if (!intro || !html.classList.contains('intro')) return;
-    const t0 = performance.now();
-    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts?.ready ?? Promise.resolve();
-    let timer = 0;
-    fonts.then(() => {
-      timer = window.setTimeout(() => {
-        intro.classList.add('is-done');
-        // Hide the overlay but KEEP html.intro: the hero's entrance delays
-        // are derived from it, and dropping it mid-animation would make the
-        // last hero elements jump to their end state.
-        window.setTimeout(() => {
-          intro.style.display = 'none';
-        }, 900);
-        // Drop the class once the hero's entrance has fully played (~2.4s
-        // after the intro lifts). Removing it earlier would shorten delays
-        // mid-animation and make elements jump; leaving it on would delay the
-        // entrance of every page visited afterwards.
-        window.setTimeout(() => html.classList.remove('intro'), 3200);
-      }, Math.max(0, 1250 - (performance.now() - t0)));
-    });
+    const timer = window.setTimeout(() => {
+      intro.style.display = 'none';
+      html.classList.remove('intro');
+    }, 700);
     return () => window.clearTimeout(timer);
   }, []);
   return null;
