@@ -23,7 +23,7 @@ from ..serializers import (
 )
 
 from ._shared import (
-    _doctor_scoped, reject_invalid_pet_photo, reject_oversized_upload, save_pet_photo,
+    _doctor_scoped, reject_invalid_pet_photo, upload_preflight, save_pet_photo,
 )
 
 @api_view(["GET", "POST"])
@@ -44,7 +44,7 @@ def pets_view(request):
             )
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
-    rejected = reject_oversized_upload(request) or reject_invalid_pet_photo(request)
+    rejected = upload_preflight(request) or reject_invalid_pet_photo(request)
     if rejected:
         return rejected
     serializer = PetSerializer(data=request.data, context={"request": request})
@@ -91,7 +91,7 @@ def pet_detail_view(request, pk):
     if request.method == "GET":
         return Response(PetSerializer(pet, context={"request": request}).data)
 
-    rejected = reject_oversized_upload(request) or reject_invalid_pet_photo(request)
+    rejected = upload_preflight(request) or reject_invalid_pet_photo(request)
     if rejected:
         return rejected
     serializer = PetSerializer(pet, data=request.data, partial=True, context={"request": request})

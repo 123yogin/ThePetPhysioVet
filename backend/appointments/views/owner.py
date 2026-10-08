@@ -26,7 +26,7 @@ from ..serializers import (
 )
 
 from ._shared import (
-    problem, reject_invalid_pet_photo, reject_oversized_upload, save_pet_photo,
+    problem, reject_invalid_pet_photo, upload_preflight, save_pet_photo,
     upload_storage_guard,
 )
 
@@ -37,7 +37,7 @@ def owner_pets_view(request):
         pets = Pet.objects.filter(owner=request.user).select_related("doctor").order_by("-created_at")
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
-    rejected = reject_oversized_upload(request) or reject_invalid_pet_photo(request)
+    rejected = upload_preflight(request) or reject_invalid_pet_photo(request)
     if rejected:
         return rejected
     data = request.data.copy()
@@ -134,9 +134,9 @@ def owner_pet_diagnoses_view(request, pk):
             ).data
         )
 
-    too_large = reject_oversized_upload(request)
-    if too_large:
-        return too_large
+    rejected = upload_preflight(request)
+    if rejected:
+        return rejected
     serializer = DiagnosticReportSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     with upload_storage_guard(request, "diagnostic report"), transaction.atomic():

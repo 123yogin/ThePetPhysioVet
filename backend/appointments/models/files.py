@@ -1,4 +1,4 @@
-"""Uploaded file bytes, stored in Postgres.
+"""Uploaded file bytes, stored in Postgres, and the storage names they get.
 
 Production runs on Vercel serverless, where the filesystem is read-only, and
 the owner chose to keep uploads in the Neon database rather than add an object
@@ -6,23 +6,59 @@ store. `appointments.storage.DatabaseStorage` reads and writes this table; the
 FileFields on DiagnosticReport, QueryAttachment and Pet hold the `name` key.
 
 Every byte here counts against Neon's storage quota (1 GB on the free plan),
-so the upload routes cap files at 4 MB and deleting a record deletes its row
-(see appointments/signals.py).
+so the upload routes cap files at 4 MB, rate-limit uploads, give each owner a
+byte quota (summed over `uploaded_by`), refuse uploads once the table nears a
+global ceiling, and delete a record's bytes when the record is deleted (see
+appointments/views/_shared.py and appointments/signals.py).
 """
+import os
+import re
 import uuid
 
 from django.db import models
 
+_SAFE_EXT = re.compile(r"\.[a-z0-9]{1,8}")
+
+
+def _random_name(prefix, filename):
+    """`<prefix>/<uuid4 hex><ext>`. The client's filename never reaches the
+    storage key (it is kept only in `original_filename` for display), so a
+    name is never reused after a delete and cannot be guessed or traversed."""
+    ext = os.path.splitext(filename or "")[1].lower()
+    if not _SAFE_EXT.fullmatch(ext):
+        ext = ""
+    return f"{prefix}/{uuid.uuid4().hex}{ext}"
+
+
+# Module-level functions (not lambdas/closures) so migrations can reference them.
+def diagnostic_report_upload_to(instance, filename):
+    return _random_name("diagnostic_reports", filename)
+
+
+def pet_photo_upload_to(instance, filename):
+    return _random_name("pets", filename)
+
+
+def query_attachment_upload_to(instance, filename):
+    return _random_name("query_attachments", filename)
+
 
 class StoredFile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # The storage key, e.g. "diagnostic_reports/scan_a1b2c3.png". Uniqueness is
+    # The storage key, e.g. "diagnostic_reports/9f1c...e2.png". Uniqueness is
     # enforced here, not by a prior exists() check, so two concurrent uploads
-    # of the same filename cannot overwrite each other.
+    # cannot overwrite each other.
     name = models.CharField(max_length=255, unique=True)
     content = models.BinaryField()
     size = models.PositiveIntegerField(default=0)
     content_type = models.CharField(max_length=100, blank=True, default="")
+    # Who uploaded it, for the per-owner byte quota. Nullable: files written
+    # outside a request (admin, shell) have no uploader, and deleting an
+    # account must not delete clinical records' bytes.
+    uploaded_by = models.ForeignKey(
+        "appointments.UserProfile", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="stored_files",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -20,7 +20,13 @@ defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any 
 > larger at its edge with a plain 413 that never reaches Django, so a larger cap would
 > only produce unexplained failures. 4 MB of file plus multipart overhead stays under the
 > limit, and the API's own 400 "File is too large (max 4 MB)." is what users see. Raising
-> it means moving uploads off the function (e.g. direct-to-object-store). The Coolify/Docker
+> it means moving uploads off the function (e.g. direct-to-object-store). **Abuse
+> limits:** 30 uploads/hour/user, 60/hour/IP, 100 MB per owner account (doctors exempt),
+> 10 signups/hour/IP, and a global ceiling — set `FILE_STORAGE_MAX_MB` (default 700) to
+> refuse uploads with a 503 before Neon's 1 GB fills; the server logs an error each time
+> it triggers. These counters need the shared cache (`REDIS_URL` or the database cache),
+> not per-process memory. Uploads are never served by path: there is no `/media/` route
+> in Django or nginx, only the signed `GET /api/v1/files/<token>`. The Coolify/Docker
 > topology below still uses the filesystem (`media_data` volume) unless you set
 > `FILE_STORAGE=db`.
 
@@ -139,8 +145,9 @@ postgres service.
 file to **`docker-compose.coolify.yml`**.
 
 - Enable **Connect to Predefined Network** so the app can reach the managed database.
-- Assign the domain/IP to the **frontend** service, **port 80**. nginx proxies `/api` and
-  `/media` internally, so the app is same-origin and needs no Traefik path rules.
+- Assign the domain/IP to the **frontend** service, **port 80**. nginx proxies `/api`
+  internally, so the app is same-origin and needs no Traefik path rules. (It no longer
+  serves `/media/`; uploads go through the signed `/api/v1/files/<token>` route.)
 
 Environment variables (set in the Coolify UI — **never** commit these):
 
@@ -276,7 +283,7 @@ POST /api/v1/auth/login           200   same-origin proxy works
 POST  (wrong password)            401
 GET  /api/v1/dashboard/stats      real aggregates from Postgres
 POST /owner/pets/1/history 5000ch 400   (SQLite hid this; Postgres would 500)
-GET  /media/                      Content-Disposition: attachment present
+GET  /media/                      Content-Disposition: attachment present (route removed 2026-10-08; now 404)
 manage.py test appointments       191/191
 manage.py check --deploy          0 warnings (with HTTPS env vars set)
 ```

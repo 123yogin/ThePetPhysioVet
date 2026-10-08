@@ -75,7 +75,9 @@ class DatabaseStorageUnitTests(TestCase):
         self.assertTrue(url.startswith("/api/v1/files/"), url)
         token = url.rsplit("/", 1)[1]
         signer = signing.TimestampSigner(salt=FILE_TOKEN_SALT)
-        self.assertEqual(signer.unsign_object(token, max_age=900), name)
+        # Bound to the row as well as the name (security review, 2026-10-08).
+        row_id = StoredFile.objects.get(name=name).id.hex
+        self.assertEqual(signer.unsign_object(token, max_age=900), [name, row_id])
 
 
 class StorageSelectionTests(SimpleTestCase):
@@ -156,14 +158,16 @@ class DiagnosisUploadAndDownloadTests(ApiTestCase):
     def test_token_for_deleted_file_is_404(self):
         r = self._post(upload("scan.png"))
         url = r.data["file_url"]
-        self.client.delete(f"{API}/diagnoses/{r.data['id']}")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f"{API}/diagnoses/{r.data['id']}")
         res = self.anon().get(url)
         self.assertEqual(res.status_code, 404)
 
     def test_deleting_a_report_frees_its_bytes(self):
         r = self._post(upload("scan.png"))
         self.assertEqual(StoredFile.objects.count(), 1)
-        self.client.delete(f"{API}/diagnoses/{r.data['id']}")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f"{API}/diagnoses/{r.data['id']}")
         self.assertEqual(StoredFile.objects.count(), 0)
 
     def test_token_signed_with_another_salt_is_404(self):
@@ -175,6 +179,7 @@ class DiagnosisUploadAndDownloadTests(ApiTestCase):
     def test_unexpected_stored_type_served_as_octet_stream(self):
         StoredFile.objects.create(name="x/evil.html", content=b"<script>", size=8,
                                   content_type="text/html")
+        # file_token() binds to this row by looking it up.
         res = self.anon().get(f"{API}/files/{file_token('x/evil.html')}")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res["Content-Type"], "application/octet-stream")
@@ -272,8 +277,9 @@ class PetPhotoStorageTests(ApiTestCase):
 
     def test_replacing_a_photo_frees_the_old_bytes(self):
         self.auth(self.doctor)
-        self.client.patch(f"{API}/pets/{self.pet_a.id}", {"photo": upload("a.png")}, format="multipart")
-        self.client.patch(f"{API}/pets/{self.pet_a.id}", {"photo": upload("b.png")}, format="multipart")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.patch(f"{API}/pets/{self.pet_a.id}", {"photo": upload("a.png")}, format="multipart")
+            self.client.patch(f"{API}/pets/{self.pet_a.id}", {"photo": upload("b.png")}, format="multipart")
         self.assertEqual(StoredFile.objects.count(), 1)
         self.pet_a.refresh_from_db()
         self.assertTrue(StoredFile.objects.filter(name=self.pet_a.photo.name).exists())

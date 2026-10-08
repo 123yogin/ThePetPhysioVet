@@ -345,10 +345,37 @@ changed.
 `detail: "Upload storage unavailable, please try again."`, and nothing is left behind
 (the record and its file are written in one transaction).
 
+**Storage-exhaustion limits (security review, 2026-10-08).** Uploaded bytes share the
+database with every clinical record, so every upload route (any request carrying a file)
+is also subject to, in this order:
+- **Rate limits:** 30 upload requests per user per hour and 60 per client IP per hour →
+  `429` problem+json. Requests without files are not counted.
+- **Per-owner quota:** an OWNER account may hold at most 100 MB of uploads in total
+  (summed over `StoredFile.uploaded_by`) → `400` problem+json
+  `"Upload limit reached for your account (100 MB). Please contact the clinic."`.
+  Doctors are exempt.
+- **Global ceiling:** once total stored upload bytes would exceed `FILE_STORAGE_MAX_MB`
+  (default 700 MB) → `503` problem+json
+  `"File storage is nearly full — please contact the clinic."`.
+
+Quota and ceiling are soft under concurrency (parallel uploads can overshoot by one
+request each). `POST /auth/signup` is limited to 10 per client IP per hour (`429`) so the
+per-owner quota cannot be multiplied with throwaway accounts.
+
+**Storage names.** Uploads are stored under random names —
+`diagnostic_reports/<uuid32><ext>`, `query_attachments/<uuid32><ext>`,
+`pets/<uuid32><ext>` — never the client's filename, which is kept only in
+`original_filename` for display. A name is never reused after a delete.
+
+**There is no `/media/` route.** Neither Django nor the nginx container serves uploads by
+path any more (both returned files to anyone holding the URL); `/media/...` is a 404.
+
 **Download links.** `Diagnosis.file_url`, `QueryAttachment.url` and `Pet.photo` are
 absolute URLs of the form `/api/v1/files/<token>`. The token is a Django
-`TimestampSigner` signature (salt `file-access`) over the storage name, **valid 15
-minutes**; it is only rendered to callers already authorised to see the parent record
+`TimestampSigner` signature (salt `file-access`) over `[storage name, StoredFile id]`
+(database storage; the id is `null` for local filesystem storage), **valid 15 minutes**.
+A token stops working when its row is deleted, even if the name were ever stored again.
+The route is rate limited to 300 requests per client IP per hour (`429`); it is only rendered to callers already authorised to see the parent record
 (rule 4), so holding it is the grant — which is what lets a plain `<a href>`/`<img src>`
 open it. A forged, expired, or dangling token is the standard `404` problem. The response
 carries the stored content type (anything outside the upload allow-list is sent as
@@ -711,6 +738,8 @@ provider are supplied via env/OCI Vault at deploy time.
 (`VERCEL` is set) — stores uploaded bytes in the `StoredFile` table
 (`appointments/storage.py` `DatabaseStorage`); otherwise `FileSystemStorage` under
 `MEDIA_ROOT`. Any other `FILE_STORAGE` value raises `ImproperlyConfigured` at startup.
+`FILE_STORAGE_MAX_MB` (default `700`, positive integer, else `ImproperlyConfigured`) is
+the global ceiling on stored upload bytes.
 
 **Production headers (added after QA round 1).** Behind `if not DEBUG:` set
 `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`,

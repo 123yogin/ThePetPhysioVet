@@ -9,45 +9,106 @@ than add an object store, so `DatabaseStorage` writes the bytes to the
 running on Vercel; local dev keeps FileSystemStorage unless told otherwise.
 
 Downloads go through `GET /api/v1/files/<token>` (views/files.py). The token is
-a 15-minute TimestampSigner signature over the storage name. Serializers only
-emit it to callers already authorised to see the parent record, so the token
-itself is the capability -- which is what lets a plain `<a href>` / `<img src>`
-work without a bearer header.
+a 15-minute TimestampSigner signature (salt "file-access") over
+`[storage name, StoredFile id]`. Serializers only emit it to callers already
+authorised to see the parent record, so the token itself is the capability --
+which is what lets a plain `<a href>` / `<img src>` work without a bearer
+header.
+
+Binding to the row id as well as the name means a token outlives neither its
+row nor a later row that happens to reuse the name. Uploads get random UUID
+names (models/files.py), and the row id of such a file *is* that UUID, so
+issuing a token costs no query; any other name (legacy or written outside an
+upload) is looked up. FileSystemStorage has no rows, so its tokens carry the
+name only -- UUID names already make those unguessable and never reused.
 """
+import contextvars
 import mimetypes
 import os
+import re
+import uuid
+from contextlib import contextmanager
 
 from django.core import signing
 from django.core.files.base import ContentFile
-from django.core.files.storage import Storage
+from django.core.files.storage import Storage, default_storage
 from django.db import IntegrityError, transaction
 from django.utils.deconstruct import deconstructible
 
 FILE_TOKEN_SALT = "file-access"
 FILE_TOKEN_MAX_AGE = 15 * 60  # seconds
 
-# Concurrent uploads of the same filename both pass get_available_name()'s
-# exists() check; the unique constraint then rejects the loser, which retries
-# under a fresh random suffix. A handful of attempts is plenty.
+# Concurrent saves under one name both pass get_available_name()'s exists()
+# check; the unique constraint then rejects the loser, which retries under a
+# fresh random suffix. A handful of attempts is plenty.
 _SAVE_ATTEMPTS = 5
+
+_UUID_BASENAME = re.compile(r"([0-9a-f]{32})(\.[a-z0-9]{1,8})?")
+
+# Who is uploading, for StoredFile.uploaded_by (the per-owner quota). Set by
+# views/_shared.py `upload_storage_guard`; storages have no request.
+_current_uploader = contextvars.ContextVar("file_uploader", default=None)
+
+
+@contextmanager
+def attribute_uploads_to(user):
+    token = _current_uploader.set(user if getattr(user, "pk", None) else None)
+    try:
+        yield
+    finally:
+        _current_uploader.reset(token)
+
+
+def delete_on_commit(storage, name):
+    """Delete `name` from `storage` once the surrounding transaction commits.
+
+    A delete that rolls back must keep its file: for FileSystemStorage the
+    unlink is not transactional, and for DatabaseStorage deferring keeps the
+    same rule in one place. Runs immediately when no transaction is open.
+    """
+    if not name:
+        return
+
+    def _delete():
+        try:
+            storage.delete(name)
+        except Exception:  # noqa: BLE001 -- a failed cleanup must not fail the request
+            import logging
+            logging.getLogger(__name__).exception("could not delete stored file after commit")
+
+    transaction.on_commit(_delete)
 
 
 def _signer():
     return signing.TimestampSigner(salt=FILE_TOKEN_SALT)
 
 
-def file_token(name):
-    """Signed, timestamped token naming one stored file."""
-    return _signer().sign_object(name)
+def _uuid_from_name(name):
+    match = _UUID_BASENAME.fullmatch(os.path.basename(name or ""))
+    return uuid.UUID(match.group(1)) if match else None
 
 
-def name_from_token(token):
-    """The storage name inside `token`, or None if it is forged or expired."""
+def file_token(name, storage=None):
+    """Signed, timestamped token naming one stored file (and its row)."""
+    storage = storage or default_storage
+    row_id = storage.row_id(name) if hasattr(storage, "row_id") else None
+    return _signer().sign_object([name, row_id.hex if row_id else None])
+
+
+def parse_file_token(token):
+    """`(name, row_id_hex_or_None)` from `token`, or None if forged/expired."""
     try:
-        name = _signer().unsign_object(token, max_age=FILE_TOKEN_MAX_AGE)
+        payload = _signer().unsign_object(token, max_age=FILE_TOKEN_MAX_AGE)
     except (signing.BadSignature, ValueError):
         return None
-    return name if isinstance(name, str) and name else None
+    if not (isinstance(payload, list) and len(payload) == 2):
+        return None
+    name, row_id = payload
+    if not (isinstance(name, str) and name):
+        return None
+    if row_id is not None and not isinstance(row_id, str):
+        return None
+    return name, row_id
 
 
 # Spelled out rather than reverse()d: the app's routes are mounted at both
@@ -55,8 +116,8 @@ def name_from_token(token):
 FILE_DOWNLOAD_PREFIX = "/api/v1/files/"
 
 
-def signed_file_path(name):
-    return f"{FILE_DOWNLOAD_PREFIX}{file_token(name)}"
+def signed_file_path(name, storage=None):
+    return f"{FILE_DOWNLOAD_PREFIX}{file_token(name, storage)}"
 
 
 def signed_file_url(field_file, request=None):
@@ -67,7 +128,7 @@ def signed_file_url(field_file, request=None):
     """
     if not field_file:
         return None
-    path = signed_file_path(field_file.name)
+    path = signed_file_path(field_file.name, field_file.storage)
     return request.build_absolute_uri(path) if request else path
 
 
@@ -92,12 +153,17 @@ class DatabaseStorage(Storage):
             content.seek(0)
         data = b"".join(content.chunks()) if hasattr(content, "chunks") else content.read()
         content_type = getattr(content, "content_type", None) or _guess_type(name)
+        uploader = _current_uploader.get()
         for attempt in range(_SAVE_ATTEMPTS):
             try:
                 with transaction.atomic():
                     StoredFile.objects.create(
+                        # A UUID-named upload's row id is that UUID, so its
+                        # token can be issued without a lookup (row_id()).
+                        id=_uuid_from_name(name) or uuid.uuid4(),
                         name=name, content=data, size=len(data),
                         content_type=content_type[:100],
+                        uploaded_by=uploader,
                     )
                 return name
             except IntegrityError:
@@ -112,19 +178,37 @@ class DatabaseStorage(Storage):
         root, ext = os.path.splitext(file_name)
         return os.path.join(dir_name, root), ext
 
-    def _open(self, name, mode="rb"):
-        if "w" in mode or "a" in mode or "+" in mode:
-            raise ValueError("DatabaseStorage files are read-only once saved.")
+    def row_id(self, name):
+        """The StoredFile id for `name` (None if there is no such row)."""
+        derived = _uuid_from_name(name)
+        if derived is not None:
+            return derived
+        return self._model().objects.filter(name=name).values_list("id", flat=True).first()
+
+    def _row(self, **lookup):
         row = (
-            self._model().objects.filter(name=name)
+            self._model().objects.filter(**lookup)
             .values_list("content", "content_type").first()
         )
         if row is None:
-            raise FileNotFoundError(name)
+            raise FileNotFoundError(lookup.get("name"))
         content, content_type = row
-        f = ContentFile(bytes(content), name=name)
-        f.content_type = content_type or _guess_type(name)
+        f = ContentFile(bytes(content), name=lookup["name"])
+        f.content_type = content_type or _guess_type(lookup["name"])
         return f
+
+    def _open(self, name, mode="rb"):
+        if "w" in mode or "a" in mode or "+" in mode:
+            raise ValueError("DatabaseStorage files are read-only once saved.")
+        return self._row(name=name)
+
+    def open_bound(self, name, row_id):
+        """Open `name` only if it is still the row the token was issued for."""
+        try:
+            pk = uuid.UUID(row_id)
+        except (TypeError, ValueError):
+            raise FileNotFoundError(name)
+        return self._row(name=name, id=pk)
 
     def exists(self, name):
         return self._model().objects.filter(name=name).exists()
@@ -140,4 +224,4 @@ class DatabaseStorage(Storage):
         return size
 
     def url(self, name):
-        return signed_file_path(name)
+        return signed_file_path(name, self)

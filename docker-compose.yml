@@ -47,8 +47,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
       # Uploaded diagnostic reports / query attachments must survive
-      # container restarts/recreates, and must be readable by nginx
-      # (mounted read-only there) so it can serve /media directly.
+      # container restarts/recreates. Only Django reads them; they are served
+      # solely via the signed /api/v1/files/<token> route.
       - media_data:/app/media
     expose:
       - "8000"
@@ -71,8 +71,8 @@ services:
         condition: service_healthy
     ports:
       - "${HTTP_PORT:-8080}:80"
-    volumes:
-      - media_data:/media:ro
+    # No media volume: nginx no longer serves uploads (signed /api/v1/files/
+    # route only, see frontend/nginx.conf).
     networks:
       - petphysio
 

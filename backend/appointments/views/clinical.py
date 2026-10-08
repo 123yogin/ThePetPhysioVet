@@ -23,7 +23,7 @@ from ..serializers import (
 )
 from .. import rehab
 
-from ._shared import _doctor_scoped, reject_oversized_upload, upload_storage_guard
+from ._shared import _doctor_scoped, upload_preflight, upload_storage_guard
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
@@ -36,9 +36,9 @@ def pet_diagnoses_view(request, pk):
             DiagnosticReportSerializer(reports, many=True, context={"request": request}).data
         )
 
-    too_large = reject_oversized_upload(request)
-    if too_large:
-        return too_large
+    rejected = upload_preflight(request)
+    if rejected:
+        return rejected
     serializer = DiagnosticReportSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     with upload_storage_guard(request, "diagnostic report"), transaction.atomic():

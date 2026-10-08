@@ -10,6 +10,8 @@ import uuid
 
 from django.db import models
 
+from .files import pet_photo_upload_to
+
 
 class Pet(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -31,7 +33,7 @@ class Pet(models.Model):
     age = models.CharField(max_length=50, blank=True, default="")
     sex = models.CharField(max_length=20, blank=True, default="Male")
     weight = models.CharField(max_length=20, blank=True, default="")
-    photo = models.ImageField(upload_to="pets/", null=True, blank=True)
+    photo = models.ImageField(upload_to=pet_photo_upload_to, null=True, blank=True)
     owner_name = models.CharField(max_length=150)
     owner_phone = models.CharField(max_length=50)
     owner_email = models.EmailField(blank=True, default="")

@@ -3,26 +3,20 @@
 Django never deletes a FileField's file on model delete. With uploads in
 Postgres (appointments/storage.py) every orphan counts against Neon's storage
 quota, so the owning rows clean up after themselves -- including cascades
-(deleting a Pet removes its reports and their files).
+(deleting a Pet removes its reports and their files). Deletion runs on
+commit, so a rolled-back delete never loses the file.
 """
-import logging
-
-from django.db import DatabaseError
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
 from .models import DiagnosticReport, Pet, QueryAttachment
-
-logger = logging.getLogger(__name__)
+from .storage import delete_on_commit
 
 
 def _delete_file(field_file):
-    if not field_file or not field_file.name:
-        return
-    try:
-        field_file.storage.delete(field_file.name)
-    except (OSError, DatabaseError):
-        logger.exception("could not delete stored file for a deleted record")
+    # Deferred to commit: a delete that rolls back must keep its file.
+    if field_file and field_file.name:
+        delete_on_commit(field_file.storage, field_file.name)
 
 
 @receiver(post_delete, sender=DiagnosticReport)

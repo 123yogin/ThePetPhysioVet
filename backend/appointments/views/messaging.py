@@ -24,7 +24,7 @@ from ..serializers import (
 )
 
 from ._shared import (
-    _doctor_scoped, problem, reject_oversized_upload, upload_storage_guard,
+    _doctor_scoped, problem, upload_preflight, upload_storage_guard,
 )
 
 MAX_QUERY_ATTACHMENTS = 5
@@ -35,9 +35,9 @@ def _create_query_message(request, thread, sender_role):
     if not message_text:
         return problem(400, "message is required.")
 
-    too_large = reject_oversized_upload(request)
-    if too_large:
-        return too_large
+    rejected = upload_preflight(request)
+    if rejected:
+        return rejected
     files = request.FILES.getlist("attachments")
     if len(files) > MAX_QUERY_ATTACHMENTS:
         return problem(400, f"A maximum of {MAX_QUERY_ATTACHMENTS} attachments are allowed per message.")

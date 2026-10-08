@@ -405,7 +405,12 @@ through `GET /api/v1/files/<token>` — a 15-minute `TimestampSigner` token (sal
 record. **Uploads count against Neon's 1 GB free storage**: 4 MB cap per file on every
 upload route (below Vercel's 4.5 MB request-body limit, which 413s at the edge before
 Django runs), pet photos restricted to JPEG/PNG/WebP/HEIC, and `appointments/signals.py`
-deletes the bytes when the owning record is deleted.
+deletes the bytes on commit when the owning record is deleted. Abuse limits
+(`views/_shared.py::upload_preflight`): 30 uploads/h/user, 60/h/IP, 100 MB per owner
+(`StoredFile.uploaded_by`; doctors exempt), a global `FILE_STORAGE_MAX_MB` ceiling (default
+700) → 503, signup 10/h/IP, downloads 300/h/IP. Uploads get random UUID storage names, the
+download token is bound to the `StoredFile` row, and **there is no `/media/` route** in
+Django or nginx — never add one back.
 
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`

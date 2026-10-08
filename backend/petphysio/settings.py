@@ -230,6 +230,26 @@ def _default_storage_backend(environ):
     return "django.core.files.storage.FileSystemStorage"
 
 
+def _file_storage_max_bytes(environ):
+    """Global ceiling on stored upload bytes (sum of StoredFile.size).
+
+    Uploads share the Neon database with every clinical record; past this
+    point upload routes answer 503 "File storage is nearly full" instead of
+    letting the database hit its plan limit. Default 700 MB of the 1 GB free
+    tier leaves room for the records themselves.
+    """
+    raw = (environ.get("FILE_STORAGE_MAX_MB") or "700").strip()
+    try:
+        mb = int(raw)
+    except ValueError:
+        mb = 0
+    if mb <= 0:
+        raise ImproperlyConfigured(f"FILE_STORAGE_MAX_MB must be a positive integer, got {raw!r}.")
+    return mb * 1024 * 1024
+
+
+FILE_STORAGE_MAX_BYTES = _file_storage_max_bytes(os.environ)
+
 # Compressed + hashed filenames (cache-busting) with a manifest, gzip/br
 # pre-compression, and long-lived cache headers — the standard WhiteNoise
 # production storage backend. `default` (uploads) is chosen above; either way
