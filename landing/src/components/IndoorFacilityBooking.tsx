@@ -406,7 +406,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
           </div>
         </div>
         <div>
-          <label className={labelCls} htmlFor="brd-aadhaar">Aadhaar number * <span className="normal-case tracking-normal text-(--c-accent)">(required at check-in)</span></label>
+          <label className={labelCls} htmlFor="brd-aadhaar">Aadhaar number *</label>
           <input
             id="brd-aadhaar"
             inputMode="numeric"
@@ -415,8 +415,12 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
             onChange={(e) => set('aadhaar', e.target.value)}
             placeholder="12-digit Aadhaar"
             aria-invalid={aadhaarShowError || undefined}
-            aria-describedby={aadhaarShowError ? 'brd-aadhaar-err' : undefined}
+            aria-describedby={aadhaarShowError ? 'brd-aadhaar-help brd-aadhaar-err' : 'brd-aadhaar-help'}
+            aria-required="true"
           />
+          <p id="brd-aadhaar-help" className="text-xs text-(--c-body) mt-1">
+            Needed to confirm your booking; bring the card at check-in.
+          </p>
           {aadhaarShowError && (
             <p id="brd-aadhaar-err" className="text-xs text-[#b23b3b] mt-1">{aadhaarMsg}</p>
           )}

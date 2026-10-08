@@ -10,7 +10,7 @@ from rest_framework.validators import UniqueValidator
 
 from . import rehab
 from .storage import signed_file_url
-from .validators import normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
+from .validators import FUTURE_ONLY_MESSAGE, is_in_the_past, normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, RehabSession, ProgressNote, Invoice, LineItem, Payment, Package,
@@ -411,9 +411,9 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if self.instance is None:
             date = attrs.get("date")
             if date and date < timezone.localdate():
-                raise serializers.ValidationError(
-                    {"date": "That date has already passed. Choose today or a later date."}
-                )
+                raise serializers.ValidationError({"date": FUTURE_ONLY_MESSAGE})
+            if date and attrs.get("time") and is_in_the_past(date, attrs["time"]):
+                raise serializers.ValidationError({"time": FUTURE_ONLY_MESSAGE})
 
         # A second identical submission is almost always a double tap on a slow
         # connection, not a deliberate second booking: nothing in the product
@@ -1174,6 +1174,7 @@ class BoardingSerializer(serializers.ModelSerializer):
     pet_id = serializers.UUIDField(read_only=True)
     pet_link_status = serializers.SerializerMethodField()
     previous_reports = serializers.SerializerMethodField()
+    previous_reports_restricted = serializers.SerializerMethodField()
     # Staff see only the last four digits; the full number never leaves the server.
     aadhaar = serializers.SerializerMethodField()
 
@@ -1182,7 +1183,7 @@ class BoardingSerializer(serializers.ModelSerializer):
         fields = [
             "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
             "emergency_contact_name", "emergency_contact_phone",
-            "owner_id", "pet_id", "owner_verified", "owner_account", "pet_link_status", "previous_reports", "expires_at",
+            "owner_id", "pet_id", "owner_verified", "owner_account", "pet_link_status", "previous_reports", "previous_reports_restricted", "expires_at",
             "check_in", "check_out", "duration", "duration_label", "price",
             "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
             "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
@@ -1204,6 +1205,14 @@ class BoardingSerializer(serializers.ModelSerializer):
         if obj.pet_id:
             return "linked"
         return "owner_only" if obj.owner_id else "unlinked"
+
+    def get_previous_reports_restricted(self, obj):
+        """True only when a pet is linked but belongs to another doctor, so the
+        empty `previous_reports` means "not yours to see" rather than "none"."""
+        if not obj.pet_id:
+            return False
+        doctor = self.context.get("doctor")
+        return obj.pet.doctor_id is not None and (doctor is None or doctor.id != obj.pet.doctor_id)
 
     def get_previous_reports(self, obj):
         """The linked pet's diagnostic reports (same serializer as the pet page);

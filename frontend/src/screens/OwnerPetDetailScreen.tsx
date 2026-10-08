@@ -14,7 +14,8 @@ import { uploadSizeError, uploadErrorMessage } from '../lib/uploads';
 import { Spinner } from '../components/Spinner';
 import { PlanGrid } from '../components/rehab/PlanGrid';
 import { Icon, IconName } from '../components/Icon';
-import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
+import { PetAvatar } from '../components/PetAvatar';
+import { humanizeStatus, friendlyDate, REPORT_TYPES } from '../lib/labels';
 
 
 const TABS: { key: 'treatment' | 'messages' | 'about'; label: string; icon: IconName }[] = [
@@ -217,7 +218,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
               boxShadow: 'var(--shadow-glass)',
             }}
           >
-            {petEmoji(pet.species)}
+            <PetAvatar name={pet.name} species={pet.species} photo={pet.photo} size={72} radius={20} />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

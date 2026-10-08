@@ -299,3 +299,99 @@ Honest accounting, since this is the trade for never sleeping:
 - **Always:** verify backups actually reach the bucket. Do not trust the Test button alone.
 - **Watch:** Oracle changed free-tier terms twice without announcement. Keep off-platform
   backups so you can rebuild anywhere from a compose file plus a Postgres dump.
+
+---
+
+## SMS via Android gateway
+
+The clinic texts owners when a visit or boarding stay is confirmed, the day before a visit,
+and on the morning an overnight stay ends. Texts go out from an Android phone with the
+clinic's SIM, running the open-source **SMS Gateway for Android** by capcom6 (Apache-2.0,
+<https://github.com/capcom6/android-sms-gateway>, docs <https://docs.sms-gate.app>), in
+**Cloud mode**. The backend calls the gateway's Cloud API
+(`POST https://api.sms-gate.app/3rdparty/v1/messages`, HTTP Basic auth); the phone polls
+the Cloud server and sends the SMS itself.
+
+### 1. Set up the phone
+1. On a spare Android phone (Android 5+) with the clinic SIM, install the latest APK from
+   <https://github.com/capcom6/android-sms-gateway/releases> and grant **SEND_SMS**.
+2. Toggle **Cloud Server** on and tap **Online**. The Cloud Server section shows a
+   **username** and **password**: these are the gateway credentials.
+3. Keep the phone on charge and on Wi-Fi or data, and exempt the app from battery
+   optimisation. If the phone is offline, sends fail (`Gateway HTTP 503: phone offline…`) and
+   the gateway drops anything older than 24 h.
+
+### 2. Set Vercel environment variables — **Production environment only**
+Scope `SMS_GATEWAY_USERNAME`, `SMS_GATEWAY_PASSWORD` and `CRON_SECRET` to **Production**, not
+Preview/Development: every preview deployment of a branch would otherwise hold the clinic's
+gateway login. Even if they leak into a preview, the gateway is only switched on
+automatically when `VERCEL_ENV=production` (set by Vercel); other environments stay
+`disabled` unless `SMS_BACKEND` is set explicitly.
+
+| Variable | Value |
+| --- | --- |
+| `SMS_BACKEND` | `android_gateway` |
+| `SMS_GATEWAY_USERNAME` | from the app's Cloud Server section |
+| `SMS_GATEWAY_PASSWORD` | from the app's Cloud Server section |
+| `CRON_SECRET` | a random string of 16+ characters (e.g. `openssl rand -hex 24`). Vercel sends it as `Authorization: Bearer …` to the cron |
+| `SMS_DAILY_LIMIT` | optional, default `90` |
+| `SMS_PER_PHONE_DAILY_LIMIT` | optional, default `3` texts per number per day |
+| `SMS_ALLOWED_COUNTRY_CODES` | optional, default `+91`; comma-separated (e.g. `+91,+44`). Other numbers are recorded `SKIPPED_COUNTRY` |
+| `SMS_WEBHOOK_SIGNING_KEY` | optional; from the app's **Settings → Webhooks → Signing Key**, to enable delivery status |
+| `CLINIC_NAME` / `CLINIC_PHONE` | optional, default `Pet Physio Vet` / `+91 72840 73241` |
+| `SMS_GATEWAY_URL` | optional, default `https://api.sms-gate.app/3rdparty/v1` (must be https; change it only for a private gateway server) |
+
+If `SMS_BACKEND` is unset, SMS is on only when the credentials are present **and**
+`VERCEL_ENV=production`; otherwise it is **disabled** (each message recorded as
+`SKIPPED_DISABLED`).
+`SMS_BACKEND=android_gateway` without credentials stops the deploy at boot, by design.
+Redeploy after changing variables. Then open **SMS Reminders** in the staff app: the mode
+should read *Android gateway (live)*. Use **Send test SMS** to your own phone.
+
+**Cron:** `vercel.json` schedules `GET /api/v1/cron/sms-reminders` twice, at `30 3 * * *` and
+`30 4 * * *` (09:00 and 10:00 IST). The run is idempotent, so the second pass only sends what
+the first skipped, deferred or failed to send (e.g. the phone was briefly offline). On the
+Hobby plan each cron is daily-only and may fire any time within its hour. Vercel runs crons only on the production deployment. If a run reports
+`deferred` > 0 (phone offline), fix the phone and re-run it by hand:
+`curl -H "Authorization: Bearer $CRON_SECRET" https://thepetphysiovet.com/api/v1/cron/sms-reminders`.
+It is idempotent, so nobody is texted twice.
+
+**Delivery status (optional):** register the webhook once per event:
+```sh
+for ev in sms:sent sms:delivered sms:failed; do
+  curl -X POST -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD" -H "Content-Type: application/json" \
+    -d "{\"url\": \"https://thepetphysiovet.com/api/v1/sms/webhook\", \"event\": \"$ev\"}" \
+    https://api.sms-gate.app/3rdparty/v1/webhooks
+done
+```
+Requests are verified with the HMAC signing key. The endpoint returns 404 until
+`SMS_WEBHOOK_SIGNING_KEY` is set.
+
+### 3. TRAI limits (read before relying on this)
+- **An ordinary prepaid/postpaid SIM is capped at about 100 SMS a day.** The app stops at
+  `SMS_DAILY_LIMIT` (default 90, counted from texts accepted today, IST) and records the rest
+  as `SKIPPED_LIMIT`. Test SMS count too.
+- **Commercial SMS in India should come from a DLT-registered sender** (a 6-character
+  header and pre-approved templates). A personal SIM is not that. Operators can throttle or
+  block a SIM that looks like bulk business traffic. This setup is meant for low-volume
+  **transactional** texts only: confirmations and reminders for something the owner booked.
+  **Never add offers or promotions** to `backend/appointments/sms/templates.py`.
+- Owners who opted out on the SMS Reminders screen are never texted (`SKIPPED_OPTOUT`).
+- **Abuse limits:** reminders go only to visits a doctor booked, confirmed or moved (an owner
+  booking their own visit can never trigger a reminder); only `SMS_ALLOWED_COUNTRY_CODES`
+  are texted; one number gets at most `SMS_PER_PHONE_DAILY_LIMIT` texts a day. Visits booked
+  before this release have no doctor confirmation recorded, so they get **no reminder until a
+  doctor confirms, books or moves them**.
+
+### 4. Swapping to a DLT-registered provider later
+All sending goes through `send_sms()` in `backend/appointments/sms/service.py`. Idempotency,
+opt-out, the daily cap and the `SmsMessage` log are provider-independent. To switch:
+1. Register the clinic's entity, a header, and the five templates in
+   `sms/templates.py` on a DLT portal (Jio/Airtel/Vi/BSNL), using your provider's process.
+2. Add a backend class in `sms/backends.py` with `name` and
+   `send(to_e164, body, message_id, timeout) -> SendResult` (never raise; 5 s timeout), add it
+   to `BACKENDS`, and add its name to `SMS_BACKENDS` and its credential check in
+   `petphysio/settings.py`.
+3. Set `SMS_BACKEND` to the new name and raise `SMS_DAILY_LIMIT` to suit the plan. Nothing
+   else changes. If the provider has its own delivery callbacks, extend `sms/webhook.py`.
+

@@ -31,6 +31,10 @@ export interface FacilityBookingGroup {
 export interface FacilityBookingsResponse {
   results: FacilityBookingGroup[];
   pending_count: number;
+  /** Per-slot capacity and opening hours (HH:MM), from the backend's facility config. */
+  capacity?: number;
+  opens?: string;
+  closes?: string;
 }
 
 /** Shared key so the sidebar badge and the screen warm one cache entry. */
@@ -63,4 +67,10 @@ export async function updateFacilityBookingStatus(
     method: 'POST',
     data: { status },
   });
+}
+
+/** "9:30 AM" from "09:30". */
+export function clock12(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 }

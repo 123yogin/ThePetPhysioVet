@@ -6,7 +6,7 @@ import { fetchAppointmentOptions } from '../api/appointments';
 import { useFlash } from '../lib/flash';
 import { nextFreeSlot } from '../lib/dates';
 import { Icon } from '../components/Icon';
-import { humanizeStatus, friendlyDate } from '../lib/labels';
+import { humanizeStatus, friendlyDate, bookingWhen } from '../lib/labels';
 import { Enquiry } from '../lib/types';
 
 type StatusTab = 'NEW' | 'CONVERTED' | 'DISMISSED';
@@ -244,7 +244,7 @@ export const EnquiriesScreen: React.FC = () => {
         >
           <span>
             <Icon name="celebrate" size={14} /> Booked an appointment for <strong>{justConverted.petName}</strong>
-            {justConverted.date ? ` on ${friendlyDate(justConverted.date)}` : ''}.
+            {justConverted.date ? ` — ${bookingWhen(justConverted.date, justConverted.time)}` : ''}.
           </span>
           <div style={{ display: 'flex', gap: '8px' }}>
             {justConverted.appointmentId && (

@@ -39,6 +39,8 @@ from .views import (
     boarding_confirm_client_view,
     # Uploaded files
     file_download_view,
+    # SMS
+    sms_log_view, sms_test_view, cron_sms_reminders_view, sms_webhook_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -120,6 +122,13 @@ urlpatterns = [
     path("notifications", notifications_view, name="notifications"),
     path("notifications/mark-all-read", notifications_mark_all_read_view, name="notifications-mark-all-read"),
     path("notification-prefs", notification_prefs_view, name="notification-prefs"),
+
+    # --- SMS (appointments/sms/) ---
+    path("sms/log", sms_log_view, name="sms-log"),
+    path("sms/test", sms_test_view, name="sms-test"),
+    # Machine callers: Vercel Cron (Bearer CRON_SECRET) and the gateway (HMAC).
+    path("sms/webhook", sms_webhook_view, name="sms-webhook"),
+    path("cron/sms-reminders", cron_sms_reminders_view, name="cron-sms-reminders"),
 
     # --- Queries ---
     path("queries/inbox", queries_inbox_view, name="queries-inbox"),

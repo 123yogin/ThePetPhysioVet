@@ -419,7 +419,9 @@ const ClientMatch: React.FC<{
         </details>
       )}
       {reports && reports.length === 0 && status === 'linked' && (
-        <span className="page-sub" style={{ fontSize: '0.8rem' }}>No reports visible to you</span>
+        <span className="page-sub" style={{ fontSize: '0.8rem' }}>
+          {g.previous_reports_restricted ? 'No reports visible to you' : 'No previous reports'}
+        </span>
       )}
     </div>
   );

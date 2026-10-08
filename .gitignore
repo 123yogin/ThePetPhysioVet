@@ -49,3 +49,7 @@ dist/
 # Vite's dep cache. It was committed at the initial commit; its real home is
 # node_modules/.vite, and a root .vite/deps is a leftover from an older config.
 .vite/
+
+# Local dependency dirs, also when they are symlinks (worktrees)
+node_modules
+.venv

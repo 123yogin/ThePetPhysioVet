@@ -20,11 +20,17 @@ from ..models import (
     Appointment,
 )
 from ..permissions import IsDoctor
+from ..sms import triggers as sms_triggers
 from ..serializers import (
     AppointmentSerializer,
 )
 
+from ..validators import FUTURE_ONLY_MESSAGE, is_in_the_past, whatsapp_phone_digits
 from ._shared import _doctor_scoped, problem
+
+# Used in owner-facing share text when the doctor has not set a clinic name.
+DEFAULT_CLINIC_NAME = "The Pet Physio Vet"
+
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
@@ -51,7 +57,8 @@ def appointments_view(request):
 
     serializer = AppointmentSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    appt = serializer.save(doctor=request.user)
+    from django.utils import timezone
+    appt = serializer.save(doctor=request.user, confirmed_at=timezone.now(), confirmed_by=request.user)
     return Response(AppointmentSerializer(appt).data, status=status.HTTP_201_CREATED)
 
 
@@ -87,13 +94,17 @@ def appointment_reschedule_view(request, pk):
     time = request.data.get("time")
     if not date or not time:
         return problem(400, "date and time are required.")
+    if is_in_the_past(date, time):
+        return problem(400, FUTURE_ONLY_MESSAGE)
 
     appt.date = date
     appt.time = time
     appt.requested_date = None
     appt.requested_time = None
     appt.status = "Rescheduled"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
+    sms_triggers.appointment_moved(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
@@ -128,7 +139,9 @@ def appointment_confirm_view(request, pk):
             f"Appointment {appt.id} has status '{appt.status}', not 'Pending'.",
         )
     appt.status = "Confirmed"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
+    sms_triggers.appointment_confirmed(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
@@ -173,7 +186,9 @@ def appointment_reschedule_approve_view(request, pk):
     appt.requested_time = None
     appt.reschedule_reason = ""
     appt.status = "Confirmed"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
+    sms_triggers.appointment_moved(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
@@ -188,6 +203,7 @@ def appointment_reschedule_reject_view(request, pk):
     appt.requested_date = None
     appt.requested_time = None
     appt.status = "Confirmed"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
     return Response(AppointmentSerializer(appt).data)
 
@@ -197,13 +213,25 @@ def appointment_reschedule_reject_view(request, pk):
 def appointment_share_view(request, pk):
     # Follow-up L1 fix (2026-08-21) — see `_doctor_scoped`.
     appt = get_object_or_404(_doctor_scoped(Appointment, request), pk=pk)
-    message = (
-        f"Hi {appt.owner_name}, this is a reminder for {appt.pet_name}'s appointment "
-        f"on {appt.date.strftime('%d %b %Y')} at {appt.time.strftime('%I:%M %p')}."
-    )
-    digits = re.sub(r"\D", "", appt.owner_phone or "")
-    whatsapp_url = f"https://wa.me/{digits}?text={quote(message)}"
-    sms_url = f"sms:{appt.owner_phone}?body={quote(message)}"
+    clinic = (getattr(appt.doctor, "clinic_name", "") or "").strip() or DEFAULT_CLINIC_NAME
+    when = f"{appt.date.strftime('%d %b %Y')} at {appt.time.strftime('%I:%M %p')}"
+    if appt.status in ("Confirmed", "Rescheduled") and not is_in_the_past(appt.date, appt.time):
+        message = (
+            f"Hi {appt.owner_name}, {appt.pet_name}'s appointment at {clinic} "
+            f"is confirmed for {when}."
+        )
+    else:
+        message = (
+            f"Hi {appt.owner_name}, this is a reminder from {clinic} about "
+            f"{appt.pet_name}'s appointment on {when}."
+        )
+    # wa.me needs the country code (bare ten digits -> "invalid number");
+    # sms: gets E.164 so the dialler does not guess. Raw phone as last resort.
+    intl = whatsapp_phone_digits(appt.owner_phone)
+    wa_digits = intl or re.sub(r"\D", "", appt.owner_phone or "")
+    sms_target = f"+{intl}" if intl else (appt.owner_phone or "")
+    whatsapp_url = f"https://wa.me/{wa_digits}?text={quote(message)}"
+    sms_url = f"sms:{sms_target}?body={quote(message)}"
     return Response({
         "whatsapp_url": whatsapp_url,
         "sms_url": sms_url,

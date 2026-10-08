@@ -71,6 +71,26 @@ def phone_key(value):
     return digits
 
 
+def whatsapp_phone_digits(value):
+    """International digits (no "+") for wa.me / E.164 links. wa.me rejects a
+    bare ten-digit Indian number as "invalid", so a number without a country
+    code -- as almost every number in this clinic is stored -- gets 91. A
+    number already written with +CC (or 00CC) keeps its own code. Returns ""
+    for anything that is not a plausible phone."""
+    cleaned = _strip_separators(value or "")
+    if not _VALID.match(cleaned):
+        return ""
+    digits = cleaned.lstrip("+")
+    if cleaned.startswith("+"):
+        return digits
+    if digits.startswith("00"):
+        return digits[2:]
+    key = phone_key(cleaned)
+    if len(key) == 10:
+        return "91" + key
+    return digits
+
+
 # ---------------------------------------------------------------- Aadhaar ----
 #
 # The 12th digit of an Aadhaar number is a Verhoeff checksum of the first
@@ -126,3 +146,21 @@ def validate_aadhaar(value):
     if not is_valid_aadhaar(s):
         raise serializers.ValidationError(AADHAAR_MESSAGE)
     return s
+
+
+FUTURE_ONLY_MESSAGE = "Pick a date and time in the future."
+
+
+def is_in_the_past(date, time) -> bool:
+    """True when `date` + `time` (clinic-local, Asia/Kolkata) is before now.
+    Accepts date/time objects or ISO strings; unparseable input is not "past"
+    (other validation reports it)."""
+    import datetime
+    from django.utils import timezone
+    try:
+        d = date if isinstance(date, datetime.date) else datetime.date.fromisoformat(str(date))
+        t = time if isinstance(time, datetime.time) else datetime.time.fromisoformat(str(time))
+    except ValueError:
+        return False
+    when = timezone.make_aware(datetime.datetime.combine(d, t.replace(tzinfo=None)))
+    return when < timezone.now()

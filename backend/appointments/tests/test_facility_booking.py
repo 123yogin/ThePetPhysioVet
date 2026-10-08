@@ -107,6 +107,13 @@ class FacilityDoctorTests(ApiTestCase):
             "date": _tomorrow(), "slots": slots,
         }, format="json")
 
+    def test_the_list_reports_the_real_capacity_and_hours(self):
+        self.auth(self.doctor)
+        data = self.client.get(BOOK).data
+        self.assertEqual(data["capacity"], FACILITY_BEDS)
+        self.assertEqual(data["opens"], "09:30")
+        self.assertEqual(data["closes"], "13:30")
+
     def test_the_list_is_doctor_only(self):
         self.assertEqual(self.anon().get(BOOK).status_code, 401)
         self.auth(self.owner_a)
@@ -379,3 +386,47 @@ class FacilityStartedSlotTests(ApiTestCase):
         res = self._book([1], d="2026-10-07")
         self.assertEqual(res.status_code, 400)
         self.assertEqual(res.data["title"], "Date in the past")
+
+
+class FacilityCompleteGuardTests(ApiTestCase):
+    """QA r4: the doctor screen gained "Mark completed". The API already
+    accepted COMPLETED unconditionally -- it must only apply to a CONFIRMED
+    booking whose slot has started (clinic time, Asia/Kolkata)."""
+
+    def _row(self, day, slot, status="CONFIRMED", ref="PPV-DONE1"):
+        return FacilityBooking.objects.create(
+            reference=ref, date=day, slot=slot, status=status, bed_index=0,
+            pet_name="Rex", owner_name="Alice", owner_phone="9991110001",
+        )
+
+    def _complete(self, ref="PPV-DONE1"):
+        self.auth(self.doctor)
+        return self.client.post(f"{BOOK}/{ref}/status", {"status": "COMPLETED"}, format="json")
+
+    def test_confirmed_past_slot_can_be_completed(self):
+        self._row(date.today() - timedelta(days=1), 0)
+        res = self._complete()
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(FacilityBooking.objects.get(reference="PPV-DONE1").status, "COMPLETED")
+
+    def test_future_slot_cannot_be_completed(self):
+        self._row(date.today() + timedelta(days=1), 0)
+        res = self._complete()
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertEqual(FacilityBooking.objects.get(reference="PPV-DONE1").status, "CONFIRMED")
+
+    def test_slot_start_uses_clinic_time(self):
+        today = date(2026, 10, 8)
+        self._row(today, 0)  # 09:30 IST
+        ist = ZoneInfo("Asia/Kolkata")
+        before = datetime(2026, 10, 8, 9, 29, tzinfo=ist)
+        after = datetime(2026, 10, 8, 9, 31, tzinfo=ist)
+        with mock.patch("django.utils.timezone.now", return_value=before):
+            self.assertEqual(self._complete().status_code, 400)
+        with mock.patch("django.utils.timezone.now", return_value=after):
+            self.assertEqual(self._complete().status_code, 200)
+
+    def test_pending_booking_cannot_be_completed(self):
+        self._row(date.today() - timedelta(days=1), 0, status="PENDING")
+        res = self._complete()
+        self.assertEqual(res.status_code, 400, res.content)
