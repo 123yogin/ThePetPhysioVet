@@ -40,6 +40,13 @@ class Invoice(models.Model):
     )
     payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES, default="post_treatment")
     created_at = models.DateTimeField(auto_now_add=True)
+    # Voiding (2026-10-08). An issued invoice is never deleted -- the number
+    # sequence must stay gap-free for the accounts -- so a mistaken one is
+    # voided instead: it keeps its number and lines, takes no payments, owes
+    # nothing and is left out of revenue. Only an invoice with nothing paid can
+    # be voided (a paid one needs a refund, which this app does not do).
+    voided_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]
@@ -84,11 +91,19 @@ class Invoice(models.Model):
         return total
 
     @property
+    def is_void(self):
+        return self.voided_at is not None
+
+    @property
     def balance_due(self):
+        if self.is_void:
+            return Decimal("0.00")
         return self.total - self.amount_paid
 
     @property
     def payment_status(self):
+        if self.is_void:
+            return "VOID"
         total = self.total
         paid = self.amount_paid
         if total > 0 and paid >= total:

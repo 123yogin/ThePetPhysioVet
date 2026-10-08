@@ -7,6 +7,7 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -24,7 +25,10 @@ from ..serializers import (
     InvoiceSerializer, OwnerPetHistorySerializer,
 )
 
-from ._shared import problem
+from ._shared import (
+    problem, reject_invalid_pet_photo, upload_preflight, save_pet_photo,
+    upload_storage_guard,
+)
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsOwner])
@@ -33,6 +37,9 @@ def owner_pets_view(request):
         pets = Pet.objects.filter(owner=request.user).select_related("doctor").order_by("-created_at")
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
+    rejected = upload_preflight(request) or reject_invalid_pet_photo(request)
+    if rejected:
+        return rejected
     data = request.data.copy()
     if hasattr(data, "setdefault"):
         data.setdefault("owner_name", request.user.get_full_name() or request.user.username)
@@ -72,11 +79,13 @@ def owner_pets_view(request):
         .distinct()
     )
     inherited_doctor_id = existing_doctor_ids.pop() if len(existing_doctor_ids) == 1 else None
-    pet = serializer.save(owner=request.user, doctor_id=inherited_doctor_id)
-    photo = request.FILES.get("photo")
-    if photo:
-        pet.photo = photo
-        pet.save()
+    # Atomic so a photo that cannot be stored (503) leaves no pet behind for
+    # the retry to duplicate.
+    with transaction.atomic():
+        pet = serializer.save(owner=request.user, doctor_id=inherited_doctor_id)
+        photo = request.FILES.get("photo")
+        if photo:
+            save_pet_photo(request, pet, photo)
     return Response(
         PetSerializer(pet, context={"request": request}).data,
         status=status.HTTP_201_CREATED,
@@ -125,9 +134,13 @@ def owner_pet_diagnoses_view(request, pk):
             ).data
         )
 
+    rejected = upload_preflight(request)
+    if rejected:
+        return rejected
     serializer = DiagnosticReportSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    report = serializer.save(pet=pet)
+    with upload_storage_guard(request, "diagnostic report"), transaction.atomic():
+        report = serializer.save(pet=pet)
     return Response(
         DiagnosticReportSerializer(report, context={"request": request}).data,
         status=status.HTTP_201_CREATED,
@@ -252,24 +265,21 @@ def owner_invoices_view(request):
     return Response(InvoiceSerializer(invoices, many=True).data)
 
 
-def _norm_phone(value):
-    """Last ten digits of a phone, so "+91 98765 43210", "098765 43210" and
-    "9876543210" all compare equal. Bookings made on the public site are typed
-    by hand in every format; the owner's stored number is too."""
-    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
-    return digits[-10:] if len(digits) >= 10 else digits
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsOwner])
 def owner_bookings_view(request):
-    """Everything this owner started on the public site, gathered into their
-    own portal so a website booking is not a black box until the clinic calls.
+    """Website bookings that belong to this account, gathered into the portal.
 
-    Bookings are anonymous on the site (no login), so they are linked back to
-    the account by PHONE — the last ten digits of the number used at booking
-    matched against the owner's stored number. An account with no phone on file
-    cannot be matched, so it simply gets empty lists.
+    PRIVACY (live QA D1, 2026-10-08): this used to match bookings to the account
+    by PHONE. Website bookings are anonymous and signup does not verify a phone,
+    so anyone who registered with a client's number saw that client's bookings
+    -- pet, notes, services, price. Now only bookings EXPLICITLY linked to the
+    account are shown:
+      - made while signed in as this owner (owner FK set at create), or
+      - linked by the clinic: convert CREATED the account, or staff explicitly
+        pressed "Confirm client" (`owner_verified` on enquiries and stays).
+    An automatic phone match, or convert finding an EXISTING account by
+    phone/email, is a staff hint and is NOT enough.
 
     Three kinds, each in the inbox a doctor triages it from:
       - facility : Physiotherapy one-hour slots (grouped per reference)
@@ -277,20 +287,16 @@ def owner_bookings_view(request):
                    the reason)
       - boarding : Indoor-facility stays (dates, duration, price, status)
     """
-    mine = _norm_phone(request.user.phone)
-    if not mine:
-        return Response({"facility": [], "requests": [], "boarding": []})
+    me = request.user
 
     # Facility slots — real bookings only (a HELD row is a transient lock with
     # no details yet), grouped into one card per reference like the doctor sees.
     groups = {}
     for row in (
         FacilityBooking.objects
-        .filter(status__in=["PENDING", "CONFIRMED", "COMPLETED"])
+        .filter(owner=me, status__in=["PENDING", "CONFIRMED", "COMPLETED"])
         .order_by("date", "slot")
     ):
-        if _norm_phone(row.owner_phone) != mine:
-            continue
         g = groups.setdefault(row.reference, {
             "reference": row.reference,
             "date": row.date.isoformat(),
@@ -304,17 +310,14 @@ def owner_bookings_view(request):
 
     requests = [
         {
-            # Enquiries have no stored reference — the ENQ-XXXX shown to the
-            # owner is derived from the id, the same way the create view does it.
-            "reference": f"ENQ-{str(e.id)[:8].upper()}",
+            "reference": e.reference,
             "pet_name": e.pet_name,
             "service": e.service,
             "reason": e.reason,
             "status": e.status,
             "created_at": e.created_at.isoformat(),
         }
-        for e in Enquiry.objects.order_by("-created_at")
-        if _norm_phone(e.phone) == mine
+        for e in Enquiry.objects.filter(owner=me, owner_verified=True).order_by("-created_at")
     ]
 
     boarding = [
@@ -329,8 +332,12 @@ def owner_bookings_view(request):
             "status": b.status,
             "walk_times": b.walk_times or [],
         }
-        for b in BoardingBooking.objects.exclude(status="HELD").order_by("-created_at")
-        if _norm_phone(b.owner_phone) == mine
+        for b in (
+            BoardingBooking.objects
+            .filter(owner=me, owner_verified=True)
+            .exclude(status="HELD")
+            .order_by("-created_at")
+        )
     ]
 
     return Response({"facility": facility, "requests": requests, "boarding": boarding})

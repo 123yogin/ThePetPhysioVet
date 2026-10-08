@@ -18,9 +18,9 @@ from .views import (
     appointments_view, appointment_detail_view, appointment_reschedule_view,
     appointment_complete_view, appointment_reschedule_approve_view,
     appointment_reschedule_reject_view, appointment_share_view,
-    appointment_confirm_view, appointment_options_view,
+    appointment_confirm_view, appointment_cancel_view, appointment_options_view,
     # Billing
-    invoices_view, invoice_detail_view, invoice_payments_view, revenue_view,
+    invoices_view, invoice_detail_view, invoice_payments_view, invoice_void_view, revenue_view,
     # Notifications
     notifications_view, notifications_mark_all_read_view, notification_prefs_view,
     # Queries
@@ -31,11 +31,14 @@ from .views import (
     owner_appointment_cancel_view, owner_invoices_view, owner_invoice_detail_view,
     owner_pet_queries_view, owner_bookings_view,
     # Enquiries
-    enquiries_view, enquiry_convert_view, enquiry_dismiss_view,
+    enquiries_view, enquiry_convert_view, enquiry_dismiss_view, enquiry_confirm_client_view,
     facility_availability_view, facility_bookings_view, facility_booking_status_view,
     facility_hold_view, facility_confirm_view,
     boarding_availability_view, boarding_view, boarding_status_view, boarding_ending_soon_view,
     boarding_hold_view, boarding_hold_confirm_view, boarding_convert_view,
+    boarding_confirm_client_view,
+    # Uploaded files
+    file_download_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -62,6 +65,9 @@ urlpatterns = [
     path("pets/<uuid:pk>/diagnoses", pet_diagnoses_view, name="pet-diagnoses"),
     path("pets/<uuid:pk>/treatment-plans", pet_treatment_plans_view, name="pet-treatment-plans"),
     path("pets/<uuid:pk>/queries", pet_queries_view, name="pet-queries"),
+
+    # --- Uploaded files (signed, time-limited download) ---
+    path("files/<str:token>", file_download_view, name="file-download"),
 
     # --- Diagnostic reports ---
     path("diagnoses/<uuid:pk>", diagnostic_report_detail_view, name="diagnosis-detail"),
@@ -100,12 +106,14 @@ urlpatterns = [
     ),
     path("appointments/<uuid:pk>/share", appointment_share_view, name="appointment-share"),
     path("appointments/<uuid:pk>/confirm", appointment_confirm_view, name="appointment-confirm"),
+    path("appointments/<uuid:pk>/cancel", appointment_cancel_view, name="appointment-cancel"),
     path("appointment-options", appointment_options_view, name="appointment-options"),
 
     # --- Billing ---
     path("invoices", invoices_view, name="invoices"),
     path("invoices/<uuid:pk>", invoice_detail_view, name="invoice-detail"),
     path("invoices/<uuid:pk>/payments", invoice_payments_view, name="invoice-payments"),
+    path("invoices/<uuid:pk>/void", invoice_void_view, name="invoice-void"),
     path("revenue", revenue_view, name="revenue"),
 
     # --- Notifications ---
@@ -146,6 +154,7 @@ urlpatterns = [
     path("enquiries", enquiries_view, name="enquiries"),
     path("enquiries/<uuid:pk>/convert", enquiry_convert_view, name="enquiry-convert"),
     path("enquiries/<uuid:pk>/dismiss", enquiry_dismiss_view, name="enquiry-dismiss"),
+    path("enquiries/<uuid:pk>/confirm-client", enquiry_confirm_client_view, name="enquiry-confirm-client"),
     path("facility/availability", facility_availability_view, name="facility-availability"),
     path("facility/bookings", facility_bookings_view, name="facility-bookings"),
     path("facility/bookings/<str:reference>/status", facility_booking_status_view, name="facility-booking-status"),
@@ -157,5 +166,9 @@ urlpatterns = [
     path("facility/boarding/holds/<str:reference>/confirm", boarding_hold_confirm_view, name="boarding-hold-confirm"),
     path("facility/boarding", boarding_view, name="boarding"),
     path("facility/boarding/<str:reference>/convert", boarding_convert_view, name="boarding-convert"),
+    path(
+        "facility/boarding/<str:reference>/confirm-client",
+        boarding_confirm_client_view, name="boarding-confirm-client",
+    ),
     path("facility/boarding/<str:reference>/status", boarding_status_view, name="boarding-status"),
 ]

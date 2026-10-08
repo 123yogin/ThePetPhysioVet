@@ -269,6 +269,7 @@ endpoint; verified as a no-op against the (single-doctor) seed data.
 | POST | `/appointments/:id/reschedule` | `{date, time}` | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/complete` | | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/confirm` | | `Appointment` — **new, 2026-08-21 (G1)**, doctor-scoped |
+| POST | `/appointments/:id/cancel` | `{reason?}` | `Appointment` (`status: "Cancelled"`, `cancel_reason`) — **new, 2026-10-08 (live QA B1)**, doctor-scoped (404 for another practice's). 400 if already `Completed`/`Cancelled`. A past date is allowed (no-shows). Frees the slot. |
 | POST | `/appointments/:id/reschedule-approve` | | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/reschedule-reject` | | `Appointment` — doctor-scoped |
 | GET | `/appointments/:id/share` | | `{whatsapp_url, sms_url, pet_name, owner_name, owner_phone}` — doctor-scoped |
@@ -319,8 +320,69 @@ Moves `status: "Pending"` → `"Confirmed"`.
 | POST | `/pets/:id/diagnoses` | multipart `{file, report_type, notes?}` | `Diagnosis` — same scoping as `GET` |
 | DELETE | `/diagnoses/:id` | | 204 — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up: previously any doctor could delete another practice's diagnostic report by ID) |
 
-Validate upload: max 10 MB, allow `image/*` + `application/pdf` + `application/dicom`.
+Validate upload: max 4 MB (amended 2026-10-08, was 10 MB), allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
+
+### Uploaded files — amended 2026-10-08 (uploads stored in Postgres)
+| GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability** |
+
+**Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
+/owner/pets/:id/diagnoses`, `POST /pets/:id/queries`, `POST /owner/pets/:id/queries`,
+and the `photo` part of `POST /pets`, `PATCH /pets/:id`, `POST /owner/pets` reject any
+file over 4 MB (4 194 304 bytes) with `400` problem+json,
+`detail: "File is too large (max 4 MB)."`, before anything is created. 4 MB, not 10:
+production is Vercel serverless, which rejects any request body over ~4.5 MB at its edge
+(a bare 413 that never reaches Django), so the cap sits below that with room for multipart
+overhead. Content-type allow-list + magic-byte sniffing (§3 Auth amendment 5) are unchanged.
+
+**Pet photos are images only.** The `photo` part must be JPEG, PNG, WebP or HEIC/HEIF
+(`image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`), checked against
+its leading bytes; anything else is `400` problem+json,
+`detail: "Pet photo must be a JPEG, PNG, WebP or HEIC image."`, and no pet is created or
+changed.
+
+**Storage failures are a 503, never an HTML 500.** If the upload backend cannot write
+(read-only filesystem, database error), the route answers `503` problem+json,
+`detail: "Upload storage unavailable, please try again."`, and nothing is left behind
+(the record and its file are written in one transaction).
+
+**Storage-exhaustion limits (security review, 2026-10-08).** Uploaded bytes share the
+database with every clinical record, so every upload route (any request carrying a file)
+is also subject to, in this order:
+- **Rate limits:** 30 upload requests per user per hour and 60 per client IP per hour →
+  `429` problem+json. Requests without files are not counted.
+- **Per-owner quota:** an OWNER account may hold at most 100 MB of uploads in total
+  (summed over `StoredFile.uploaded_by`) → `400` problem+json
+  `"Upload limit reached for your account (100 MB). Please contact the clinic."`.
+  Doctors are exempt.
+- **Global ceiling:** once total stored upload bytes would exceed `FILE_STORAGE_MAX_MB`
+  (default 700 MB) → `503` problem+json
+  `"File storage is nearly full — please contact the clinic."`.
+
+Quota and ceiling are soft under concurrency (parallel uploads can overshoot by one
+request each). `POST /auth/signup` is limited to 10 per client IP per hour (`429`) so the
+per-owner quota cannot be multiplied with throwaway accounts.
+
+**Storage names.** Uploads are stored under random names —
+`diagnostic_reports/<uuid32><ext>`, `query_attachments/<uuid32><ext>`,
+`pets/<uuid32><ext>` — never the client's filename, which is kept only in
+`original_filename` for display. A name is never reused after a delete.
+
+**There is no `/media/` route.** Neither Django nor the nginx container serves uploads by
+path any more (both returned files to anyone holding the URL); `/media/...` is a 404.
+
+**Download links.** `Diagnosis.file_url`, `QueryAttachment.url` and `Pet.photo` are
+absolute URLs of the form `/api/v1/files/<token>`. The token is a Django
+`TimestampSigner` signature (salt `file-access`) over `[storage name, StoredFile id]`
+(database storage; the id is `null` for local filesystem storage), **valid 15 minutes**.
+A token stops working when its row is deleted, even if the name were ever stored again.
+The route is rate limited to 300 requests per client IP per hour (`429`); it is only rendered to callers already authorised to see the parent record
+(rule 4), so holding it is the grant — which is what lets a plain `<a href>`/`<img src>`
+open it. A forged, expired, or dangling token is the standard `404` problem. The response
+carries the stored content type (anything outside the upload allow-list is sent as
+`application/octet-stream`), `Content-Disposition: attachment; filename="..."`, and
+`X-Content-Type-Options: nosniff`. Clients must re-fetch the parent record for a fresh
+link rather than caching a URL.
 
 ### Treatment plans
 | GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
@@ -396,11 +458,30 @@ Convert: find-or-create owner (existing matched owner, else phone, else email; n
 password) and pet (by name under that owner), link both. Idempotent and serialised: a second call, or a stay already
 auto-linked to a pet, creates nothing. The owner-portal `GET /owner/bookings` excludes `HELD` rows.
 
+**Owner visibility (amended 2026-10-08, live QA D1 — privacy).** The automatic phone match above is a
+**staff hint only**: signup does not verify a phone, so it never makes a stay visible to the matched account.
+`Booking` JSON adds `owner_verified` (bool) and `owner_account` (`{id, name, email, phone}` of the linked
+account, or null — doctor routes only, so staff can check who it is). `owner_verified` is `true` only when the
+stay was created/confirmed with a valid OWNER bearer token, when `convert` **created** the owner account itself,
+or after staff call **`POST /facility/boarding/:ref/confirm-client`** (doctor; 400 when no account is linked;
+404 unknown/HELD; idempotent; returns the `Booking`). `convert` finding an EXISTING account by phone or email
+does **not** verify it (signup verifies neither). Enquiries follow the same rule: `Enquiry.owner` +
+`owner_verified` (+ `owner_account` on the doctor JSON); convert verifies only an owner it created; otherwise
+staff call **`POST /enquiries/:id/confirm-client`** (doctor; 400 until converted). `GET /owner/bookings` returns
+only facility bookings whose `owner` is the caller (signed-in create), and enquiries/stays with `owner = caller
+AND owner_verified`. Migration 0021 backfills converted enquiries only where convert created the owner account
+(unusable password, joined after the enquiry); others stay unlinked. Public responses are unchanged.
+
+**Lazy matching (2026-10-08, live QA B3).** `GET /facility/boarding` (doctor) re-runs the same match for active
+(`PENDING`/`CONFIRMED`/`CHECKED_IN`) stays with no owner and persists the result (unverified), so a client who
+signed up after booking is recognised. Ambiguous phones stay unlinked. Public routes are unaffected.
+
 ### Billing
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
 | POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |
 | GET | `/invoices/:id` | | `Invoice` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up: previously reachable by any doctor by ID) |
-| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID) |
+| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID). 400 on a voided invoice; the void and balance checks run under a row lock on the invoice (shared with `/void`), so a payment and a void cannot interleave. |
+| POST | `/invoices/:id/void` | `{reason?}` | `Invoice` with `payment_status: "VOID"`, `balance_due: 0`, `voided_at`, `void_reason` — **new, 2026-10-08 (live QA B7)**, doctor-scoped. Only an invoice with nothing paid (400 otherwise). Idempotent (repeat returns the voided invoice). The invoice keeps its number and lines; it is excluded from `/revenue` and owes nothing. |
 
 **Doctor-scoping and orphan invoices (amended 2026-08-21 — L1, extended to detail
 routes the same day).** `Invoice` has no direct `doctor` FK; doctor-scoping on
@@ -502,6 +583,10 @@ before it becomes a real patient/clinical record. `Enquiry` is a new model:
 `preferred_date` (nullable), `preferred_specialist` (blank-default), `status`
 (`NEW`/`CONVERTED`/`DISMISSED`), `created_at`, `converted_appointment` (nullable FK,
 set on conversion), `actioned_by`/`actioned_at` (audit trail for convert/dismiss).
+**Amended 2026-10-08 (live QA):** nullable `owner` FK (set when submitted with a valid OWNER bearer token, and
+by `convert` — never from the phone; it is what `GET /owner/bookings` reads), and the doctor JSON adds
+`reference` (`ENQ-XXXXXXXX`, derived from the id exactly as the create response shows it). Unknown `/api/*`
+paths now return a JSON `404` problem (`application/problem+json`) instead of Django's HTML page.
 UUID primary key, one plain `CreateModel` migration (`0002_enquiry`) — this project's
 migration chain was flattened to a single `0001_initial` on 2026-09-02 (see the
 breaking-change note at the top of this document) specifically so nothing here repeats
@@ -559,7 +644,8 @@ owner from `pet_name`/`species_breed` (case-insensitive name match against the
 owner's existing pets — never duplicates one), assigned to the converting doctor.
 `species` is a best-effort guess off `species_breed` (`"cat"`/`"dog"` substring match,
 default `"Dog"`); `species_breed` itself is stored verbatim in `breed`. Creates the
-`Appointment` as `Pending`, owned by the converting doctor, using the supplied
+`Appointment` as **`Confirmed`** (amended 2026-10-08, live QA B2 — was `Pending`; the doctor chose the
+date/time and pressed "Confirm & Book", so a second confirm step was redundant), owned by the converting doctor, using the supplied
 `date`/`time`/`visit_type` — `visit_type` is validated against
 `Appointment.VISIT_TYPES` (never a fourth hardcoded vocabulary; see the B1/B2 history
 above). Marks the enquiry `CONVERTED` and links `converted_appointment`. Wrapped in a
@@ -672,6 +758,13 @@ and their absence raises `ImproperlyConfigured` at startup — a silently no-op 
 a wrong SPA base URL would look like "reset email sent" while never reaching the user.
 No SMTP provider is configured or invented; `EMAIL_BACKEND`/credentials for a real
 provider are supplied via env/OCI Vault at deploy time.
+
+**Upload storage (added 2026-10-08).** `FILE_STORAGE=db` — or running on Vercel
+(`VERCEL` is set) — stores uploaded bytes in the `StoredFile` table
+(`appointments/storage.py` `DatabaseStorage`); otherwise `FileSystemStorage` under
+`MEDIA_ROOT`. Any other `FILE_STORAGE` value raises `ImproperlyConfigured` at startup.
+`FILE_STORAGE_MAX_MB` (default `700`, positive integer, else `ImproperlyConfigured`) is
+the global ceiling on stored upload bytes.
 
 **Production headers (added after QA round 1).** Behind `if not DEBUG:` set
 `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`,

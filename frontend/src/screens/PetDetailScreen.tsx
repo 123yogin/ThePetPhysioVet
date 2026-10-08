@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from '../components/ExternalLink';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,8 @@ import { PlanGrid } from '../components/rehab/PlanGrid';
 import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
+import { uploadSizeError, uploadErrorMessage } from '../lib/uploads';
+import { Spinner } from '../components/Spinner';
 import { Icon } from '../components/Icon';
 import { ProgressChart } from '../components/ProgressChart';
 import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
@@ -65,6 +67,11 @@ export const PetDetailScreen: React.FC = () => {
   const [creatingPlan, setCreatingPlan] = useState(false);
   const [builderKey, setBuilderKey] = useState(0);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  // null = automatic: the create card starts open only when the pet has no plans yet.
+  const [createOpen, setCreateOpen] = useState<boolean | null>(null);
+  const createHeadingRef = useRef<HTMLHeadingElement>(null);
+  const newPlanButtonRef = useRef<HTMLButtonElement>(null);
+  const pendingCreateFocus = useRef<'heading' | 'button' | null>(null);
 
   const [noteTextByPlan, setNoteTextByPlan] = useState<Record<string, string>>({});
   const [savingNotePlanId, setSavingNotePlanId] = useState<string | null>(null);
@@ -113,6 +120,8 @@ export const PetDetailScreen: React.FC = () => {
   const handleUploadDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!diagFile) return addFlash('Please select an image/radiograph file', 'error');
+    const tooLarge = uploadSizeError(diagFile);
+    if (tooLarge) return addFlash(tooLarge, 'error');
     const formData = new FormData();
     formData.append('report_type', diagType);
     formData.append('notes', diagNotes);
@@ -125,8 +134,8 @@ export const PetDetailScreen: React.FC = () => {
       setDiagNotes('');
       setDiagFile(null);
       refetchDiagnoses();
-    } catch (err: any) {
-      addFlash(err.message || 'Failed to upload report', 'error');
+    } catch (err: unknown) {
+      addFlash(uploadErrorMessage(err, 'Failed to upload report'), 'error');
     } finally {
       setUploadingDiagnosis(false);
     }
@@ -151,12 +160,28 @@ export const PetDetailScreen: React.FC = () => {
     }
   };
 
+  const createExpanded = createOpen ?? (treatmentPlans !== undefined && treatmentPlans.length === 0);
+  const hasPlans = (treatmentPlans?.length ?? 0) > 0;
+  const toggleCreate = (open: boolean) => {
+    setCreateOpen(open);
+    pendingCreateFocus.current = open ? 'heading' : 'button';
+  };
+  // Move focus to whatever replaced the control the user just activated.
+  useEffect(() => {
+    const target = pendingCreateFocus.current;
+    pendingCreateFocus.current = null;
+    if (target === 'heading') createHeadingRef.current?.focus();
+    if (target === 'button') newPlanButtonRef.current?.focus();
+  }, [createExpanded]);
+
   const handleCreatePlan = async (payload: TreatmentPlanInput) => {
     setCreatingPlan(true);
     try {
       await createTreatmentPlan(petId, payload);
       addFlash('Treatment plan created', 'success');
       setBuilderKey((k) => k + 1);
+      setCreateOpen(false);
+      pendingCreateFocus.current = 'button';
       refetchPlans();
     } catch (err: any) {
       addFlash(err.message || 'Failed to create plan', 'error');
@@ -354,7 +379,17 @@ export const PetDetailScreen: React.FC = () => {
                   <input
                     type="file"
                     className="input-glass"
-                    onChange={(e) => setDiagFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      const tooLarge = uploadSizeError(file);
+                      if (tooLarge) {
+                        addFlash(tooLarge, 'error');
+                        e.target.value = '';
+                        setDiagFile(null);
+                        return;
+                      }
+                      setDiagFile(file);
+                    }}
                     disabled={uploadingDiagnosis}
                   />
                 </div>
@@ -370,7 +405,14 @@ export const PetDetailScreen: React.FC = () => {
                   disabled={uploadingDiagnosis}
                 />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={uploadingDiagnosis}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={uploadingDiagnosis}
+                aria-busy={uploadingDiagnosis}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                {uploadingDiagnosis && <Spinner />}
                 {uploadingDiagnosis ? 'Uploading…' : 'Upload Report'}
               </button>
             </form>
@@ -445,10 +487,32 @@ export const PetDetailScreen: React.FC = () => {
       {/* Treatment Tab */}
       {activeTab === 'treatment' && (
         <div>
-          <div className="glass-card" style={{ marginBottom: '24px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Create New Physical Therapy Plan</h3>
-            <PlanBuilder key={builderKey} submitting={creatingPlan} submitLabel="Save Treatment Plan" onSubmit={handleCreatePlan} />
-          </div>
+          {/* Wait for the plan list so the card doesn't flash collapsed, then open. */}
+          {treatmentPlans === undefined && !plansError ? null : createExpanded ? (
+            <div className="glass-card" style={{ marginBottom: '24px' }}>
+              <div className="pb-card-head">
+                <h3 ref={createHeadingRef} tabIndex={-1}>Create New Physical Therapy Plan</h3>
+              </div>
+              <PlanBuilder
+                key={builderKey}
+                submitting={creatingPlan}
+                submitLabel="Save Treatment Plan"
+                onSubmit={handleCreatePlan}
+                onCancel={hasPlans ? () => toggleCreate(false) : undefined}
+              />
+            </div>
+          ) : (
+            <div className="pb-create-toggle">
+              <button
+                ref={newPlanButtonRef}
+                type="button"
+                className="btn btn-primary"
+                onClick={() => toggleCreate(true)}
+              >
+                <Icon name="plus" size={16} /> New rehab plan
+              </button>
+            </div>
+          )}
 
           {plansError && (
             <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -480,8 +544,16 @@ export const PetDetailScreen: React.FC = () => {
                   />
                 ) : (
                   <>
+                    {/* A finished or paused plan must not read "Today to … (in N
+                        days)" — that is the live-plan phrasing (live QA B6). */}
                     <p style={{ color: 'var(--brown-500)', margin: '0 0 12px' }}>
-                      {friendlyDate(plan.start_date)} to {plan.end_date ? friendlyDate(plan.end_date) : 'open-ended'}
+                      {plan.status === 'COMPLETED'
+                        ? plan.completed_at
+                          ? `Completed ${friendlyDate(plan.completed_at.substring(0, 10)).replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())}`
+                          : 'Completed'
+                        : plan.status === 'PAUSED'
+                          ? 'Paused'
+                          : `${friendlyDate(plan.start_date)} to ${plan.end_date ? friendlyDate(plan.end_date) : 'open-ended'}`}
                     </p>
                     <PlanGrid plan={plan} onEdit={() => setEditingPlanId(plan.id)} />
                     {plan.status === 'ACTIVE' && (

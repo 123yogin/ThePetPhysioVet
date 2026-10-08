@@ -171,13 +171,12 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({ availableCodes }) =>
           onCancel={close}
           onClose={close}
           onClick={close}
-          aria-label={
-            effectiveService
-              ? effectiveService.title
-              : reasonFor
-                ? `Request an appointment for ${reasonFor}`
-                : 'Tell us about your pet'
-          }
+          // <dialog> + showModal() already maps to a modal dialog, but spelled
+          // out explicitly so every assistive tech / audit sees it (live QA D5);
+          // the visible heading names it rather than a duplicate aria-label.
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-panel-title"
           className="m-0 max-w-none max-h-none w-screen h-screen border-0 bg-(--c-ink)/40 flex items-stretch sm:items-center justify-center sm:p-4 backdrop:bg-black/40 animate-in fade-in"
         >
           {/* Full screen on a phone. At 390px a centred box holding a
@@ -217,7 +216,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({ availableCodes }) =>
                   otherwise reads as the form not having listened. */}
               {showPicker ? 'Book a visit' : effectiveService ? 'Bookable service' : reasonFor ? 'Appointment request' : 'Not sure yet'}
             </span>
-            <h3 className="font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-3">
+            <h3 id="booking-panel-title" className="font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-3">
               {showPicker
                 ? 'What would you like to book?'
                 : effectiveService ? effectiveService.title : reasonFor ? `Book for ${reasonFor}` : 'Tell us about your pet'}

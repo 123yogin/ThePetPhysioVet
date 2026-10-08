@@ -10,13 +10,20 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
+import logging
 import re
+from contextlib import contextmanager
+
+from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Q
+from django.db import DatabaseError
+from django.db.models import Q, Sum
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from ..models import (
-    UserProfile,
+    StoredFile, UserProfile,
 )
+from ..storage import attribute_uploads_to, delete_on_commit
 
 def problem(status_code, title, detail=None):
     """A minimal RFC-7807 problem-details body for hand-rolled errors.
@@ -33,6 +40,158 @@ def problem(status_code, title, detail=None):
     """
     body = {"type": "about:blank", "title": title, "status": status_code, "detail": detail or title}
     return Response(body, status=status_code)
+
+
+def _maybe_user(request):
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    try:
+        result = JWTAuthentication().authenticate(request)
+    except AuthenticationFailed:
+        return None
+    return result[0] if result else None
+
+
+def maybe_owner(request):
+    """The OWNER user if the request carries a valid owner token, else None.
+    Never raises. Used by the public booking intakes so a booking made while
+    signed in is linked to that account -- the only way a website booking may
+    reach /owner/bookings without the clinic linking it (live QA D1)."""
+    user = _maybe_user(request)
+    return user if getattr(user, "role", None) == "OWNER" else None
+
+
+logger = logging.getLogger(__name__)
+
+# One cap for every upload route (diagnoses, query attachments, pet photos).
+# 4 MB because Vercel rejects request bodies over ~4.5 MB before Django runs
+# (see serializers.MAX_UPLOAD_SIZE). Uploads are stored in Postgres
+# (appointments/storage.py), so this also bounds Neon storage per file.
+MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+UPLOAD_TOO_LARGE = "File is too large (max 4 MB)."
+UPLOAD_STORAGE_UNAVAILABLE = "Upload storage unavailable, please try again."
+
+# Storage-exhaustion controls (security review, 2026-10-08). Uploaded bytes
+# live in the same Neon database as the clinical records, so filling it is a
+# denial of service against the whole clinic, not just uploads.
+UPLOAD_WINDOW_SECONDS = 60 * 60
+UPLOAD_USER_LIMIT = 30   # upload requests per user per hour
+UPLOAD_IP_LIMIT = 300     # upload requests per client IP per hour (see _client_ip caveat)
+# Per-owner byte quota, summed over StoredFile.uploaded_by. Doctors are
+# exempt: they are the clinic, and blocking a clinician mid-consult is worse
+# than the storage it saves. Owner accounts are self-service (public signup),
+# which is also why signup is rate limited per IP (views/auth.py).
+OWNER_UPLOAD_QUOTA_BYTES = 100 * 1024 * 1024
+UPLOAD_RATE_LIMITED = "Too many uploads. Please wait a while and try again."
+STORAGE_NEARLY_FULL = "File storage is nearly full — please contact the clinic."
+
+
+def _uploaded_files(request):
+    return [f for _field, files in request.FILES.lists() for f in files]
+
+
+def upload_preflight(request):
+    """Every check an upload request must pass before anything is written.
+
+    Returns a problem Response to send back, or None to proceed. Requests
+    carrying no files (e.g. a PATCH of a pet's breed) skip all of it and do
+    not count against the rate limits.
+
+    Order: rate limits (cheap, and count failed attempts too), the per-file
+    size cap, then the owner quota and the global ceiling (aggregate queries).
+    The quota/ceiling checks are soft under concurrency -- two parallel
+    uploads can each pass and overshoot by one request's worth (<= 5 x 4 MB),
+    which the rate limits bound.
+    """
+    files = _uploaded_files(request)
+    if not files:
+        return None
+    user = getattr(request, "user", None)
+    if _rate_limited(f"upload:user:{getattr(user, 'pk', 'anon')}",
+                     UPLOAD_USER_LIMIT, UPLOAD_WINDOW_SECONDS) \
+            or _rate_limited(f"upload:ip:{_client_ip(request)}",
+                             UPLOAD_IP_LIMIT, UPLOAD_WINDOW_SECONDS):
+        return problem(429, "Too many requests", UPLOAD_RATE_LIMITED)
+
+    incoming = 0
+    for f in files:
+        size = getattr(f, "size", 0) or 0
+        if size > MAX_UPLOAD_BYTES:
+            return problem(400, UPLOAD_TOO_LARGE)
+        incoming += size
+
+    if getattr(user, "role", None) == "OWNER":
+        used = StoredFile.objects.filter(uploaded_by=user).aggregate(t=Sum("size"))["t"] or 0
+        if used + incoming > OWNER_UPLOAD_QUOTA_BYTES:
+            quota_mb = max(1, OWNER_UPLOAD_QUOTA_BYTES // (1024 * 1024))
+            return problem(
+                400,
+                f"Upload limit reached for your account ({quota_mb} MB). "
+                "Please contact the clinic.",
+            )
+
+    total = StoredFile.objects.aggregate(t=Sum("size"))["t"] or 0
+    if total + incoming > settings.FILE_STORAGE_MAX_BYTES:
+        logger.error(
+            "upload refused: file storage ceiling reached (%s + %s > %s bytes)",
+            total, incoming, settings.FILE_STORAGE_MAX_BYTES,
+        )
+        return problem(503, STORAGE_NEARLY_FULL)
+    return None
+
+
+def reject_invalid_pet_photo(request):
+    """A 400 problem if the request's `photo` is not a JPEG/PNG/WebP/HEIC
+    image, else None. Checked before the pet is created or changed."""
+    photo = request.FILES.get("photo")
+    if not photo:
+        return None
+    # Imported here: serializers.py imports from this module.
+    from rest_framework import serializers as drf_serializers
+    from ..serializers import validate_pet_photo, PET_PHOTO_MESSAGE
+    try:
+        validate_pet_photo(photo)
+    except drf_serializers.ValidationError:
+        return problem(400, PET_PHOTO_MESSAGE)
+    return None
+
+
+class UploadStorageUnavailable(APIException):
+    status_code = 503
+    default_detail = UPLOAD_STORAGE_UNAVAILABLE
+    default_code = "upload_storage_unavailable"
+
+
+@contextmanager
+def upload_storage_guard(request, operation):
+    """Turn a storage failure into a 503 problem instead of an HTML 500, and
+    attribute anything stored inside the block to the requesting user (the
+    per-owner quota sums StoredFile.uploaded_by).
+
+    OSError covers a read-only or full filesystem (what Vercel produced);
+    DatabaseError covers DatabaseStorage. Put any `transaction.atomic()`
+    INSIDE this block so the rollback happens before the error is mapped.
+    """
+    try:
+        with attribute_uploads_to(getattr(request, "user", None)):
+            yield
+    except (OSError, DatabaseError):
+        logger.exception(
+            "upload storage failed: operation=%s user_id=%s",
+            operation, getattr(getattr(request, "user", None), "pk", None),
+        )
+        raise UploadStorageUnavailable()
+
+
+def save_pet_photo(request, pet, photo):
+    """Store `photo` on `pet`, then free the photo it replaced once the
+    transaction commits (a rolled-back replacement keeps the old photo)."""
+    old_name = pet.photo.name if pet.photo else ""
+    with upload_storage_guard(request, "pet photo"):
+        pet.photo = photo
+        pet.save()
+    if old_name and old_name != pet.photo.name:
+        delete_on_commit(pet.photo.storage, old_name)
 
 
 def maybe_doctor(request):

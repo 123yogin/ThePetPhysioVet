@@ -9,6 +9,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from . import rehab
+from .storage import signed_file_url
 from .validators import normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
@@ -26,7 +27,11 @@ from .models import (
 # `image/svg+xml` through. SVG is executable XML (can carry <script>) and is
 # served back from the media origin, so it is a stored-XSS vector — replaced
 # with an explicit allow-list of raster image types.
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+# 4 MB (amended 2026-10-08, was 10 MB): production is Vercel serverless, which
+# rejects a request body over ~4.5 MB at its edge before Django runs. 4 MB of
+# file plus multipart overhead stays under that, so the API's own 400 is what
+# the user sees rather than a gateway 413.
+MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 ALLOWED_UPLOAD_TYPES = (
     "image/png", "image/jpeg", "image/gif", "image/webp",
     "application/pdf", "application/dicom",
@@ -81,7 +86,7 @@ def _sniff_head(file_obj):
 
 def _validate_upload(file_obj):
     if file_obj.size > MAX_UPLOAD_SIZE:
-        raise serializers.ValidationError("File too large. Maximum size is 10 MB.")
+        raise serializers.ValidationError("File is too large (max 4 MB).")
     content_type = getattr(file_obj, "content_type", "") or ""
     if content_type not in ALLOWED_UPLOAD_TYPES:
         raise serializers.ValidationError(
@@ -252,6 +257,32 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         return value
 
 
+# Pet photos are rendered as <img>, so only raster photo formats a phone
+# camera produces. Sniffed like every other upload: the multipart
+# Content-Type is client-controlled. HEIC/HEIF is an ISO-BMFF container,
+# recognised by its `ftyp` box and a HEIF-family brand.
+PET_PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
+PET_PHOTO_MESSAGE = "Pet photo must be a JPEG, PNG, WebP or HEIC image."
+_HEIF_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1")
+
+
+def validate_pet_photo(file_obj):
+    """Raise ValidationError(PET_PHOTO_MESSAGE) unless `file_obj` is a real
+    JPEG/PNG/WebP/HEIC image. Size is checked separately (same cap as every
+    other upload)."""
+    content_type = (getattr(file_obj, "content_type", "") or "").lower()
+    if content_type not in PET_PHOTO_TYPES:
+        raise serializers.ValidationError(PET_PHOTO_MESSAGE)
+    head = _sniff_head(file_obj)
+    if content_type in ("image/heic", "image/heif"):
+        ok = head[4:8] == b"ftyp" and head[8:12] in _HEIF_BRANDS
+    else:
+        ok = _matches_signature(head, content_type)
+    if not ok:
+        raise serializers.ValidationError(PET_PHOTO_MESSAGE)
+    return file_obj
+
+
 class PetSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     doctor_name = serializers.SerializerMethodField()
@@ -276,11 +307,9 @@ class PetSerializer(serializers.ModelSerializer):
         read_only_fields = ["doctor_name"]
 
     def get_photo(self, obj):
-        if not obj.photo:
-            return None
-        request = self.context.get("request")
-        url = obj.photo.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link (appointments/storage.py): only rendered for
+        # callers already allowed to see this pet, so the token is the grant.
+        return signed_file_url(obj.photo, self.context.get("request"))
 
     def get_doctor_name(self, obj):
         doctor = obj.doctor
@@ -362,10 +391,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "owner_name", "owner_phone",
             "date", "time", "visit_type", "visit_type_display", "status",
             "requested_date", "requested_time", "reschedule_reason", "reason_notes",
+            "cancel_reason",
         ]
         read_only_fields = [
             "pet_name", "owner_name", "owner_phone", "visit_type_display",
             "status", "requested_date", "requested_time", "reschedule_reason",
+            "cancel_reason",
         ]
 
     def validate(self, attrs):
@@ -447,11 +478,9 @@ class DiagnosticReportSerializer(serializers.ModelSerializer):
         read_only_fields = ["original_filename", "size", "mime", "uploaded_at"]
 
     def get_file_url(self, obj):
-        if not obj.file:
-            return None
-        request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link (appointments/storage.py): only rendered for
+        # callers already allowed to see the pet, so the token is the grant.
+        return signed_file_url(obj.file, self.context.get("request"))
 
     def get_is_dicom(self, obj):
         return obj.mime == "application/dicom" or obj.original_filename.lower().endswith(".dcm")
@@ -701,15 +730,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
     # said so. It is now summed from the line rates like every other money field.
     tax = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     is_tax_invoice = serializers.BooleanField(read_only=True)
+    # Set only by POST /invoices/:id/void; never writable here.
+    voided_at = serializers.DateTimeField(read_only=True)
+    void_reason = serializers.CharField(read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
             "id", "invoice_no", "pet_id", "pet_name", "subtotal", "tax", "is_tax_invoice", "total",
             "payment_status", "payment_mode", "created_at", "line_items",
-            "payments", "package", "amount_paid", "balance_due",
+            "payments", "package", "amount_paid", "balance_due", "voided_at", "void_reason",
         ]
-        read_only_fields = ["invoice_no", "created_at"]
+        read_only_fields = ["invoice_no", "created_at", "voided_at", "void_reason"]
 
     def get_pet_id(self, obj):
         return obj.pet_id
@@ -740,11 +772,8 @@ class QueryAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["original_filename", "mime", "size"]
 
     def get_url(self, obj):
-        if not obj.file:
-            return None
-        request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link -- see DiagnosticReportSerializer.get_file_url.
+        return signed_file_url(obj.file, self.context.get("request"))
 
     def validate_file(self, value):
         return _validate_upload(value)
@@ -898,6 +927,20 @@ class EnquiryCreateSerializer(serializers.ModelSerializer):
         return normalise_phone(value)
 
 
+def _owner_account(user):
+    """The linked client account as staff need it to VERIFY the link before
+    pressing "Confirm client": who it is and how to reach them. Doctor-facing
+    serializers only -- never on a public or owner response (live QA D1)."""
+    if user is None:
+        return None
+    return {
+        "id": str(user.id),
+        "name": (user.get_full_name() or user.username).strip(),
+        "email": user.email or "",
+        "phone": user.phone or "",
+    }
+
+
 class EnquirySerializer(serializers.ModelSerializer):
     """Doctor-facing read shape for `GET /enquiries` and the convert/dismiss
     responses — snake_case, matching this app's internal API convention
@@ -909,6 +952,13 @@ class EnquirySerializer(serializers.ModelSerializer):
 
     converted_appointment_id = serializers.UUIDField(read_only=True, allow_null=True)
     appointment = serializers.SerializerMethodField()
+    # ENQ-XXXXXXXX -- the reference the visitor was given, so the clinic can
+    # match a phone call to the card (live QA B6).
+    reference = serializers.CharField(read_only=True)
+    owner_account = serializers.SerializerMethodField()
+
+    def get_owner_account(self, obj):
+        return _owner_account(obj.owner if obj.owner_id else None)
 
     class Meta:
         model = Enquiry
@@ -916,7 +966,8 @@ class EnquirySerializer(serializers.ModelSerializer):
             "id", "first_name", "last_name", "pet_name", "species_breed",
             "email", "phone", "service", "reason", "preferred_date",
             "preferred_specialist", "status", "created_at",
-            "converted_appointment_id", "appointment",
+            "converted_appointment_id", "appointment", "reference",
+            "owner_verified", "owner_account",
         ]
         read_only_fields = fields
 
@@ -1131,7 +1182,7 @@ class BoardingSerializer(serializers.ModelSerializer):
         fields = [
             "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
             "emergency_contact_name", "emergency_contact_phone",
-            "owner_id", "pet_id", "pet_link_status", "previous_reports", "expires_at",
+            "owner_id", "pet_id", "owner_verified", "owner_account", "pet_link_status", "previous_reports", "expires_at",
             "check_in", "check_out", "duration", "duration_label", "price",
             "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
             "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
@@ -1143,6 +1194,11 @@ class BoardingSerializer(serializers.ModelSerializer):
 
     def get_aadhaar(self, obj):
         return f"XXXX XXXX {obj.aadhaar[-4:]}" if len(obj.aadhaar) >= 4 else ""
+
+    owner_account = serializers.SerializerMethodField()
+
+    def get_owner_account(self, obj):
+        return _owner_account(obj.owner if obj.owner_id else None)
 
     def get_pet_link_status(self, obj):
         if obj.pet_id:

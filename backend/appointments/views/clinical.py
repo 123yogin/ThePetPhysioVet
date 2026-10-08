@@ -23,7 +23,7 @@ from ..serializers import (
 )
 from .. import rehab
 
-from ._shared import _doctor_scoped
+from ._shared import _doctor_scoped, upload_preflight, upload_storage_guard
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
@@ -36,9 +36,13 @@ def pet_diagnoses_view(request, pk):
             DiagnosticReportSerializer(reports, many=True, context={"request": request}).data
         )
 
+    rejected = upload_preflight(request)
+    if rejected:
+        return rejected
     serializer = DiagnosticReportSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    report = serializer.save(pet=pet)
+    with upload_storage_guard(request, "diagnostic report"), transaction.atomic():
+        report = serializer.save(pet=pet)
     return Response(
         DiagnosticReportSerializer(report, context={"request": request}).data,
         status=status.HTTP_201_CREATED,
@@ -53,7 +57,8 @@ def diagnostic_report_detail_view(request, pk):
     report = get_object_or_404(
         _doctor_scoped(DiagnosticReport, request, lookup="pet__doctor"), pk=pk,
     )
-    report.delete()
+    with transaction.atomic():
+        report.delete()  # signals.py frees the stored bytes in the same transaction
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

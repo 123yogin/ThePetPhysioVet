@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchEnquiries, convertEnquiry, dismissEnquiry, enquiriesQueryKey } from '../api/enquiries';
+import { fetchEnquiries, convertEnquiry, dismissEnquiry, confirmEnquiryClient, enquiriesQueryKey } from '../api/enquiries';
 import { fetchAppointmentOptions } from '../api/appointments';
 import { useFlash } from '../lib/flash';
 import { todayISO } from '../lib/dates';
@@ -219,6 +219,15 @@ export const EnquiriesScreen: React.FC = () => {
     convertMutation.mutate({ id: enq.id, date: convertDate, time: convertTime, visit_type: convertVisitType });
   };
 
+  const confirmClientMutation = useMutation({
+    mutationFn: (id: string) => confirmEnquiryClient(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['enquiries'] });
+      addFlash('Client confirmed — the request now shows in their app.', 'success');
+    },
+    onError: (err: any) => addFlash(err?.message || 'Could not confirm the client.', 'error'),
+  });
+
   const anyMutationPending = convertMutation.isPending || dismissMutation.isPending;
 
   return (
@@ -361,6 +370,8 @@ export const EnquiriesScreen: React.FC = () => {
 
                       <span style={{ display: 'block', fontSize: '12px', color: 'var(--brown-500)', marginTop: '6px' }}>
                         <Icon name="clock" size={12} /> {timeAgo(enq.created_at)}
+                        {/* The visitor quotes this on the phone (live QA B6). */}
+                        {enq.reference && <span style={{ marginLeft: '10px', letterSpacing: '0.04em' }}>{enq.reference}</span>}
                       </span>
                     </span>
                   </button>
@@ -450,6 +461,30 @@ export const EnquiriesScreen: React.FC = () => {
                           <Link to={`/appointments/${appointmentId}/share`} className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}>
                             View Appointment <Icon name="arrowRight" size={14} />
                           </Link>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Convert matched an EXISTING account by email (unverified at
+                        signup): show who it is, and only publish it to that
+                        owner's app once staff confirm (live QA D1). */}
+                    {isConverted && enq.owner_account && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--brown-700)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span>
+                          <b>Linked account:</b> {enq.owner_account.name || '—'}
+                          {enq.owner_account.email ? ` · ${enq.owner_account.email}` : ''}
+                          {enq.owner_account.phone ? ` · ${enq.owner_account.phone}` : ''}
+                          {enq.owner_verified ? ' · shown in their app' : ' · not yet shown in their app'}
+                        </span>
+                        {!enq.owner_verified && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={confirmClientMutation.isPending}
+                            onClick={() => confirmClientMutation.mutate(enq.id)}
+                          >
+                            {confirmClientMutation.isPending && confirmClientMutation.variables === enq.id ? 'Confirming…' : 'Confirm client'}
+                          </button>
                         )}
                       </div>
                     )}
