@@ -30,6 +30,7 @@ interface Hold { reference: string; expiresAt: number; date: string; duration: s
 /** Digits only, folding a leading +91 / 91 / 0, so spacing and country code can't hide a duplicate. */
 function phoneKey(raw: string): string {
   let d = raw.replace(/\D/g, '');
+  if (d.length === 14 && d.startsWith('0091')) d = d.slice(4);
   if (d.length > 10 && d.startsWith('91')) d = d.slice(2);
   if (d.length > 10 && d.startsWith('0')) d = d.slice(1);
   else if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
@@ -158,23 +159,28 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
   const full = !!selection && selection.available <= 0;
   const samePhone =
     !!form.emergencyPhone.trim() && phoneKey(form.emergencyPhone) === phoneKey(form.ownerPhone);
-  const canSubmit =
-    !!duration && !!date && !full && holdLive &&
-    form.petName.trim() && form.ownerName.trim() && form.ownerPhone.trim() &&
-    form.emergencyPhone.trim() && !samePhone &&
-    aadhaarOk && terms && !busy;
+  const aadhaarMsg = 'Please enter a valid 12-digit Aadhaar number.';
+  // Why the request can't go yet, in the order the visitor should fix things.
+  // The button is never silently disabled: this text is shown next to it.
+  const blocker =
+    !duration || !date ? 'Choose a stay length and check-in date.'
+      : full ? 'Fully booked for those dates — try another date or duration.'
+      : !holdLive ? 'Hold a bed first.'
+      : !form.petName.trim() || !form.ownerName.trim() || !form.ownerPhone.trim() ? 'Please fill in the required fields.'
+      : !form.emergencyPhone.trim() ? 'Please add an emergency contact number.'
+      : samePhone ? 'Emergency contact must be a different number.'
+      : !aadhaarOk ? aadhaarMsg
+      : !terms ? 'Please accept the terms and conditions.'
+      : '';
+  // A stale submit error goes away as soon as what blocked it changes.
+  React.useEffect(() => { setError(''); }, [blocker]);
+  const aadhaarShowError = !!form.aadhaar.trim() && !aadhaarOk;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) {
-      setError(
-        !holdLive ? 'Please hold a bed first.'
-          : samePhone ? 'Emergency contact must be a different number.'
-          : !form.emergencyPhone.trim() ? 'Please add an emergency contact number.'
-          : !aadhaarOk ? 'Please enter a valid 12-digit Aadhaar number.'
-          : !terms ? 'Please accept the terms and conditions.'
-            : 'Please fill in the required fields.',
-      );
+    if (busy) return;
+    if (blocker) {
+      setError(blocker);
       return;
     }
     setBusy(true);
@@ -397,7 +403,12 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
             value={form.aadhaar}
             onChange={(e) => set('aadhaar', e.target.value)}
             placeholder="12-digit Aadhaar"
+            aria-invalid={aadhaarShowError || undefined}
+            aria-describedby={aadhaarShowError ? 'brd-aadhaar-err' : undefined}
           />
+          {aadhaarShowError && (
+            <p id="brd-aadhaar-err" className="text-xs text-[#b23b3b] mt-1">{aadhaarMsg}</p>
+          )}
         </div>
       </div>
 
@@ -418,8 +429,11 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       />
 
       {error && <p className="text-sm text-[#b23b3b] mb-4" role="alert">{error}</p>}
+      {!error && blocker && !!duration && (
+        <p className="text-xs text-(--c-accent) mb-3" data-testid="brd-blocker">{blocker}</p>
+      )}
 
-      <button type="submit" disabled={!canSubmit} className={primaryBtn}>
+      <button type="submit" disabled={busy} className={primaryBtn}>
         {busy && <Loader2 className="w-4 h-4 animate-spin" />}
         {selection && !full ? `Request stay · ${rupee(selection.price)}` : 'Request stay'}
       </button>
