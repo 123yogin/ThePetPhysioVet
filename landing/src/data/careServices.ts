@@ -147,7 +147,7 @@ export const CARE_SERVICES: CareService[] = [
       },
       {
         q: 'How much does pet boarding cost?',
-        a: 'From ₹100 for one hour of day care to ₹1,200 for 24 hours, ₹6,000 for a week and ₹21,000 for a month. The full price list is on this page, and you are paid at the clinic.',
+        a: 'From ₹100 for one hour of day care to ₹1,200 for 24 hours, ₹6,000 for a week and ₹21,000 for a month. The full price list is on this page; you pay at the clinic.',
       },
       {
         q: 'Do I need Aadhaar to board my pet?',
@@ -159,7 +159,7 @@ export const CARE_SERVICES: CareService[] = [
       },
       {
         q: 'Is a vet at the clinic?',
-        a: `The Indoor Facility is part of The Pet Physio Vet, the veterinary physiotherapy clinic of Dr. Dhanvi Patel. Physiotherapy appointments run ${physioHours()}, by appointment. Care for boarders is supervised round the clock.`,
+        a: `The Indoor Facility is part of The Pet Physio Vet, the veterinary physiotherapy clinic of Dr. Dhanvi Patel. Physiotherapy runs ${physioHours()}, by appointment. Care for boarders is supervised round the clock.`,
         // TODO(owner): who is on site overnight (staff vs vet), then state it.
       },
     ],
