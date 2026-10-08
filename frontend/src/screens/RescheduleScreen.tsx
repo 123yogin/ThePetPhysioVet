@@ -93,8 +93,10 @@ export const RescheduleScreen: React.FC = () => {
           <button type="submit" className="btn btn-primary" disabled={submitting}>
             {submitting ? 'Saving...' : 'Update Appointment'}
           </button>
+          {/* "Cancel" here read as "cancel the appointment" (live QA B1); it only
+              leaves the form. Cancelling a visit is on the appointments list. */}
           <button type="button" onClick={() => navigate('/appointments')} className="btn btn-ghost">
-            Cancel
+            Back without changes
           </button>
         </div>
       </form>

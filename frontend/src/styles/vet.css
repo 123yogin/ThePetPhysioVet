@@ -764,6 +764,7 @@ tr:hover td {
 
 /* Red — cancelled / overdue / failed */
 .badge-cancelled,
+.badge-void,
 .badge-overdue,
 .badge-failed,
 .badge-danger {

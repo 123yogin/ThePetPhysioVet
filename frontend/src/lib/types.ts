@@ -255,6 +255,8 @@ export interface Enquiry {
   created_at: string;
   converted_appointment_id?: string | null;
   appointment?: Appointment | null;
+  /** ENQ-XXXXXXXX — the reference the visitor was given on the website. */
+  reference?: string;
 }
 
 export interface EnquiriesResponse {

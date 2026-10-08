@@ -37,6 +37,9 @@ export interface Boarding {
   owner_id?: string | null;
   pet_id?: string | null;
   pet_link_status?: 'linked' | 'owner_only' | 'unlinked';
+  /** True once the clinic converted (or the owner booked signed in). An
+   *  automatic phone match is false — a hint, not a confirmed client. */
+  owner_verified?: boolean;
   /** null when no pet is linked; [] when the pet belongs to another practice. */
   previous_reports?: Diagnosis[] | null;
 }

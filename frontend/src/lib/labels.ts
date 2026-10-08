@@ -99,6 +99,39 @@ export function formatMoney(amount?: number | string | null, currency = 'INR'): 
   return symbol ? `${symbol}${digits}` : `${currency} ${digits}`;
 }
 
+/**
+ * The day a boarded pet goes home (live QA D4). The API's `check_out` is the
+ * stay's inclusive LAST BED-NIGHT — what capacity counts — so a 24-hour stay
+ * from the 8th has check_out = the 8th and leaves on the 9th. A stay shorter
+ * than a day leaves the day it arrived. Display only; never for capacity.
+ */
+export function boardingDeparture(checkIn: string, checkOut: string, duration: string): string {
+  const sub = /^(\d+)h$/.exec(duration || '');
+  if (sub && Number(sub[1]) < 24) return checkIn;
+  const d = new Date(`${checkOut}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return checkOut;
+  d.setDate(d.getDate() + 1);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/**
+ * "Owner brings: food, utensils · Clinic provides: blanket" from the four
+ * boarding intake fields. Replaces "food owner, utensils owner, …" (live QA B6).
+ */
+export function boardingProvidesLine(intake: Record<string, string | undefined>): string {
+  const items: [string, string][] = [
+    ['food', 'food_by'], ['utensils', 'utensils_by'], ['medicines', 'medicines_by'], ['blanket', 'blanket_by'],
+  ];
+  const owner = items.filter(([, k]) => intake[k] !== 'clinic').map(([n]) => n);
+  const clinic = items.filter(([, k]) => intake[k] === 'clinic').map(([n]) => n);
+  const parts: string[] = [];
+  if (owner.length) parts.push(`Owner brings: ${owner.join(', ')}`);
+  if (clinic.length) parts.push(`Clinic provides: ${clinic.join(', ')}`);
+  return parts.join(' · ');
+}
+
 /** Diagnostic report types, shared by the staff and owner upload forms.
  *  Values match DiagnosticReport.REPORT_TYPES on the backend. */
 export const REPORT_TYPES: { value: string; label: string }[] = [

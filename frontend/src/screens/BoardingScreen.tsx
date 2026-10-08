@@ -9,7 +9,8 @@ import { useFlash } from '../lib/flash';
 import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { ExternalLink } from '../components/ExternalLink';
-import { friendlyDate, formatMoney, REPORT_TYPES } from '../lib/labels';
+import { friendlyDate, formatMoney, REPORT_TYPES, boardingDeparture, boardingProvidesLine } from '../lib/labels';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { isValidAadhaar } from '../lib/aadhaar';
 
 /**
@@ -36,8 +37,6 @@ const BADGE_CLASS: Record<string, string> = {
   COMPLETED: 'badge-confirmed',
   CANCELLED: 'badge-cancelled',
 };
-
-const providerLabel = (v: string) => (v === 'clinic' ? 'clinic' : 'owner');
 
 // Actions offered per status.
 const NEXT_ACTIONS: Record<string, { action: BoardingAction; label: string; primary?: boolean }[]> = {
@@ -73,6 +72,7 @@ export const BoardingScreen: React.FC = () => {
     onSuccess: (_r, vars) => {
       qc.invalidateQueries({ queryKey: ['boarding'] });
       addFlash(vars.act === 'cancel' ? 'Booking cancelled — beds freed.' : 'Booking updated.', 'success');
+      if (vars.act === 'cancel') setCancelTarget(null);
     },
     onError: () => addFlash('Could not update the booking.', 'error'),
   });
@@ -87,6 +87,9 @@ export const BoardingScreen: React.FC = () => {
     },
     onError: (e: any) => addFlash(e?.detail || e?.message || 'Could not convert to patient.', 'error'),
   });
+
+  // Live QA B4: Cancel freed the bed on a single tap. It now asks first.
+  const [cancelTarget, setCancelTarget] = useState<Boarding | null>(null);
 
   // Reference of the stay just converted, so its "Open pet record" link takes focus.
   const [justConverted, setJustConverted] = useState<string | null>(null);
@@ -132,13 +135,32 @@ export const BoardingScreen: React.FC = () => {
             g={g}
             highlight={!!highlightRef && g.reference === highlightRef}
             busy={action.isPending && action.variables?.reference === g.reference}
-            onAction={(act, intake) => action.mutate({ reference: g.reference, act, intake })}
+            onAction={(act, intake) => (
+              act === 'cancel' ? setCancelTarget(g) : action.mutate({ reference: g.reference, act, intake })
+            )}
             converting={convert.isPending && convert.variables === g.reference}
             onConvert={() => convert.mutate(g.reference)}
             focusRecord={justConverted === g.reference}
           />
         ))}
       </div>
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title="Cancel this boarding stay?"
+        body={cancelTarget && (
+          <>
+            {cancelTarget.pet_name} ({cancelTarget.owner_name}) · {cancelTarget.duration_label} from{' '}
+            {friendlyDate(cancelTarget.check_in)}. The bed is released immediately.
+          </>
+        )}
+        confirmLabel="Cancel stay"
+        cancelLabel="Keep stay"
+        danger
+        busy={action.isPending}
+        onConfirm={() => cancelTarget && action.mutate({ reference: cancelTarget.reference, act: 'cancel' })}
+        onClose={() => setCancelTarget(null)}
+      />
     </div>
   );
 };
@@ -220,8 +242,12 @@ const BoardingCard: React.FC<{
       <ClientMatch g={g} converting={converting} onConvert={onConvert} focusRecord={focusRecord} />
 
       <div className="page-sub" style={{ fontSize: '0.85rem', margin: 0 }}>
-        <Icon name="clock" size={12} /> {friendlyDate(g.check_in)}
-        {g.check_out !== g.check_in ? ` → ${friendlyDate(g.check_out)}` : ''}
+        {/* check_out is the last bed-night; show the day the pet goes home (D4). */}
+        <Icon name="clock" size={12} /> Arrives {friendlyDate(g.check_in)}
+        {(() => {
+          const leaves = boardingDeparture(g.check_in, g.check_out, g.duration);
+          return leaves === g.check_in ? ' · goes home the same day' : ` · goes home ${friendlyDate(leaves)}`;
+        })()}
       </div>
 
       {/* Intake — the clinic records this here (owner vs clinic per item), it is
@@ -261,10 +287,7 @@ const BoardingCard: React.FC<{
         </div>
       ) : (
         <div style={{ fontSize: '0.82rem', lineHeight: 1.6 }}>
-          <div>
-            <b>Bringing:</b> food {providerLabel(intake.food_by)}, utensils {providerLabel(intake.utensils_by)},
-            medicines {providerLabel(intake.medicines_by)}, blanket {providerLabel(intake.blanket_by)}
-          </div>
+          <div>{boardingProvidesLine(intake)}</div>
           {intake.food_preference && <div><b>Food:</b> {intake.food_preference}</div>}
           {editable && (
             <button
@@ -327,9 +350,18 @@ const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () =>
             {converting ? 'Converting…' : 'Convert to patient'}
           </button>
         )}
+        {/* A phone match is only a hint (signup does not verify phones), so the
+            stay is not shown in that owner's portal until staff confirm it. */}
+        {status === 'linked' && g.owner_verified === false && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={converting} onClick={onConvert}>
+            {converting ? 'Linking…' : 'Confirm client'}
+          </button>
+        )}
       </div>
-      {status !== 'unlinked' && (
-        <span className="page-sub" style={{ fontSize: '0.78rem' }}>Verify with the owner before relying on it</span>
+      {status !== 'unlinked' && !g.owner_verified && (
+        <span className="page-sub" style={{ fontSize: '0.78rem' }}>
+          Matched by phone — verify with the owner, then confirm to show it in their app
+        </span>
       )}
       {reports && reports.length > 0 && (
         <details style={{ fontSize: '0.82rem' }}>

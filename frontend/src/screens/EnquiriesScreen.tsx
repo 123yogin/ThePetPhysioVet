@@ -361,6 +361,8 @@ export const EnquiriesScreen: React.FC = () => {
 
                       <span style={{ display: 'block', fontSize: '12px', color: 'var(--brown-500)', marginTop: '6px' }}>
                         <Icon name="clock" size={12} /> {timeAgo(enq.created_at)}
+                        {/* The visitor quotes this on the phone (live QA B6). */}
+                        {enq.reference && <span style={{ marginLeft: '10px', letterSpacing: '0.04em' }}>{enq.reference}</span>}
                       </span>
                     </span>
                   </button>
