@@ -30,7 +30,7 @@ const SEX_LABELS: Record<string, string> = {
   FS: 'Female (Spayed)',
 };
 function sexLabel(sex?: string | null): string {
-  if (!sex) return 'N/A';
+  if (!sex) return '—';
   return SEX_LABELS[sex] || humanizeStatus(sex);
 }
 

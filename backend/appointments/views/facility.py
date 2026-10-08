@@ -330,7 +330,15 @@ def _facility_list(request):
         g["slots"].append({"slot": row["slot"], "label": row["slot_label"], "status": row["status"]})
     results = sorted(groups.values(), key=lambda g: (g["date"], g["created_at"]))
     pending_count = FacilityBooking.objects.filter(status="PENDING").values("reference").distinct().count()
-    return Response({"results": results, "pending_count": pending_count})
+    # The clinic's real facility rules, so the doctor UI never hardcodes (and
+    # lets go stale) "N per hour, 9:30 to 1:30".
+    return Response({
+        "results": results,
+        "pending_count": pending_count,
+        "capacity": FACILITY_BEDS,
+        "opens": FACILITY_SLOTS[0]["start"],
+        "closes": FACILITY_SLOTS[-1]["end"],
+    })
 
 
 @api_view(["GET", "POST"])

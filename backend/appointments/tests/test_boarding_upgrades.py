@@ -276,10 +276,12 @@ class PreviousReportsTests(BoardingBase):
         self.assertNotIn("file", rep)
         none_row = self.doctor_row(self.create(ownerPhone="9123456789").data["reference"])
         self.assertIsNone(none_row["previous_reports"])
+        self.assertIs(none_row["previous_reports_restricted"], False)
 
     def test_linked_pet_without_reports_is_an_empty_list(self):
         row = self.doctor_row(self.create(ownerPhone="9991110001", petName="Rex").data["reference"])
         self.assertEqual(row["previous_reports"], [])
+        self.assertIs(row["previous_reports_restricted"], False)
 
 
 class HoldTests(BoardingBase):
@@ -492,6 +494,7 @@ class FinalReviewTests(BoardingBase):
         row = self.doctor_row(self.create(ownerPhone="9991110001", petName="Rex").data["reference"])
         self.assertEqual(row["pet_link_status"], "linked")
         self.assertEqual(row["previous_reports"], [])
+        self.assertIs(row["previous_reports_restricted"], True)
 
     def test_previous_reports_visible_when_pet_has_no_doctor(self):
         self.pet_a.doctor = None

@@ -24,6 +24,7 @@ from ..serializers import (
     AppointmentSerializer,
 )
 
+from ..validators import FUTURE_ONLY_MESSAGE, is_in_the_past
 from ._shared import _doctor_scoped, problem
 
 @api_view(["GET", "POST"])
@@ -87,6 +88,8 @@ def appointment_reschedule_view(request, pk):
     time = request.data.get("time")
     if not date or not time:
         return problem(400, "date and time are required.")
+    if is_in_the_past(date, time):
+        return problem(400, FUTURE_ONLY_MESSAGE)
 
     appt.date = date
     appt.time = time

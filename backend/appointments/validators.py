@@ -126,3 +126,21 @@ def validate_aadhaar(value):
     if not is_valid_aadhaar(s):
         raise serializers.ValidationError(AADHAAR_MESSAGE)
     return s
+
+
+FUTURE_ONLY_MESSAGE = "Pick a date and time in the future."
+
+
+def is_in_the_past(date, time) -> bool:
+    """True when `date` + `time` (clinic-local, Asia/Kolkata) is before now.
+    Accepts date/time objects or ISO strings; unparseable input is not "past"
+    (other validation reports it)."""
+    import datetime
+    from django.utils import timezone
+    try:
+        d = date if isinstance(date, datetime.date) else datetime.date.fromisoformat(str(date))
+        t = time if isinstance(time, datetime.time) else datetime.time.fromisoformat(str(time))
+    except ValueError:
+        return False
+    when = timezone.make_aware(datetime.datetime.combine(d, t.replace(tzinfo=None)))
+    return when < timezone.now()

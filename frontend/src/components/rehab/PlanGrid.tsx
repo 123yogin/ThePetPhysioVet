@@ -33,6 +33,11 @@ function describe(s: RehabSession, showWho = true): string {
   return GLYPH[s.display_status]?.label ?? s.display_status;
 }
 
+/** Clinic-local (Asia/Kolkata) calendar day of an ISO timestamp. */
+function clinicDay(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(iso));
+}
+
 export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) => {
   const qc = useQueryClient();
   const { addFlash } = useFlash();
@@ -150,8 +155,20 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
         </div>
       )}
 
+      {plan.status !== 'ACTIVE' && (
+        <p className="rehab-closed-summary" role="status" style={{ color: 'var(--brown-500)', margin: '0 0 8px' }}>
+          {plan.status === 'COMPLETED'
+            ? `${plan.completed_at ? `Completed on ${longDate(clinicDay(plan.completed_at))} · ` : 'Completed · '}`
+            : 'Paused · '}
+          {/* Completing deletes the future DUE sessions, so the originally planned
+              total is gone: report only what was done. */}
+          {done} {done === 1 ? 'session' : 'sessions'} done
+        </p>
+      )}
       {total === 0 ? (
-        <p style={{ color: 'var(--brown-500)' }}>No sessions are scheduled for this plan yet.</p>
+        plan.status === 'ACTIVE' && (
+          <p style={{ color: 'var(--brown-500)' }}>No sessions are scheduled for this plan yet.</p>
+        )
       ) : (
         <>
           <div className="rehab-progress">
@@ -166,7 +183,7 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
               <span style={{ width: `${pct}%` }} />
             </div>
             <span className="rehab-progress-text">
-              {done} of {total} done · {late} late · {skipped} skipped
+              {plan.status === 'ACTIVE' ? `${done} of ${total} done · ` : ''}{late} late · {skipped} skipped
             </span>
           </div>
 

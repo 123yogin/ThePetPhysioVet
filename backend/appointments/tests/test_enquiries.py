@@ -216,6 +216,12 @@ class EnquiryConvertTests(ApiTestCase):
         body.update(overrides)
         return self.client.post(f"{API}/enquiries/{self.enquiry.id}/convert", body, format="json")
 
+    def test_convert_leaves_new_pet_sex_unknown(self):
+        r = self._convert()
+        self.assertEqual(r.status_code, 200, r.content)
+        pet = Pet.objects.get(name=self.enquiry.pet_name, owner__email__iexact=self.enquiry.email)
+        self.assertEqual(pet.sex, "")
+
     def test_convert_into_the_past_is_400(self):
         before = Appointment.objects.count()
         r = self._convert(date="2020-01-01", time="10:00")
