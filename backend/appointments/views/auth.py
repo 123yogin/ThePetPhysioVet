@@ -33,6 +33,10 @@ from django.contrib.auth import authenticate
 
 from ._shared import _client_ip, _first_error_detail, _rate_limited, problem
 
+# Public signup, per client IP per hour (see `_client_ip` for the edge caveat).
+SIGNUP_WINDOW_SECONDS = 60 * 60
+SIGNUP_IP_LIMIT = 30
+
 def _issue_tokens(user):
     refresh = RefreshToken.for_user(user)
     return str(refresh.access_token), str(refresh)
@@ -105,6 +109,11 @@ def login_view(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def signup_view(request):
+    # Every owner account carries its own upload quota, so unlimited signups
+    # would multiply it (security review 2026-10-08). Counted before
+    # validation so failed attempts count too.
+    if _rate_limited(f"signup:ip:{_client_ip(request)}", SIGNUP_IP_LIMIT, SIGNUP_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many sign-ups from this network. Please try again later.")
     serializer = SignupSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()

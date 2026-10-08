@@ -210,14 +210,53 @@ if SERVE_SPA and SPA_DIST_DIR.is_dir():
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+def _default_storage_backend(environ):
+    """Where uploads go.
+
+    Vercel's serverless filesystem is read-only, so writing to MEDIA_ROOT there
+    crashed every upload with an HTML 500. Uploads are stored in Postgres
+    (appointments/storage.py `DatabaseStorage`) when FILE_STORAGE=db or when
+    running on Vercel (it sets VERCEL=1 in every function). Local dev keeps the
+    filesystem by default. An unrecognised value fails fast rather than
+    silently falling back to a backend that cannot write in production.
+    """
+    choice = (environ.get("FILE_STORAGE") or "").strip().lower()
+    if choice not in ("", "db", "filesystem"):
+        raise ImproperlyConfigured(
+            f"FILE_STORAGE must be 'db' or 'filesystem', got {choice!r}."
+        )
+    if choice == "db" or environ.get("VERCEL"):
+        return "appointments.storage.DatabaseStorage"
+    return "django.core.files.storage.FileSystemStorage"
+
+
+def _file_storage_max_bytes(environ):
+    """Global ceiling on stored upload bytes (sum of StoredFile.size).
+
+    Uploads share the Neon database with every clinical record; past this
+    point upload routes answer 503 "File storage is nearly full" instead of
+    letting the database hit its plan limit. Default 700 MB of the 1 GB free
+    tier leaves room for the records themselves.
+    """
+    raw = (environ.get("FILE_STORAGE_MAX_MB") or "700").strip()
+    try:
+        mb = int(raw)
+    except ValueError:
+        mb = 0
+    if mb <= 0:
+        raise ImproperlyConfigured(f"FILE_STORAGE_MAX_MB must be a positive integer, got {raw!r}.")
+    return mb * 1024 * 1024
+
+
+FILE_STORAGE_MAX_BYTES = _file_storage_max_bytes(os.environ)
+
 # Compressed + hashed filenames (cache-busting) with a manifest, gzip/br
 # pre-compression, and long-lived cache headers — the standard WhiteNoise
-# production storage backend. `default` (media/uploads) storage is left as
-# the plain filesystem backend; media is never served by Django in
-# production (see petphysio/urls.py) so it doesn't need cache-busting here.
+# production storage backend. `default` (uploads) is chosen above; either way
+# uploads are served by the signed `GET /api/v1/files/<token>` route.
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": _default_storage_backend(os.environ),
     },
     "staticfiles": {
         # Manifest storage hashes filenames and REQUIRES a manifest produced by

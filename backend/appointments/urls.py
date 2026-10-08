@@ -37,6 +37,8 @@ from .views import (
     boarding_availability_view, boarding_view, boarding_status_view, boarding_ending_soon_view,
     boarding_hold_view, boarding_hold_confirm_view, boarding_convert_view,
     boarding_confirm_client_view,
+    # Uploaded files
+    file_download_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -63,6 +65,9 @@ urlpatterns = [
     path("pets/<uuid:pk>/diagnoses", pet_diagnoses_view, name="pet-diagnoses"),
     path("pets/<uuid:pk>/treatment-plans", pet_treatment_plans_view, name="pet-treatment-plans"),
     path("pets/<uuid:pk>/queries", pet_queries_view, name="pet-queries"),
+
+    # --- Uploaded files (signed, time-limited download) ---
+    path("files/<str:token>", file_download_view, name="file-download"),
 
     # --- Diagnostic reports ---
     path("diagnoses/<uuid:pk>", diagnostic_report_detail_view, name="diagnosis-detail"),

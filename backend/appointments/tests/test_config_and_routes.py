@@ -250,6 +250,7 @@ class ModelPackageIntegrityTests(ApiTestCase):
         "Enquiry",                                     # enquiries
         "FacilityBooking",                             # facility (2026-09-21)
         "BoardingBooking",                             # boarding (2026-09-25)
+        "StoredFile",                                  # files (2026-10-08, uploads in Postgres)
     }
 
     def test_no_pending_migrations(self):

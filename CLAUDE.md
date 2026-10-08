@@ -395,6 +395,23 @@ Trade-off: this disables all confirmations, including destructive commands — i
   (An empty repo-root `media/` used to sit here and was deleted — nothing wrote to it, and
   the compose files mount the named volume `media_data` at `/app/media` instead.)
 
+## Uploads in Postgres — 2026-10-08
+Production (Vercel serverless) has a read-only filesystem, so every upload 500'd. Uploaded
+bytes now live in the `StoredFile` table via `appointments/storage.py::DatabaseStorage`,
+selected when `VERCEL` is set or `FILE_STORAGE=db` (local dev keeps `FileSystemStorage`;
+the test suite runs against `DatabaseStorage` via `tests/base.py`). Files are served only
+through `GET /api/v1/files/<token>` — a 15-minute `TimestampSigner` token (salt
+`file-access`) rendered by serializers to callers already authorised for the parent
+record. **Uploads count against Neon's 1 GB free storage**: 4 MB cap per file on every
+upload route (below Vercel's 4.5 MB request-body limit, which 413s at the edge before
+Django runs), pet photos restricted to JPEG/PNG/WebP/HEIC, and `appointments/signals.py`
+deletes the bytes on commit when the owning record is deleted. Abuse limits
+(`views/_shared.py::upload_preflight`): 30 uploads/h/user, 60/h/IP, 100 MB per owner
+(`StoredFile.uploaded_by`; doctors exempt), a global `FILE_STORAGE_MAX_MB` ceiling (default
+700) → 503, signup 10/h/IP, downloads 300/h/IP. Uploads get random UUID storage names, the
+download token is bound to the `StoredFile` row, and **there is no `/media/` route** in
+Django or nginx — never add one back.
+
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`
   **`DEBUG=true` is now required locally** — without it (and without `SECRET_KEY`) Django

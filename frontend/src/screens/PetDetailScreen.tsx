@@ -10,6 +10,8 @@ import { PlanGrid } from '../components/rehab/PlanGrid';
 import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
+import { uploadSizeError, uploadErrorMessage } from '../lib/uploads';
+import { Spinner } from '../components/Spinner';
 import { Icon } from '../components/Icon';
 import { ProgressChart } from '../components/ProgressChart';
 import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
@@ -118,6 +120,8 @@ export const PetDetailScreen: React.FC = () => {
   const handleUploadDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!diagFile) return addFlash('Please select an image/radiograph file', 'error');
+    const tooLarge = uploadSizeError(diagFile);
+    if (tooLarge) return addFlash(tooLarge, 'error');
     const formData = new FormData();
     formData.append('report_type', diagType);
     formData.append('notes', diagNotes);
@@ -130,8 +134,8 @@ export const PetDetailScreen: React.FC = () => {
       setDiagNotes('');
       setDiagFile(null);
       refetchDiagnoses();
-    } catch (err: any) {
-      addFlash(err.message || 'Failed to upload report', 'error');
+    } catch (err: unknown) {
+      addFlash(uploadErrorMessage(err, 'Failed to upload report'), 'error');
     } finally {
       setUploadingDiagnosis(false);
     }
@@ -375,7 +379,17 @@ export const PetDetailScreen: React.FC = () => {
                   <input
                     type="file"
                     className="input-glass"
-                    onChange={(e) => setDiagFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      const tooLarge = uploadSizeError(file);
+                      if (tooLarge) {
+                        addFlash(tooLarge, 'error');
+                        e.target.value = '';
+                        setDiagFile(null);
+                        return;
+                      }
+                      setDiagFile(file);
+                    }}
                     disabled={uploadingDiagnosis}
                   />
                 </div>
@@ -391,7 +405,14 @@ export const PetDetailScreen: React.FC = () => {
                   disabled={uploadingDiagnosis}
                 />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={uploadingDiagnosis}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={uploadingDiagnosis}
+                aria-busy={uploadingDiagnosis}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                {uploadingDiagnosis && <Spinner />}
                 {uploadingDiagnosis ? 'Uploading…' : 'Upload Report'}
               </button>
             </form>

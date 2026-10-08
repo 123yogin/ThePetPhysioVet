@@ -320,8 +320,69 @@ Moves `status: "Pending"` → `"Confirmed"`.
 | POST | `/pets/:id/diagnoses` | multipart `{file, report_type, notes?}` | `Diagnosis` — same scoping as `GET` |
 | DELETE | `/diagnoses/:id` | | 204 — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up: previously any doctor could delete another practice's diagnostic report by ID) |
 
-Validate upload: max 10 MB, allow `image/*` + `application/pdf` + `application/dicom`.
+Validate upload: max 4 MB (amended 2026-10-08, was 10 MB), allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
+
+### Uploaded files — amended 2026-10-08 (uploads stored in Postgres)
+| GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability** |
+
+**Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
+/owner/pets/:id/diagnoses`, `POST /pets/:id/queries`, `POST /owner/pets/:id/queries`,
+and the `photo` part of `POST /pets`, `PATCH /pets/:id`, `POST /owner/pets` reject any
+file over 4 MB (4 194 304 bytes) with `400` problem+json,
+`detail: "File is too large (max 4 MB)."`, before anything is created. 4 MB, not 10:
+production is Vercel serverless, which rejects any request body over ~4.5 MB at its edge
+(a bare 413 that never reaches Django), so the cap sits below that with room for multipart
+overhead. Content-type allow-list + magic-byte sniffing (§3 Auth amendment 5) are unchanged.
+
+**Pet photos are images only.** The `photo` part must be JPEG, PNG, WebP or HEIC/HEIF
+(`image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`), checked against
+its leading bytes; anything else is `400` problem+json,
+`detail: "Pet photo must be a JPEG, PNG, WebP or HEIC image."`, and no pet is created or
+changed.
+
+**Storage failures are a 503, never an HTML 500.** If the upload backend cannot write
+(read-only filesystem, database error), the route answers `503` problem+json,
+`detail: "Upload storage unavailable, please try again."`, and nothing is left behind
+(the record and its file are written in one transaction).
+
+**Storage-exhaustion limits (security review, 2026-10-08).** Uploaded bytes share the
+database with every clinical record, so every upload route (any request carrying a file)
+is also subject to, in this order:
+- **Rate limits:** 30 upload requests per user per hour and 60 per client IP per hour →
+  `429` problem+json. Requests without files are not counted.
+- **Per-owner quota:** an OWNER account may hold at most 100 MB of uploads in total
+  (summed over `StoredFile.uploaded_by`) → `400` problem+json
+  `"Upload limit reached for your account (100 MB). Please contact the clinic."`.
+  Doctors are exempt.
+- **Global ceiling:** once total stored upload bytes would exceed `FILE_STORAGE_MAX_MB`
+  (default 700 MB) → `503` problem+json
+  `"File storage is nearly full — please contact the clinic."`.
+
+Quota and ceiling are soft under concurrency (parallel uploads can overshoot by one
+request each). `POST /auth/signup` is limited to 10 per client IP per hour (`429`) so the
+per-owner quota cannot be multiplied with throwaway accounts.
+
+**Storage names.** Uploads are stored under random names —
+`diagnostic_reports/<uuid32><ext>`, `query_attachments/<uuid32><ext>`,
+`pets/<uuid32><ext>` — never the client's filename, which is kept only in
+`original_filename` for display. A name is never reused after a delete.
+
+**There is no `/media/` route.** Neither Django nor the nginx container serves uploads by
+path any more (both returned files to anyone holding the URL); `/media/...` is a 404.
+
+**Download links.** `Diagnosis.file_url`, `QueryAttachment.url` and `Pet.photo` are
+absolute URLs of the form `/api/v1/files/<token>`. The token is a Django
+`TimestampSigner` signature (salt `file-access`) over `[storage name, StoredFile id]`
+(database storage; the id is `null` for local filesystem storage), **valid 15 minutes**.
+A token stops working when its row is deleted, even if the name were ever stored again.
+The route is rate limited to 300 requests per client IP per hour (`429`); it is only rendered to callers already authorised to see the parent record
+(rule 4), so holding it is the grant — which is what lets a plain `<a href>`/`<img src>`
+open it. A forged, expired, or dangling token is the standard `404` problem. The response
+carries the stored content type (anything outside the upload allow-list is sent as
+`application/octet-stream`), `Content-Disposition: attachment; filename="..."`, and
+`X-Content-Type-Options: nosniff`. Clients must re-fetch the parent record for a fresh
+link rather than caching a URL.
 
 ### Treatment plans
 | GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
@@ -697,6 +758,13 @@ and their absence raises `ImproperlyConfigured` at startup — a silently no-op 
 a wrong SPA base URL would look like "reset email sent" while never reaching the user.
 No SMTP provider is configured or invented; `EMAIL_BACKEND`/credentials for a real
 provider are supplied via env/OCI Vault at deploy time.
+
+**Upload storage (added 2026-10-08).** `FILE_STORAGE=db` — or running on Vercel
+(`VERCEL` is set) — stores uploaded bytes in the `StoredFile` table
+(`appointments/storage.py` `DatabaseStorage`); otherwise `FileSystemStorage` under
+`MEDIA_ROOT`. Any other `FILE_STORAGE` value raises `ImproperlyConfigured` at startup.
+`FILE_STORAGE_MAX_MB` (default `700`, positive integer, else `ImproperlyConfigured`) is
+the global ceiling on stored upload bytes.
 
 **Production headers (added after QA round 1).** Behind `if not DEBUG:` set
 `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`,

@@ -382,6 +382,14 @@ class PermissionConfigTests(ApiTestCase):
     # only and neither response reveals any client data). The new
     # `boarding_convert_view` is NOT AllowAny (IsAuthenticated + IsDoctor).
     # Widened to exactly eighteen, and no wider.
+    #
+    # AMENDED 2026-10-08 for uploads stored in Postgres: `file_download_view`
+    # (GET /files/<token>) is a THIRD category -- a signed capability. The
+    # 15-minute TimestampSigner token (salt "file-access") is only rendered by
+    # serializers for callers already authorised to see the parent record, and
+    # a forged/expired token is a 404 (test_file_storage.py). It must accept no
+    # bearer header because the SPA opens files via plain <a href>/<img src>.
+    # Widened to exactly nineteen, and no wider.
     ALLOWANY_ALLOWLIST = [
         "appointment_options_view",
         "boarding_availability_view", "boarding_ending_soon_view",
@@ -390,7 +398,7 @@ class PermissionConfigTests(ApiTestCase):
         "enquiries_view",
         "facility_availability_view", "facility_booking_status_view",
         "facility_bookings_view", "facility_confirm_view",
-        "facility_hold_view", "login_view",
+        "facility_hold_view", "file_download_view", "login_view",
         "password_reset_confirm_view", "password_reset_request_view",
         "refresh_view", "signup_view",
     ]

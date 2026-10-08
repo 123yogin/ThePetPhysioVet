@@ -20,7 +20,7 @@
 #    Traefik proxy entirely, which means no TLS and no routing.
 #
 # Assign your domain (or bare IP) to the FRONTEND service, port 80. nginx
-# already proxies /api and /media to the backend internally, so the whole app
+# already proxies /api to the backend internally, so the whole app
 # is same-origin and needs no Traefik path rules.
 
 services:
@@ -82,8 +82,8 @@ services:
     # expose, NOT ports — see note 3 above.
     expose:
       - "80"
-    volumes:
-      - media_data:/media:ro
+    # No media volume: nginx no longer serves uploads (signed /api/v1/files/
+    # route only, see frontend/nginx.conf).
 
 volumes:
   media_data:

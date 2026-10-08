@@ -12,6 +12,8 @@ from decimal import Decimal
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+from .files import diagnostic_report_upload_to
+
 
 class DiagnosticReport(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -32,7 +34,7 @@ class DiagnosticReport(models.Model):
 
     pet = models.ForeignKey("appointments.Pet", on_delete=models.CASCADE, related_name="diagnostic_reports")
     report_type = models.CharField(max_length=20, choices=REPORT_TYPES, default="OTHER")
-    file = models.FileField(upload_to="diagnostic_reports/")
+    file = models.FileField(upload_to=diagnostic_report_upload_to)
     original_filename = models.CharField(max_length=255, blank=True, default="")
     size = models.PositiveIntegerField(default=0)
     mime = models.CharField(max_length=100, blank=True, default="")

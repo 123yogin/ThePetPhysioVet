@@ -8,6 +8,7 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
+from django.db import transaction
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -22,7 +23,9 @@ from ..serializers import (
     QueryThreadSerializer, QueryMessageSerializer, QueryAttachmentSerializer,
 )
 
-from ._shared import _doctor_scoped, problem
+from ._shared import (
+    _doctor_scoped, problem, upload_preflight, upload_storage_guard,
+)
 
 MAX_QUERY_ATTACHMENTS = 5
 
@@ -32,6 +35,9 @@ def _create_query_message(request, thread, sender_role):
     if not message_text:
         return problem(400, "message is required.")
 
+    rejected = upload_preflight(request)
+    if rejected:
+        return rejected
     files = request.FILES.getlist("attachments")
     if len(files) > MAX_QUERY_ATTACHMENTS:
         return problem(400, f"A maximum of {MAX_QUERY_ATTACHMENTS} attachments are allowed per message.")
@@ -45,21 +51,24 @@ def _create_query_message(request, thread, sender_role):
     # sender_name/sender_role are derived from request.user — never from the
     # request body (API_CONTRACT.md §3 Queries).
     sender_name = request.user.get_full_name() or request.user.username
-    msg = QueryMessage.objects.create(
-        thread=thread,
-        sender=request.user,
-        sender_role=sender_role,
-        sender_name=sender_name,
-        message=message_text,
-    )
-    for f in validated_files:
-        QueryAttachment.objects.create(
-            message=msg,
-            file=f,
-            original_filename=getattr(f, "name", ""),
-            mime=getattr(f, "content_type", "") or "",
-            size=getattr(f, "size", 0),
+    # One transaction: an attachment that cannot be stored must not leave a
+    # message behind without it (the client would retry and post it twice).
+    with upload_storage_guard(request, "query attachment"), transaction.atomic():
+        msg = QueryMessage.objects.create(
+            thread=thread,
+            sender=request.user,
+            sender_role=sender_role,
+            sender_name=sender_name,
+            message=message_text,
         )
+        for f in validated_files:
+            QueryAttachment.objects.create(
+                message=msg,
+                file=f,
+                original_filename=getattr(f, "name", ""),
+                mime=getattr(f, "content_type", "") or "",
+                size=getattr(f, "size", 0),
+            )
     return Response(
         QueryMessageSerializer(msg, context={"request": request}).data,
         status=status.HTTP_201_CREATED,
