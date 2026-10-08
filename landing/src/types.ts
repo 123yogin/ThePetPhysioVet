@@ -104,9 +104,9 @@ export interface GalleryItem {
    *
    * Reels deliberately carry NO poster image. Extracting a still and
    * re-compressing it produced a worse picture than the video's own first
-   * frame, so the tile renders the <video> itself with preload="metadata" --
-   * the browser paints frame one at native quality and fetches only the header,
-   * not the file. The whole reel is loaded when a visitor opens it.
+   * frame, so the tile renders the <video> itself (LazyLoopVideo), attaching
+   * the small loop only as the tile nears the viewport. The whole reel is
+   * loaded when a visitor opens it.
    */
   videoUrl?: string;
   /**

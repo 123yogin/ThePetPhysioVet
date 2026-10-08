@@ -123,9 +123,11 @@ export const SITE: SiteConfig = {
     + 'Clinic visits at Shilaj, Ahmedabad, and home visits across the city.',
   // No "&" — it becomes "&amp;" in the HTML attribute, which pushed the rendered
   // length past Google's 160-char limit even though the source read shorter.
+  // Local-SEO plan 2026-10-08 (P1-6): names the locality and the secondary
+  // services (pool, home visits, boarding) that searchers combine with it.
   metaDescription:
-    'Veterinary physiotherapy and rehabilitation in Ahmedabad — arthritis, IVDD, '
-    + 'post-surgery and mobility care for dogs and cats by a qualified vet physio.',
+    'Vet physiotherapy for dogs and cats in Shilaj, Ahmedabad: indoor hydrotherapy pool, '
+    + 'laser, acupuncture, home visits and boarding, with Dr. Dhanvi Patel.',
 
   // Must be the real production origin — every canonical URL is built from it.
   // The primary domain is www (the apex 308-redirects to it), so canonicals use
@@ -203,6 +205,11 @@ export const SITE: SiteConfig = {
   // Sunday is deliberately ABSENT rather than listed as closed. The days array
   // answers which days the window covers; it is not the same statement as "we
   // are shut on Sunday". Add explicit closed days only if the clinic says so.
+  //
+  // TODO(owner): boarding is advertised as "24x7" in bookableServices.ts and
+  // the GBP was seen showing "closes 7:30 pm" (2026-10-07). These hours are
+  // the physiotherapy window only; confirm front-desk, boarding and
+  // grooming/swimming hours before adding any of them here or to schema.
   openingHours: [
     {
       days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],

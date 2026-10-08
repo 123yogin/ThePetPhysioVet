@@ -49,13 +49,17 @@
          it was a render-blocking request (~460 ms in a trace) for nothing. -->
 
     <!--
-      Intro gate. Runs before first paint so the intro overlay and the hero's
-      delayed entrance agree from the very first frame. Home page only, once
-      per browser session, never under reduced motion. If storage is blocked
-      it simply shows. The overlay's exit is a CSS animation, so it clears
-      itself even if the app never hydrates.
+      Intro gate. Home page only, once per browser session, never under
+      reduced motion. If storage is blocked it simply shows.
+
+      The intro must never hold the page back: the content underneath is
+      server-rendered and paints in the same frame, the hero no longer waits
+      for the overlay (--intro-wait is 0), the overlay ignores pointer events,
+      and its CSS animation clears it in about half a second even if the app
+      never hydrates. It is position:fixed, so it cannot shift layout. It used
+      to hold the page for ~2s and was the mobile LCP element (6.2s lab LCP).
     -->
-    <style>#intro{display:none}html.intro #intro{display:flex;position:fixed;inset:0;z-index:1000;background:#fef9f2}</style>
+    <style>#intro{display:none}html.intro #intro{display:flex;position:fixed;inset:0;z-index:1000;background:#fef9f2;pointer-events:none}</style>
     <script>
       (function () {
         try {
@@ -74,8 +78,10 @@
   >
     <div id="intro" aria-hidden="true">
       <div class="intro-mark">
-        <img class="intro-l" src="/logo.svg?v=4" alt="" width="180" height="180" />
-        <img class="intro-r" src="/logo.svg?v=4" alt="" width="180" height="180" />
+        <!-- A 192px raster of the mark (27 KB) instead of the 165 KB traced SVG:
+             identical at this size, and it no longer competes with the page. -->
+        <img class="intro-l" src="/logo-192.png" alt="" width="180" height="180" decoding="async" />
+        <img class="intro-r" src="/logo-192.png" alt="" width="180" height="180" decoding="async" />
       </div>
       <span class="intro-word">The Pet Physio Vet</span>
       <div class="intro-ticks"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>

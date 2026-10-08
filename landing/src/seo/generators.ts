@@ -12,7 +12,56 @@ import { indexableRoutes, matchRoute } from './routes';
 import { getPageMeta } from './metadata';
 import { CONDITIONS, SERVICES, SPECIALISTS, FAQS } from '../data/clinicData';
 import { conditionFaqs } from '../data/conditionFaqs';
-import { conditionPath, servicePath, specialistPath } from './routes';
+import { conditionPath, servicePath, specialistPath, carePath } from './routes';
+import { CARE_SERVICES } from '../data/careServices';
+import { BOARDING_PRICES, bookableByCode } from '../data/bookableServices';
+import { rupee } from '../lib/format';
+import { plainText } from '../data/treatmentContent';
+
+/** "label ₹n; label ₹n" for a price list. */
+const priceLine = (list: { label: string; price: number }[]): string =>
+  list.map((p) => `${p.label} ${rupee(p.price)}`).join('; ');
+
+/**
+ * One line per care/secondary service, with the prices the site shows. Shared
+ * by llms.txt and llms-full.txt so the two cannot disagree.
+ */
+function careServiceLines(): Array<{ label: string; url: string; note: string }> {
+  const out: Array<{ label: string; url: string; note: string }> = [];
+  for (const c of CARE_SERVICES) {
+    const card = bookableByCode(c.bookingCode);
+    out.push({
+      label: c.seoTitle,
+      url: absoluteUrl(carePath(c.id)),
+      note: `${card?.summary ?? c.seoDescription} Prices: ${priceLine(c.bookingCode === 'IndoorFacility' ? BOARDING_PRICES : [])}. Paid at the clinic; Aadhaar required at check-in.`,
+    });
+  }
+  const swim = bookableByCode('Hydrotherapy');
+  if (swim?.priceList) {
+    out.push({
+      label: 'Dog swimming sessions (indoor pool)',
+      url: absoluteUrl(servicePath('hydrotherapy')),
+      note: `${swim.summary} ${swim.includes.join(', ')}. Prices: ${priceLine(swim.priceList)}.`,
+    });
+  }
+  const groom = bookableByCode('Grooming');
+  if (groom?.priceList) {
+    out.push({
+      label: 'Dog grooming',
+      url: `${SITE.origin}/#book`,
+      note: `${groom.summary} ${groom.includes.join(', ')}. Prices: ${priceLine(groom.priceList)}.`,
+    });
+  }
+  const walk = bookableByCode('Walking');
+  if (walk) {
+    out.push({
+      label: 'Dog walking',
+      url: `${absoluteUrl(carePath('pet-boarding'))}#dog-walking`,
+      note: `${walk.summary} ${walk.includes.join(', ')}.`,
+    });
+  }
+  return out;
+}
 
 
 /**
@@ -161,6 +210,10 @@ export function buildLlmsTxt(): string {
       return line(route.path, s.title, `${s.shortDesc} Typical session: ${s.duration}.`);
     }),
     '',
+    '## Care services (boarding, swimming, grooming, walking)',
+    '',
+    ...careServiceLines().map((c) => `- [${c.label}](${c.url}): ${c.note.replace(/\s+/g, ' ').trim()}`),
+    '',
     '## Clinicians',
     '',
     // Skip the parts we don't have rather than emitting ". ." as a description.
@@ -172,7 +225,7 @@ export function buildLlmsTxt(): string {
     '## Other pages',
     '',
     ...indexableRoutes()
-      .filter((r) => !['condition', 'service', 'specialist'].includes(r.kind))
+      .filter((r) => !['condition', 'service', 'care', 'specialist'].includes(r.kind))
       .map((r) => {
         const m = getPageMeta(r.path);
         return line(r.path, r.kind === 'home' ? SITE.brandName : m.title, m.description);
@@ -229,6 +282,16 @@ export function buildLlmsFullTxt(): string {
     out.push(absoluteUrl(servicePath(s.id)));
     out.push(clean(s.fullDesc));
     if (s.duration) out.push(`Typical session: ${s.duration}`);
+    out.push('');
+  }
+
+  out.push('## Care services', '');
+  for (const c of careServiceLines()) {
+    out.push(`### ${c.label}`, c.url, clean(c.note), '');
+  }
+  for (const c of CARE_SERVICES) {
+    out.push(`### ${c.title}: questions`);
+    for (const f of c.faqs) out.push(`Q: ${clean(f.q)} A: ${clean(plainText(f.a))}`);
     out.push('');
   }
 

@@ -4,6 +4,8 @@ import { matchRoute } from './seo/routes';
 import { HomePage } from './pages/HomePage';
 import { ConditionPage } from './pages/ConditionPage';
 import { ServicePage } from './pages/ServicePage';
+import { CarePage } from './pages/CarePage';
+import type { CareService } from './data/careServices';
 import { SpecialistPage } from './pages/SpecialistPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { LegalPage } from './pages/LegalPage';
@@ -23,6 +25,8 @@ const RouteView: React.FC = () => {
       return entity ? <ConditionPage condition={entity as ConditionItem} /> : <NotFoundPage />;
     case 'service':
       return entity ? <ServicePage service={entity as ServiceItem} /> : <NotFoundPage />;
+    case 'care':
+      return entity ? <CarePage service={entity as CareService} /> : <NotFoundPage />;
     case 'specialist':
       return entity ? <SpecialistPage specialist={entity as Specialist} /> : <NotFoundPage />;
     case 'privacy':
