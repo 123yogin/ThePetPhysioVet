@@ -14,6 +14,7 @@ import time
 from rest_framework import serializers
 
 from ..models import SmsMessage
+from .service import scrub
 
 MAX_SKEW_SECONDS = 300
 
@@ -63,7 +64,7 @@ def apply_event(event, payload):
     fields = {"status": new_status}
     if new_status == "FAILED":
         reason = payload.get("reason") or ("Cancelled on the gateway." if event == "sms:cancelled" else "")
-        fields["error"] = f"Gateway: {reason}"[:500]
+        fields["error"] = scrub(f"Gateway: {reason}")[:500]
     # Conditional update: two concurrent events cannot both win a downgrade.
     SmsMessage.objects.filter(pk=msg.pk, status=msg.status).update(**fields)
     return "updated"

@@ -17,6 +17,7 @@ from django.db import models
 class SmsMessage(models.Model):
     KIND_CHOICES = (
         ("appointment_confirmed", "Appointment confirmed"),
+        ("appointment_moved", "Appointment moved"),
         ("appointment_reminder", "Appointment reminder"),
         ("boarding_confirmed", "Boarding confirmed"),
         ("boarding_checkout", "Boarding check-out reminder"),
@@ -29,6 +30,7 @@ class SmsMessage(models.Model):
         ("FAILED", "Failed"),
         ("SKIPPED_OPTOUT", "Skipped (owner opted out)"),
         ("SKIPPED_LIMIT", "Skipped (daily limit reached)"),
+        ("SKIPPED_COUNTRY", "Skipped (country not allowed)"),
         ("SKIPPED_DISABLED", "Skipped (SMS disabled)"),
     )
 

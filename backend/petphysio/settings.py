@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from pathlib import Path
 from datetime import timedelta
@@ -347,7 +348,11 @@ def _sms_backend_choice(environ, debug):
     if not choice:
         if debug:
             return "console"
-        return "android_gateway" if has_creds else "disabled"
+        # Only the real production deployment texts real people by default.
+        # Preview/development builds share env vars too easily (security
+        # review M2); they stay disabled unless SMS_BACKEND says otherwise.
+        is_production = environ.get("VERCEL_ENV") == "production"
+        return "android_gateway" if (has_creds and is_production) else "disabled"
     if choice not in SMS_BACKENDS:
         raise ImproperlyConfigured(
             f"SMS_BACKEND must be one of {', '.join(SMS_BACKENDS)}, got {choice!r}."
@@ -373,6 +378,38 @@ def _sms_daily_limit(environ):
     return limit
 
 
+def _sms_per_phone_daily_limit(environ):
+    """Texts one number may receive per day -- caps any single relay."""
+    raw = (environ.get("SMS_PER_PHONE_DAILY_LIMIT") or "3").strip()
+    try:
+        limit = int(raw)
+    except ValueError:
+        limit = 0
+    if limit <= 0:
+        raise ImproperlyConfigured(f"SMS_PER_PHONE_DAILY_LIMIT must be a positive integer, got {raw!r}.")
+    return limit
+
+
+def _sms_allowed_country_codes(environ):
+    """Calling codes the clinic may text, e.g. "+91" or "+91,+44". Anything
+    else is recorded as SKIPPED_COUNTRY and never sent."""
+    raw = environ.get("SMS_ALLOWED_COUNTRY_CODES") or "+91"
+    codes = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        code = "+" + item.lstrip("+")
+        if not re.fullmatch(r"\+[1-9]\d{0,3}", code):
+            raise ImproperlyConfigured(
+                f"SMS_ALLOWED_COUNTRY_CODES must be calling codes like +91, got {item!r}."
+            )
+        codes.append(code)
+    if not codes:
+        raise ImproperlyConfigured("SMS_ALLOWED_COUNTRY_CODES must list at least one code.")
+    return tuple(codes)
+
+
 def _sms_gateway_url(environ):
     url = (environ.get("SMS_GATEWAY_URL") or SMS_DEFAULT_GATEWAY_URL).strip().rstrip("/")
     if not url.startswith("https://"):
@@ -386,6 +423,8 @@ SMS_GATEWAY_URL = _sms_gateway_url(os.environ)
 SMS_GATEWAY_USERNAME = os.environ.get("SMS_GATEWAY_USERNAME", "")
 SMS_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "")
 SMS_DAILY_LIMIT = _sms_daily_limit(os.environ)
+SMS_PER_PHONE_DAILY_LIMIT = _sms_per_phone_daily_limit(os.environ)
+SMS_ALLOWED_COUNTRY_CODES = _sms_allowed_country_codes(os.environ)
 SMS_TIMEOUT_SECONDS = 5
 # HMAC key from the gateway app (Settings -> Webhooks -> Signing Key). The
 # delivery-status webhook answers 404 until it is set.

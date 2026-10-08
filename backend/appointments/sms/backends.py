@@ -18,11 +18,12 @@ mode. Request/response shapes were taken from the Cloud server's Swagger
     503 -> queue limits exceeded / device offline
 """
 import base64
+import http.client
 import json
 import logging
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from django.conf import settings
 from rest_framework import serializers
@@ -41,6 +42,40 @@ class SendResult:
     ok: bool
     provider_id: str = ""
     error: str = ""
+    # True when the request may have reached the provider but no answer came
+    # back (timeout, dropped connection): it might have been sent, so it counts
+    # toward the daily cap and is safe to retry only because the id is reused.
+    uncertain: bool = False
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    """Never follow a redirect: it would replay the Basic-auth header and the
+    patient's number to wherever the Location points (security review L1).
+    Returning None makes urllib raise HTTPError with the 3xx status."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = build_opener(_NoRedirect())
+
+
+def urlopen(req, timeout):
+    """The only network call in this package (patched in tests)."""
+    return _OPENER.open(req, timeout=timeout)
+
+
+def _transport_failure(exc):
+    """(error text, uncertain) for an exception raised before any HTTP status."""
+    reason = exc.reason if isinstance(exc, URLError) else exc
+    if isinstance(reason, (TimeoutError, ConnectionResetError, ConnectionAbortedError,
+                           http.client.RemoteDisconnected, http.client.IncompleteRead)):
+        uncertain = True
+    elif isinstance(exc, URLError) or isinstance(reason, ConnectionRefusedError):
+        uncertain = False   # DNS, refused, TLS: the request never left
+    else:
+        uncertain = True    # unknown socket error: assume it may have gone out
+    return f"Gateway unreachable: {type(reason).__name__}: {reason}"[:300], uncertain
 
 
 class _GatewayAccepted(serializers.Serializer):
@@ -93,9 +128,9 @@ class AndroidGatewayBackend:
                 # gateway already queued: it is sent, do not send it again.
                 return SendResult(ok=True, provider_id=message_id)
             return SendResult(ok=False, error=self._http_error(exc))
-        except (TimeoutError, URLError, OSError) as exc:
-            reason = getattr(exc, "reason", exc)
-            return SendResult(ok=False, error=f"Gateway unreachable: {type(reason).__name__}: {reason}"[:300])
+        except (OSError, http.client.HTTPException) as exc:  # URLError/TimeoutError are OSErrors
+            error, uncertain = _transport_failure(exc)
+            return SendResult(ok=False, error=error, uncertain=uncertain)
 
         try:
             data = json.loads(raw or b"{}")

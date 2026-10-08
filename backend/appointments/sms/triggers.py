@@ -25,7 +25,7 @@ REMINDABLE = ("Confirmed", "Rescheduled")
 CHECKOUT_STATUSES = ("CONFIRMED", "CHECKED_IN")
 # Vercel caps the function at 30 s; stop starting new sends after this.
 CRON_BUDGET_SECONDS = 20
-# Consecutive gateway failures before the run stops calling it.
+# Consecutive provider failures before the run stops calling the gateway.
 CIRCUIT_BREAK_AFTER = 3
 
 
@@ -42,6 +42,21 @@ def appointment_confirmed(appt):
         )
     except Exception:  # noqa: BLE001
         logger.exception("appointment_confirmed SMS failed; the confirmation is unaffected.")
+
+
+def appointment_moved(appt):
+    """A doctor moved the visit (direct reschedule, or approving the owner's
+    request). One text per new slot."""
+    try:
+        appt.refresh_from_db(fields=["date", "time", "owner_phone", "pet_name"])
+        send_sms(
+            appt.owner_phone,
+            templates.appointment_moved(appt.pet_name, appt.date, appt.time),
+            kind="appointment_moved", related=appt,
+            scheduled_for=f"{appt.date}T{appt.time}",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("appointment_moved SMS failed; the reschedule is unaffected.")
 
 
 def boarding_confirmed(stay):
@@ -73,7 +88,10 @@ def _tally(counts, msg, created_before):
 
 def _jobs(today):
     tomorrow = today + timedelta(days=1)
-    appts = (Appointment.objects.filter(date=tomorrow, status__in=REMINDABLE)
+    # Only visits a doctor booked, confirmed or moved: an owner-made booking
+    # must never make the clinic's SIM text a number nobody at the clinic saw.
+    appts = (Appointment.objects.filter(date=tomorrow, status__in=REMINDABLE,
+                                        doctor__isnull=False, confirmed_at__isnull=False)
              .order_by("time"))
     for a in appts:
         yield ("appointment_reminders", a.owner_phone,
@@ -114,7 +132,10 @@ def run_daily_reminders(today=None, budget_seconds=CRON_BUDGET_SECONDS):
             continue
         msg = send_sms(phone, body, kind=kind, related=related, scheduled_for=scheduled_for)
         _tally(counts, msg, existing)
-        consecutive_failures = consecutive_failures + 1 if msg.status == "FAILED" else 0
+        # Only provider/transport failures trip the breaker; a bad number in
+        # one record must not stop everyone else's reminder (review M1).
+        if getattr(msg, "provider_attempted", False):
+            consecutive_failures = consecutive_failures + 1 if msg.status == "FAILED" else 0
     if result["appointment_reminders"]["deferred"] or result["checkout_reminders"]["deferred"]:
         logger.warning("SMS cron deferred some reminders (time budget or gateway failing); re-run to retry.")
     return result

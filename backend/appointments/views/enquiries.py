@@ -286,6 +286,8 @@ def enquiry_convert_view(request, pk):
             visit_type_display=visit_type_labels[visit_type],
             status="Confirmed",
             reason_notes=enquiry.reason,
+            confirmed_at=timezone.now(),
+            confirmed_by=request.user,
         )
 
         enquiry.status = "CONVERTED"

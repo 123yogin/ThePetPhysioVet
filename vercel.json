@@ -12,7 +12,8 @@
   },
 
   "crons": [
-    { "path": "/api/v1/cron/sms-reminders", "schedule": "30 3 * * *" }
+    { "path": "/api/v1/cron/sms-reminders", "schedule": "30 3 * * *" },
+    { "path": "/api/v1/cron/sms-reminders", "schedule": "30 4 * * *" }
   ],
 
   "redirects": [

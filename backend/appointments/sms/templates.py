@@ -43,6 +43,11 @@ def appointment_confirmed(pet, d, t):
             f"Call {_phone()} to change.")
 
 
+def appointment_moved(pet, d, t):
+    return (f"{_brand()}: {_pet(pet)}'s appointment has moved to {_when(d, t)}. "
+            f"Call {_phone()} to change.")
+
+
 def appointment_reminder(pet, d, t):
     return (f"{_brand()}: reminder - {_pet(pet)}'s appointment is tomorrow, {_when(d, t)}. "
             f"Call {_phone()} to change.")

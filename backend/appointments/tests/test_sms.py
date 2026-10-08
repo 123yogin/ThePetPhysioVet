@@ -93,7 +93,8 @@ class PhoneFormatTests(SimpleTestCase):
             with self.subTest(raw=raw):
                 self.assertEqual(to_e164(raw), "+919876543210")
 
-    def test_international_number_with_plus_is_kept(self):
+    @override_settings(SMS_ALLOWED_COUNTRY_CODES=("+91", "+44"))
+    def test_international_number_with_plus_is_kept_when_allowed(self):
         self.assertEqual(to_e164("+44 7700 900123"), "+447700900123")
 
     def test_unusable_numbers_are_none(self):
@@ -113,7 +114,7 @@ class SmsSettingsTests(SimpleTestCase):
         creds = {"SMS_GATEWAY_USERNAME": "u", "SMS_GATEWAY_PASSWORD": "p"}
         self.assertEqual(choose({}, debug=True), "console")
         self.assertEqual(choose({}, debug=False), "disabled")
-        self.assertEqual(choose(creds, debug=False), "android_gateway")
+        self.assertEqual(choose({**creds, "VERCEL_ENV": "production"}, debug=False), "android_gateway")
         self.assertEqual(choose({"SMS_BACKEND": "disabled", **creds}, debug=False), "disabled")
         with self.assertRaises(ImproperlyConfigured):
             choose({"SMS_BACKEND": "android_gateway"}, debug=False)
@@ -162,12 +163,15 @@ class SendSmsGatewayTests(ApiTestCase):
         self.assertIsNotNone(msg.sent_at)
 
     def test_timeout_is_failed_and_never_raises(self):
-        for exc in (TimeoutError("timed out"), URLError("unreachable"), OSError("reset")):
+        # (exception, may it have reached the gateway?) -- "maybe" keeps sent_at
+        # so the send still uses a daily-cap slot (security review M3).
+        cases = ((TimeoutError("timed out"), True), (URLError("unreachable"), False), (OSError("reset"), True))
+        for exc, maybe_sent in cases:
             with self.subTest(exc=type(exc).__name__), patch(URLOPEN, side_effect=exc):
                 msg = send_sms("9876543210", "Hello", kind="test")
             self.assertEqual(msg.status, "FAILED")
             self.assertTrue(msg.error)
-            self.assertIsNone(msg.sent_at)
+            self.assertEqual(msg.sent_at is not None, maybe_sent)
 
     def test_rejected_credentials_never_leak_into_error_or_logs(self):
         with self.assertLogs("appointments.sms", "INFO") as logs, \
@@ -396,6 +400,7 @@ class CronTests(ApiTestCase):
         return Appointment.objects.create(
             pet=pet, doctor=self.doctor, pet_name=pet.name, owner_name=pet.owner_name,
             owner_phone=pet.owner_phone, date=day, time=time(*hhmm), status=status,
+            confirmed_at=timezone.now(), confirmed_by=self.doctor,
         )
 
     def _cron(self, token="cron-secret-123456"):
@@ -466,7 +471,7 @@ class CronTests(ApiTestCase):
         self.assertEqual(msg.boarding_id, leaving.id)
         self.assertIn("Bruno", msg.body)
 
-    @override_settings(**GATEWAY)
+    @override_settings(**GATEWAY, SMS_PER_PHONE_DAILY_LIMIT=10)  # five visits, one owner
     def test_a_dead_gateway_stops_the_run_and_a_rerun_retries(self):
         tomorrow = timezone.localdate() + timedelta(days=1)
         for h in range(9, 14):
