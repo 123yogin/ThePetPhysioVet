@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRehabToday, rehabTodayKey } from '../api/treatment';
@@ -23,9 +23,11 @@ const Section: React.FC<{ title: string; hint: string; empty: string; items: Reh
   empty,
   items,
   showPlanned,
-}) => (
-  <section className="glass-card" style={{ marginBottom: 24 }} aria-labelledby={`sec-${title}`}>
-    <h2 id={`sec-${title}`} style={{ margin: '0 0 4px', fontSize: 18 }}>
+}) => {
+  const headingId = useId();
+  return (
+  <section className="glass-card" style={{ marginBottom: 24 }} aria-labelledby={headingId}>
+    <h2 id={headingId} style={{ margin: '0 0 4px', fontSize: 18 }}>
       {title} ({items.length})
     </h2>
     <p style={{ margin: '0 0 16px', color: 'var(--brown-500)' }}>{hint}</p>
@@ -51,7 +53,7 @@ const Section: React.FC<{ title: string; hint: string; empty: string; items: Reh
                     {s.display_status === 'DUE' && '○ Due'}
                   </div>
                 </div>
-                <SessionActions session={s} />
+                <SessionActions key={`${s.id}-${s.status}`} session={s} />
               </li>
             ))}
           </ul>
@@ -59,7 +61,8 @@ const Section: React.FC<{ title: string; hint: string; empty: string; items: Reh
       ))
     )}
   </section>
-);
+  );
+};
 
 export const TodayRehabScreen: React.FC = () => {
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: rehabTodayKey, queryFn: fetchRehabToday });

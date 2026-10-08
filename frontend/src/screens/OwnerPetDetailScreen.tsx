@@ -293,7 +293,7 @@ export const OwnerPetDetailScreen: React.FC = () => {
                   <p style={{ color: 'var(--brown-600)', fontSize: '12px', marginTop: '4px' }}>
                     Started {friendlyDate(plan.start_date)}
                   </p>
-                  {plan.sessions && plan.sessions.length > 0 ? (
+                  {plan.schedule?.length ? (
                     <div style={{ marginTop: '12px' }}>
                       <h5 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--brown-900)', margin: '0 0 8px' }}>
                         Rehab checklist

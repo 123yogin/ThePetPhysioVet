@@ -35,7 +35,7 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
   });
   const [start, setStart] = useState(plan?.start_date ?? todayISO());
   const [duration, setDuration] = useState<Duration>(editing ? 'custom' : '7');
-  const [customEnd, setCustomEnd] = useState(plan?.end_date ?? addDaysISO(todayISO(), 6));
+  const [customEnd, setCustomEnd] = useState(editing ? (plan?.end_date ?? '') : addDaysISO(todayISO(), 6));
   const [submitted, setSubmitted] = useState(false);
 
   const required = (code: string) => catalogue?.frequencies.find((f) => f.code === code)?.weekdays_required ?? 0;
@@ -72,7 +72,8 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
     }
   });
   if (!start) errors.push('Choose a start date.');
-  if (!endDate || endDate < start) errors.push('The end date must be on or after the start date.');
+  // Editing an open-ended plan may leave the end date blank (stays open).
+  if (!(editing && !endDate) && (!endDate || endDate < start)) errors.push('The end date must be on or after the start date.');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +86,7 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
       schedule,
       therapies: ordered,
       ...(editing ? {} : { start_date: start }),
-      end_date: endDate,
+      ...(editing && !endDate ? {} : { end_date: endDate }),
     });
   };
 
@@ -179,6 +180,7 @@ export const PlanBuilder: React.FC<Props> = ({ plan, submitting, submitLabel, on
             className="input-glass"
             value={endDate}
             min={start}
+            placeholder={editing ? 'Open-ended' : undefined}
             disabled={duration !== 'custom' || submitting}
             onChange={(e) => setCustomEnd(e.target.value)}
           />

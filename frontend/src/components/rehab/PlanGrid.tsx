@@ -23,11 +23,11 @@ const GLYPH: Record<string, { mark: string; label: string; cls: string }> = {
   DUE: { mark: '○', label: 'Due', cls: 'due' },
 };
 
-function describe(s: RehabSession): string {
+function describe(s: RehabSession, showWho = true): string {
   if (s.display_status === 'DONE_LATE' && s.done_on) {
     return `planned ${weekdayShort(s.planned_date)}, done ${weekdayShort(s.done_on)}`;
   }
-  if (s.display_status === 'DONE' && s.done_by_name) return `Done by ${s.done_by_name}`;
+  if (s.display_status === 'DONE' && showWho && s.done_by_name) return `Done by ${s.done_by_name}`;
   if (s.display_status === 'SKIPPED' && s.skip_reason) return `Skipped: ${s.skip_reason}`;
   return GLYPH[s.display_status]?.label ?? s.display_status;
 }
@@ -38,6 +38,7 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
   const today = todayISO();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
 
   const sessions = useMemo(() => plan.sessions ?? [], [plan.sessions]);
   const byKey = useMemo(() => {
@@ -58,13 +59,23 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
     return dateRange(start, end);
   }, [sessions, plan.start_date, plan.end_date]);
 
+  const cellsReadOnly = readOnly || plan.status !== 'ACTIVE';
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   // Move focus into the panel when it opens, so keyboard users land on the actions.
   useEffect(() => {
     if (selectedId) panelRef.current?.focus();
   }, [selectedId]);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ['treatmentPlans'] });
+  const closePanel = () => {
+    setSelectedId(null);
+    // Hand focus back to the cell that opened the panel (it stays mounted).
+    openerRef.current?.focus();
+  };
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['treatmentPlans'] });
+    qc.invalidateQueries({ queryKey: ['rehabToday'] });
+  };
   const extend = useMutation({
     mutationFn: () => extendTreatmentPlan(plan.id, 7),
     onSuccess: () => {
@@ -152,7 +163,7 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
                       const s = byKey.get(`${t}|${d}`);
                       if (!s) return <td key={d} className={d === today ? 'rehab-today' : undefined} />;
                       const g = GLYPH[s.display_status] ?? GLYPH.DUE;
-                      const text = `${t}, ${longDate(d)}: ${describe(s)}`;
+                      const text = `${t}, ${longDate(d)}: ${describe(s, !readOnly)}`;
                       const content = (
                         <>
                           <span aria-hidden="true">{g.mark}</span>
@@ -161,15 +172,22 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
                       );
                       return (
                         <td key={d} className={d === today ? 'rehab-today' : undefined}>
-                          {readOnly ? (
-                            <span className={`rehab-cell ${g.cls}`} title={describe(s)}>{content}</span>
+                          {cellsReadOnly ? (
+                            <span className={`rehab-cell ${g.cls}`} title={describe(s, !readOnly)}>{content}</span>
                           ) : (
                             <button
                               type="button"
                               className={`rehab-cell ${g.cls}${selectedId === s.id ? ' selected' : ''}`}
                               title={describe(s)}
                               aria-expanded={selectedId === s.id}
-                              onClick={() => setSelectedId(selectedId === s.id ? null : s.id)}
+                              onClick={(e) => {
+                                if (selectedId === s.id) {
+                                  setSelectedId(null);
+                                } else {
+                                  openerRef.current = e.currentTarget;
+                                  setSelectedId(s.id);
+                                }
+                              }}
                             >
                               {content}
                             </button>
@@ -191,7 +209,7 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
             ))}
           </ul>
 
-          {!readOnly && selected && (
+          {!cellsReadOnly && selected && (
             <div
               ref={panelRef}
               tabIndex={-1}
@@ -199,16 +217,16 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
               aria-label={`${selected.therapy} on ${longDate(selected.planned_date)}`}
               className="rehab-panel"
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setSelectedId(null);
+                if (e.key === 'Escape') closePanel();
               }}
             >
               <div className="rehab-panel-head">
                 <strong>{selected.therapy}</strong> · {longDate(selected.planned_date)} · {describe(selected)}
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedId(null)}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={closePanel}>
                   Close
                 </button>
               </div>
-              <SessionActions key={`${selected.id}-${selected.status}`} session={selected} onChanged={() => setSelectedId(null)} />
+              <SessionActions key={`${selected.id}-${selected.status}`} session={selected} onChanged={closePanel} />
             </div>
           )}
         </>
