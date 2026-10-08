@@ -4,6 +4,7 @@ import { GalleryItem } from '../types';
 import { Maximize2 } from 'lucide-react';
 import { SplitWords, VelocitySkew } from '../motion';
 import { Pulse } from '../motion/extras';
+import { LazyLoopVideo } from './LazyLoopVideo';
 
 interface GallerySectionProps {
   onSelectImage: (item: GalleryItem) => void;
@@ -135,15 +136,11 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                         all -- permanent motion is a genuine problem for some
                         people, and there is already a marquee moving. */}
                     {item.videoUrl ? (
-                      <video
+                      <LazyLoopVideo
                         src={item.previewUrl || item.videoUrl}
-                        autoPlay={!prefersReducedMotion}
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        aria-label={item.altText}
-                        className="w-full aspect-[3/4] object-cover grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
+                        label={item.altText}
+                        reducedMotion={prefersReducedMotion}
+                        className="w-full aspect-[3/4] object-cover bg-(--c-surface-3) grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
                       />
                     ) : (
                       <img
