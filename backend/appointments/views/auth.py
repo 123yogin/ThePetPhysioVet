@@ -35,7 +35,7 @@ from ._shared import _client_ip, _first_error_detail, _rate_limited, problem
 
 # Public signup, per client IP per hour (see `_client_ip` for the edge caveat).
 SIGNUP_WINDOW_SECONDS = 60 * 60
-SIGNUP_IP_LIMIT = 10
+SIGNUP_IP_LIMIT = 30
 
 def _issue_tokens(user):
     refresh = RefreshToken.for_user(user)

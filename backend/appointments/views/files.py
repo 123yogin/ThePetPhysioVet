@@ -31,7 +31,7 @@ from ._shared import _client_ip, _rate_limited, problem
 # why that is a coarse bucket behind the edge). A pet page renders a handful
 # of links; 300/hour leaves room for a busy clinic browser.
 FILE_DOWNLOAD_WINDOW_SECONDS = 60 * 60
-FILE_DOWNLOAD_IP_LIMIT = 300
+FILE_DOWNLOAD_IP_LIMIT = 5000
 
 
 @api_view(["GET"])

@@ -57,7 +57,7 @@ UPLOAD_STORAGE_UNAVAILABLE = "Upload storage unavailable, please try again."
 # denial of service against the whole clinic, not just uploads.
 UPLOAD_WINDOW_SECONDS = 60 * 60
 UPLOAD_USER_LIMIT = 30   # upload requests per user per hour
-UPLOAD_IP_LIMIT = 60     # upload requests per client IP per hour (see _client_ip caveat)
+UPLOAD_IP_LIMIT = 300     # upload requests per client IP per hour (see _client_ip caveat)
 # Per-owner byte quota, summed over StoredFile.uploaded_by. Doctors are
 # exempt: they are the clinic, and blocking a clinician mid-consult is worse
 # than the storage it saves. Owner accounts are self-service (public signup),
