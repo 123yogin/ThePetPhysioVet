@@ -147,6 +147,26 @@ class PlanCreateTests(RehabBase):
         self.assertEqual(r.json()["sessions"], [])
         self.assertEqual(r.json()["schedule"], [])
 
+    def test_duration_4wk_derives_end_date(self):
+        plan = self.make_plan(duration="4WK")
+        self.assertEqual(plan["end_date"], "2026-11-03")  # start + 27
+        self.assertEqual(len(plan["sessions"]), 28)
+
+    def test_unparseable_duration_leaves_end_date_open(self):
+        r = self.client.post(self.url, {"start_date": "2026-10-07", "duration": "until healed"},
+                             format="json")
+        self.assertEqual(r.status_code, 201)
+        self.assertIsNone(r.json()["end_date"])
+
+    def test_patch_status_only_on_legacy_plan_keeps_null_end_date(self):
+        legacy = TreatmentPlan.objects.create(pet=self.pet_a, start_date=WED, therapies=["x"])
+        self.assertIsNone(legacy.end_date)
+        r = self.client.patch(f"{API}/treatment-plans/{legacy.id}", {"status": "PAUSED"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIsNone(r.json()["end_date"])
+        legacy.refresh_from_db()
+        self.assertIsNone(legacy.end_date)
+
     def test_client_cannot_write_sessions(self):
         r = self.client.post(self.url, self.payload(sessions=[{"therapy": "x"}]), format="json")
         self.assertEqual(r.status_code, 201)
@@ -175,8 +195,9 @@ class TickTests(RehabBase):
 
     def test_done_late_keeps_planned_date(self):
         s = self.sess(self.plan["id"], day=5)
-        self.assertEqual(self.client.get(f"{API}/treatment-plans/{self.plan['id']}")
-                         .json()["sessions"][1]["display_status"], "MISSED")
+        sessions = self.client.get(f"{API}/treatment-plans/{self.plan['id']}").json()["sessions"]
+        by_date = {x["planned_date"]: x for x in sessions}
+        self.assertEqual(by_date["2026-10-05"]["display_status"], "MISSED")
         r = self.client.post(self.url_for(s, "done"), {}, format="json")
         body = r.json()
         self.assertEqual(body["planned_date"], "2026-10-05")

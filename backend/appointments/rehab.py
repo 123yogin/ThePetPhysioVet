@@ -6,6 +6,7 @@ ORIGINAL start_date, so extending a plan continues alternate-day / bi-weekly
 rhythm rather than restarting it.
 """
 
+import re
 from datetime import timedelta
 
 from django.db import transaction
@@ -34,6 +35,18 @@ WEEKDAYS_REQUIRED = {f["code"]: f["weekdays_required"] for f in FREQUENCIES}
 
 DEFAULT_PLAN_DAYS = 7
 MAX_PLAN_DAYS = 366  # bounds how many rows one request can make us generate
+
+
+_DURATION_RE = re.compile(r"^(\d+)\s*(wk|w|weeks?|d|days?)$", re.IGNORECASE)
+
+
+def parse_duration_days(text):
+    """"4WK" / "2 weeks" / "10d" -> days; None when it is not that shape."""
+    m = _DURATION_RE.match((text or "").strip())
+    if not m:
+        return None
+    n = int(m.group(1))
+    return n * 7 if m.group(2).lower().startswith("w") else n
 
 
 def generate_dates(plan_start, plan_end, frequency, weekdays):
@@ -86,7 +99,11 @@ def sync_sessions(plan, today, backfill_from=None):
         if key not in desired and s.status == "DUE" and s.planned_date >= today
     ]
     if stale:
-        RehabSession.objects.filter(pk__in=stale).delete()
+        # Re-assert the condition in the DELETE: a doctor may have ticked one
+        # of these between the read above and now.
+        RehabSession.objects.filter(
+            pk__in=stale, status="DUE", planned_date__gte=today,
+        ).delete()
 
     RehabSession.objects.bulk_create(
         [

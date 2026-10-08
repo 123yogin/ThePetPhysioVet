@@ -77,13 +77,16 @@ def pet_treatment_plans_view(request, pk):
 def treatment_plan_detail_view(request, pk):
     # Follow-up L1 fix (2026-08-21): reached only via its pet — see
     # `_doctor_scoped`.
-    plan = get_object_or_404(
-        _doctor_scoped(TreatmentPlan, request, lookup="pet__doctor"), pk=pk,
-    )
+    base = _doctor_scoped(TreatmentPlan, request, lookup="pet__doctor")
     if request.method == "PATCH":
-        serializer = TreatmentPlanSerializer(plan, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        plan = serializer.save()
+        # Row lock so a PATCH and an extend on the same plan serialise.
+        with transaction.atomic():
+            plan = get_object_or_404(base.select_for_update(of=("self",)), pk=pk)
+            serializer = TreatmentPlanSerializer(plan, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            plan = serializer.save()
+        return Response(TreatmentPlanSerializer(plan).data)
+    plan = get_object_or_404(base, pk=pk)
     return Response(TreatmentPlanSerializer(plan).data)
 
 
@@ -96,7 +99,7 @@ class _ExtendSerializer(serializers.Serializer):
 def treatment_plan_extend_view(request, pk):
     base = _doctor_scoped(TreatmentPlan, request, lookup="pet__doctor")
     with transaction.atomic():
-        plan = get_object_or_404(base.select_for_update(), pk=pk)
+        plan = get_object_or_404(base.select_for_update(of=("self",)), pk=pk)
         serializer = _ExtendSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         old_end = plan.end_date or (plan.start_date + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1))

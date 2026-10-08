@@ -569,18 +569,26 @@ class TreatmentPlanSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         inst = self.instance
         start = attrs.get("start_date") or (inst.start_date if inst else None)
-        if "end_date" in attrs and attrs["end_date"] is not None:
-            end = attrs["end_date"]
-        elif inst is not None and inst.end_date is not None:
-            end = inst.end_date
-        else:
-            end = start + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1) if start else None
+        end = attrs.get("end_date")
+        if end is None and inst is not None:
+            end = inst.end_date  # never invent an end_date on update
+        if end is None and inst is None and start:
+            # Create only: derive from `duration` ("4WK", "10 days") when it
+            # parses, leave it open for other free text, else default 7 days.
+            duration = (attrs.get("duration") or "").strip()
+            if not duration:
+                end = start + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1)
+            else:
+                days = rehab.parse_duration_days(duration)
+                if days:
+                    end = start + timedelta(days=days - 1)
+            if end is not None:
+                attrs["end_date"] = end
         if start and end:
             if end < start:
                 raise serializers.ValidationError({"end_date": "End date is before the start date."})
             if (end - start).days + 1 > rehab.MAX_PLAN_DAYS:
                 raise serializers.ValidationError({"end_date": "A plan can span at most 366 days."})
-            attrs["end_date"] = end
         schedule = attrs.get("schedule")
         if schedule and not attrs.get("therapies"):
             attrs["therapies"] = [e["therapy"] for e in schedule]
