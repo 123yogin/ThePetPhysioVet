@@ -24,8 +24,12 @@ from ..serializers import (
     AppointmentSerializer,
 )
 
-from ..validators import FUTURE_ONLY_MESSAGE, is_in_the_past
+from ..validators import FUTURE_ONLY_MESSAGE, is_in_the_past, whatsapp_phone_digits
 from ._shared import _doctor_scoped, problem
+
+# Used in owner-facing share text when the doctor has not set a clinic name.
+DEFAULT_CLINIC_NAME = "The Pet Physio Vet"
+
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
@@ -200,13 +204,25 @@ def appointment_reschedule_reject_view(request, pk):
 def appointment_share_view(request, pk):
     # Follow-up L1 fix (2026-08-21) — see `_doctor_scoped`.
     appt = get_object_or_404(_doctor_scoped(Appointment, request), pk=pk)
-    message = (
-        f"Hi {appt.owner_name}, this is a reminder for {appt.pet_name}'s appointment "
-        f"on {appt.date.strftime('%d %b %Y')} at {appt.time.strftime('%I:%M %p')}."
-    )
-    digits = re.sub(r"\D", "", appt.owner_phone or "")
-    whatsapp_url = f"https://wa.me/{digits}?text={quote(message)}"
-    sms_url = f"sms:{appt.owner_phone}?body={quote(message)}"
+    clinic = (getattr(appt.doctor, "clinic_name", "") or "").strip() or DEFAULT_CLINIC_NAME
+    when = f"{appt.date.strftime('%d %b %Y')} at {appt.time.strftime('%I:%M %p')}"
+    if appt.status in ("Confirmed", "Rescheduled") and not is_in_the_past(appt.date, appt.time):
+        message = (
+            f"Hi {appt.owner_name}, {appt.pet_name}'s appointment at {clinic} "
+            f"is confirmed for {when}."
+        )
+    else:
+        message = (
+            f"Hi {appt.owner_name}, this is a reminder from {clinic} about "
+            f"{appt.pet_name}'s appointment on {when}."
+        )
+    # wa.me needs the country code (bare ten digits -> "invalid number");
+    # sms: gets E.164 so the dialler does not guess. Raw phone as last resort.
+    intl = whatsapp_phone_digits(appt.owner_phone)
+    wa_digits = intl or re.sub(r"\D", "", appt.owner_phone or "")
+    sms_target = f"+{intl}" if intl else (appt.owner_phone or "")
+    whatsapp_url = f"https://wa.me/{wa_digits}?text={quote(message)}"
+    sms_url = f"sms:{sms_target}?body={quote(message)}"
     return Response({
         "whatsapp_url": whatsapp_url,
         "sms_url": sms_url,
