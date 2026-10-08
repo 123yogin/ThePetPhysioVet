@@ -37,9 +37,11 @@ export interface Boarding {
   owner_id?: string | null;
   pet_id?: string | null;
   pet_link_status?: 'linked' | 'owner_only' | 'unlinked';
-  /** True once the clinic converted (or the owner booked signed in). An
-   *  automatic phone match is false — a hint, not a confirmed client. */
+  /** True once staff pressed "Confirm client", convert created the account, or
+   *  the owner booked signed in. A phone/email match is false — a hint only. */
   owner_verified?: boolean;
+  /** The linked account, so staff can check it before confirming. */
+  owner_account?: { id: string; name: string; email: string; phone: string } | null;
   /** null when no pet is linked; [] when the pet belongs to another practice. */
   previous_reports?: Diagnosis[] | null;
 }
@@ -128,6 +130,14 @@ export async function createBoarding(payload: Record<string, unknown>) {
 }
 
 /** Find-or-create the owner + pet for a stay and link them (idempotent). */
+/** Staff have checked the linked account is this client: show the stay in
+ *  that owner's app. */
+export async function confirmBoardingClient(reference: string) {
+  return http<Boarding>(`/facility/boarding/${encodeURIComponent(reference)}/confirm-client`, {
+    method: 'POST',
+  });
+}
+
 export async function convertBoarding(reference: string) {
   return http<Boarding>(`/facility/boarding/${encodeURIComponent(reference)}/convert`, {
     method: 'POST',

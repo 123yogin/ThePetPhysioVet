@@ -65,13 +65,20 @@ class Enquiry(models.Model):
         related_name="actioned_enquiries",
     )
     actioned_at = models.DateTimeField(null=True, blank=True)
-    # The owner account this enquiry belongs to: set when it was sent while
+    # The owner account this enquiry is linked to: set when it was sent while
     # signed in as that owner, or by the clinic's convert. Never inferred from
-    # the phone -- see FacilityBooking.owner (live QA D1).
+    # the phone -- see FacilityBooking.owner (live QA D1). Visibility to that
+    # owner is gated separately by `owner_verified`.
     owner = models.ForeignKey(
         "appointments.UserProfile", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="enquiries",
     )
+    # Whether `owner` may see this enquiry in /owner/bookings. True only when it
+    # was sent while signed in as that owner, when convert CREATED the account
+    # itself, or after staff explicitly confirm the client. Convert matching an
+    # EXISTING account by (unverified) email leaves it False -- a staff link,
+    # not proof of identity (live QA D1 review).
+    owner_verified = models.BooleanField(default=False)
 
     @property
     def reference(self):

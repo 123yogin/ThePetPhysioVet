@@ -125,6 +125,13 @@ def invoice_detail_view(request, pk):
     return Response(InvoiceSerializer(invoice).data)
 
 
+def _locked_invoice(pk):
+    """The invoice row, locked for the rest of the transaction. `of=("self",)`
+    because callers' scoping joins nullable pet/doctor rows, and Postgres
+    refuses FOR UPDATE on the nullable side of an outer join."""
+    return Invoice.objects.select_for_update(of=("self",)).get(pk=pk)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
 def invoice_payments_view(request, pk):
@@ -141,9 +148,6 @@ def invoice_payments_view(request, pk):
         if existing:
             return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
 
-    if invoice.is_void:
-        return problem(400, "This invoice has been voided and cannot take a payment.")
-
     amount_paid = request.data.get("amount_paid")
     if amount_paid is None:
         return problem(400, "amount_paid is required.")
@@ -154,29 +158,41 @@ def invoice_payments_view(request, pk):
     if amount_paid <= 0:
         return problem(400, "amount_paid must be a positive amount.")
 
-    # Known-issue #3: overpayment used to be accepted, driving balance_due
-    # (and the dashboard's pending_payments sum) negative.
-    if amount_paid > invoice.balance_due:
-        return problem(
-            400,
-            "amount_paid exceeds the invoice's balance due.",
-            f"amount_paid ({amount_paid}) exceeds balance_due ({invoice.balance_due}).",
-        )
+    # Review fix (live QA B7): re-read the invoice under a row lock so a void
+    # (which takes the same lock) and a payment cannot interleave -- without it
+    # a payment that read the invoice just before a concurrent void committed
+    # would be recorded against a voided invoice.
+    with transaction.atomic():
+        invoice = _locked_invoice(invoice.pk)
+        if invoice.is_void:
+            return problem(400, "This invoice has been voided and cannot take a payment.")
 
-    try:
-        payment = Payment.objects.create(
-            invoice=invoice,
-            amount_paid=amount_paid,
-            gateway_ref=request.data.get("gateway_ref", ""),
-            status="SUCCESS",
-            idempotency_key=idempotency_key,
-        )
-    except IntegrityError:
-        # Race: another request with the same idempotency_key committed first.
-        existing = Payment.objects.filter(idempotency_key=idempotency_key).first()
-        if not existing:
-            raise
-        return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
+        # Known-issue #3: overpayment used to be accepted, driving balance_due
+        # (and the dashboard's pending_payments sum) negative.
+        if amount_paid > invoice.balance_due:
+            return problem(
+                400,
+                "amount_paid exceeds the invoice's balance due.",
+                f"amount_paid ({amount_paid}) exceeds balance_due ({invoice.balance_due}).",
+            )
+
+        try:
+            # Savepoint, so an idempotency-key collision does not poison the
+            # outer transaction holding the lock.
+            with transaction.atomic():
+                payment = Payment.objects.create(
+                    invoice=invoice,
+                    amount_paid=amount_paid,
+                    gateway_ref=request.data.get("gateway_ref", ""),
+                    status="SUCCESS",
+                    idempotency_key=idempotency_key,
+                )
+        except IntegrityError:
+            # Race: another request with the same idempotency_key committed first.
+            existing = Payment.objects.filter(idempotency_key=idempotency_key).first()
+            if not existing:
+                raise
+            return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
 
     return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 

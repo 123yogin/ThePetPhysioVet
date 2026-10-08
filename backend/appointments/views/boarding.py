@@ -182,10 +182,21 @@ def _lazy_match(rows):
     pending = [b for b in rows if b.owner_id is None and b.status in BoardingBooking.ACTIVE_STATUSES]
     if not pending:
         return
+    # Narrow candidates in SQL by the last seven digits of each stay's phone
+    # (stored phones vary in separators/prefix, so exact equality would miss);
+    # phone_key then does the exact comparison in Python. Never scans every
+    # owner per GET.
+    tails = {phone_key(b.owner_phone)[-7:] for b in pending} - {""}
+    if not tails:
+        return
+    acc_q, pet_q = Q(), Q()
+    for t in tails:
+        acc_q |= Q(phone__contains=t)
+        pet_q |= Q(owner_phone__contains=t)
     index = {}
-    for uid, ph in UserProfile.objects.filter(role="OWNER").exclude(phone="").values_list("id", "phone"):
+    for uid, ph in UserProfile.objects.filter(acc_q, role="OWNER").values_list("id", "phone"):
         index.setdefault(phone_key(ph), set()).add(uid)
-    for oid, ph in Pet.objects.filter(owner__isnull=False).exclude(owner_phone="").values_list("owner_id", "owner_phone"):
+    for oid, ph in Pet.objects.filter(pet_q, owner__isnull=False).values_list("owner_id", "owner_phone"):
         index.setdefault(phone_key(ph), set()).add(oid)
     index.pop("", None)
     for b in pending:
@@ -656,6 +667,9 @@ def boarding_convert_view(request, reference):
                 )
                 owner.set_unusable_password()
                 owner.save()
+                # Convert made this account for this stay, so the link is the
+                # clinic's own -- not a match against someone else's signup.
+                booking.owner_verified = True
             name = booking.pet_name.strip()
             pet = Pet.objects.filter(owner=owner, name__iexact=name).order_by("created_at", "id").first()
             if pet is None:
@@ -665,13 +679,34 @@ def boarding_convert_view(request, reference):
                     owner_phone=phone, owner_email=email,
                 )
             booking.owner, booking.pet = owner, pet
-            booking.save(update_fields=["owner", "pet"])
-        # The clinic has now vouched for this link (live QA D1), so the stay may
-        # appear in that owner's portal -- including a stay that was already
-        # auto-matched, where convert is how staff confirm the match.
-        if booking.owner_id and not booking.owner_verified:
-            booking.owner_verified = True
-            booking.save(update_fields=["owner_verified"])
+            # owner_verified is True only if the account was created just above.
+            # An EXISTING account found by phone/email stays unverified until
+            # staff press "Confirm client" (live QA D1 review).
+            booking.save(update_fields=["owner", "pet", "owner_verified"])
+    return Response(BoardingSerializer(
+        booking, context={"request": request, "doctor": request.user},
+    ).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsDoctor])
+def boarding_confirm_client_view(request, reference):
+    """POST /facility/boarding/<ref>/confirm-client -- DOCTOR only. Staff have
+    checked the linked account (name / email / phone shown on the card as
+    `owner_account`) really is this client, so the stay may now appear in that
+    owner's portal. The ONLY way a matched existing account becomes verified.
+    404 unknown/HELD; 400 when no account is linked; idempotent."""
+    booking = BoardingBooking.objects.filter(reference=reference).exclude(status="HELD").first()
+    if booking is None:
+        return problem(404, "Not found", "No boarding booking with that reference.")
+    if booking.owner_id is None:
+        return problem(
+            400, "No client linked",
+            "This stay is not linked to a client account yet — convert it first.",
+        )
+    if not booking.owner_verified:
+        booking.owner_verified = True
+        booking.save(update_fields=["owner_verified"])
     return Response(BoardingSerializer(
         booking, context={"request": request, "doctor": request.user},
     ).data)

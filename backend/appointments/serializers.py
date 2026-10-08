@@ -903,6 +903,20 @@ class EnquiryCreateSerializer(serializers.ModelSerializer):
         return normalise_phone(value)
 
 
+def _owner_account(user):
+    """The linked client account as staff need it to VERIFY the link before
+    pressing "Confirm client": who it is and how to reach them. Doctor-facing
+    serializers only -- never on a public or owner response (live QA D1)."""
+    if user is None:
+        return None
+    return {
+        "id": str(user.id),
+        "name": (user.get_full_name() or user.username).strip(),
+        "email": user.email or "",
+        "phone": user.phone or "",
+    }
+
+
 class EnquirySerializer(serializers.ModelSerializer):
     """Doctor-facing read shape for `GET /enquiries` and the convert/dismiss
     responses — snake_case, matching this app's internal API convention
@@ -917,6 +931,10 @@ class EnquirySerializer(serializers.ModelSerializer):
     # ENQ-XXXXXXXX -- the reference the visitor was given, so the clinic can
     # match a phone call to the card (live QA B6).
     reference = serializers.CharField(read_only=True)
+    owner_account = serializers.SerializerMethodField()
+
+    def get_owner_account(self, obj):
+        return _owner_account(obj.owner if obj.owner_id else None)
 
     class Meta:
         model = Enquiry
@@ -925,6 +943,7 @@ class EnquirySerializer(serializers.ModelSerializer):
             "email", "phone", "service", "reason", "preferred_date",
             "preferred_specialist", "status", "created_at",
             "converted_appointment_id", "appointment", "reference",
+            "owner_verified", "owner_account",
         ]
         read_only_fields = fields
 
@@ -1139,7 +1158,7 @@ class BoardingSerializer(serializers.ModelSerializer):
         fields = [
             "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
             "emergency_contact_name", "emergency_contact_phone",
-            "owner_id", "pet_id", "owner_verified", "pet_link_status", "previous_reports", "expires_at",
+            "owner_id", "pet_id", "owner_verified", "owner_account", "pet_link_status", "previous_reports", "expires_at",
             "check_in", "check_out", "duration", "duration_label", "price",
             "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
             "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
@@ -1151,6 +1170,11 @@ class BoardingSerializer(serializers.ModelSerializer):
 
     def get_aadhaar(self, obj):
         return f"XXXX XXXX {obj.aadhaar[-4:]}" if len(obj.aadhaar) >= 4 else ""
+
+    owner_account = serializers.SerializerMethodField()
+
+    def get_owner_account(self, obj):
+        return _owner_account(obj.owner if obj.owner_id else None)
 
     def get_pet_link_status(self, obj):
         if obj.pet_id:

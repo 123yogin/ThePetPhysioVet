@@ -263,9 +263,10 @@ def owner_bookings_view(request):
     -- pet, notes, services, price. Now only bookings EXPLICITLY linked to the
     account are shown:
       - made while signed in as this owner (owner FK set at create), or
-      - linked by the clinic: an enquiry the doctor converted, a boarding stay
-        the doctor converted (`owner_verified`).
-    The automatic boarding phone match is a staff hint and is NOT enough.
+      - linked by the clinic: convert CREATED the account, or staff explicitly
+        pressed "Confirm client" (`owner_verified` on enquiries and stays).
+    An automatic phone match, or convert finding an EXISTING account by
+    phone/email, is a staff hint and is NOT enough.
 
     Three kinds, each in the inbox a doctor triages it from:
       - facility : Physiotherapy one-hour slots (grouped per reference)
@@ -303,7 +304,7 @@ def owner_bookings_view(request):
             "status": e.status,
             "created_at": e.created_at.isoformat(),
         }
-        for e in Enquiry.objects.filter(owner=me).order_by("-created_at")
+        for e in Enquiry.objects.filter(owner=me, owner_verified=True).order_by("-created_at")
     ]
 
     boarding = [

@@ -111,11 +111,12 @@ class BoardingBooking(models.Model):
         "appointments.Pet", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="boarding_bookings",
     )
-    # Whether `owner` was set by an explicit act -- the clinic's convert, or a
-    # booking made while signed in as that owner -- rather than the automatic
-    # phone match. Only a verified link shows the stay in the owner's portal:
-    # signup does not verify a phone, so an automatic match is a staff HINT,
-    # never proof of identity (live QA D1, 2026-10-08).
+    # Whether the stay may appear in `owner`'s portal. True only when it was
+    # booked while signed in as that owner, when convert CREATED the account
+    # itself, or after staff explicitly press "Confirm client". An automatic
+    # phone match, or convert finding an EXISTING account by phone/email, is a
+    # staff HINT: signup verifies neither, so it is never proof of identity
+    # (live QA D1, 2026-10-08).
     owner_verified = models.BooleanField(default=False)
 
     check_in = models.DateField()

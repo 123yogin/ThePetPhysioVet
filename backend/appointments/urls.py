@@ -31,11 +31,12 @@ from .views import (
     owner_appointment_cancel_view, owner_invoices_view, owner_invoice_detail_view,
     owner_pet_queries_view, owner_bookings_view,
     # Enquiries
-    enquiries_view, enquiry_convert_view, enquiry_dismiss_view,
+    enquiries_view, enquiry_convert_view, enquiry_dismiss_view, enquiry_confirm_client_view,
     facility_availability_view, facility_bookings_view, facility_booking_status_view,
     facility_hold_view, facility_confirm_view,
     boarding_availability_view, boarding_view, boarding_status_view, boarding_ending_soon_view,
     boarding_hold_view, boarding_hold_confirm_view, boarding_convert_view,
+    boarding_confirm_client_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -148,6 +149,7 @@ urlpatterns = [
     path("enquiries", enquiries_view, name="enquiries"),
     path("enquiries/<uuid:pk>/convert", enquiry_convert_view, name="enquiry-convert"),
     path("enquiries/<uuid:pk>/dismiss", enquiry_dismiss_view, name="enquiry-dismiss"),
+    path("enquiries/<uuid:pk>/confirm-client", enquiry_confirm_client_view, name="enquiry-confirm-client"),
     path("facility/availability", facility_availability_view, name="facility-availability"),
     path("facility/bookings", facility_bookings_view, name="facility-bookings"),
     path("facility/bookings/<str:reference>/status", facility_booking_status_view, name="facility-booking-status"),
@@ -159,5 +161,9 @@ urlpatterns = [
     path("facility/boarding/holds/<str:reference>/confirm", boarding_hold_confirm_view, name="boarding-hold-confirm"),
     path("facility/boarding", boarding_view, name="boarding"),
     path("facility/boarding/<str:reference>/convert", boarding_convert_view, name="boarding-convert"),
+    path(
+        "facility/boarding/<str:reference>/confirm-client",
+        boarding_confirm_client_view, name="boarding-confirm-client",
+    ),
     path("facility/boarding/<str:reference>/status", boarding_status_view, name="boarding-status"),
 ]

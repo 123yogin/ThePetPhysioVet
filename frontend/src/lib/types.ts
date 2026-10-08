@@ -257,6 +257,9 @@ export interface Enquiry {
   appointment?: Appointment | null;
   /** ENQ-XXXXXXXX — the reference the visitor was given on the website. */
   reference?: string;
+  /** Whether the linked account may see this in their app (see confirm-client). */
+  owner_verified?: boolean;
+  owner_account?: { id: string; name: string; email: string; phone: string } | null;
 }
 
 export interface EnquiriesResponse {

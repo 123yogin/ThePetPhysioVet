@@ -293,17 +293,78 @@ class OwnerBookingsPrivacyTests(ApiTestCase):
         data = self._bookings(stranger)
         self.assertEqual(data, {"facility": [], "requests": [], "boarding": []})
 
-    def test_boarding_converted_by_the_clinic_is_shown(self):
-        owner = self._stranger()
-        r = self.anon().post(f"{API}/facility/boarding", _boarding_body(), format="json")
-        ref = r.data["reference"]
+    # --- convert never vouches for a MATCHED account (review fix) ---------
+
+    def _anon_stay(self, **over):
+        r = self.anon().post(f"{API}/facility/boarding", _boarding_body(**over), format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.data["reference"]
+
+    def _convert_stay(self, ref):
         self.auth(self.doctor)
         c = self.client.post(f"{API}/facility/boarding/{ref}/convert", {}, format="json")
         self.assertEqual(c.status_code, 200, c.content)
-        data = self._bookings(owner)
-        self.assertEqual([b["reference"] for b in data["boarding"]], [ref])
+        return c
 
-    def test_enquiry_converted_by_the_clinic_is_shown_to_that_owner(self):
+    def test_converting_a_stay_matched_to_a_stranger_does_not_show_it(self):
+        stranger = self._stranger()
+        ref = self._anon_stay()
+        c = self._convert_stay(ref)
+        stay = BoardingBooking.objects.get(reference=ref)
+        self.assertEqual(stay.owner_id, stranger.id)  # staff link only
+        self.assertFalse(stay.owner_verified)
+        self.assertFalse(c.data["owner_verified"])
+        self.assertEqual(self._bookings(stranger)["boarding"], [])
+
+    def test_converting_a_stay_matched_by_email_does_not_show_it(self):
+        stranger = UserProfile.objects.create_user(
+            username="mailer", password="Strange-Pass-1", role="OWNER", email="priya@example.com",
+        )
+        ref = self._anon_stay(ownerPhone="9811100000", ownerEmail="priya@example.com")
+        self._convert_stay(ref)
+        self.assertEqual(BoardingBooking.objects.get(reference=ref).owner_id, stranger.id)
+        self.assertEqual(self._bookings(stranger)["boarding"], [])
+
+    def test_doctor_card_shows_the_matched_account_for_verification(self):
+        stranger = self._stranger()
+        ref = self._anon_stay()
+        self.auth(self.doctor)
+        row = next(r for r in self.client.get(f"{API}/facility/boarding").data["results"] if r["reference"] == ref)
+        self.assertEqual(row["owner_account"]["email"], "stranger@example.com")
+        self.assertEqual(row["owner_account"]["phone"], stranger.phone)
+        self.assertIn("name", row["owner_account"])
+
+    def test_explicit_confirm_client_shows_the_stay(self):
+        owner = self._stranger()
+        ref = self._anon_stay()
+        self.auth(self.doctor)
+        r = self.client.post(f"{API}/facility/boarding/{ref}/confirm-client", {}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(r.data["owner_verified"])
+        self.assertEqual([b["reference"] for b in self._bookings(owner)["boarding"]], [ref])
+
+    def test_confirm_client_needs_a_linked_owner_and_a_doctor(self):
+        ref = self._anon_stay(ownerPhone="9811100001")
+        self.auth(self.owner_a)
+        self.assertEqual(
+            self.client.post(f"{API}/facility/boarding/{ref}/confirm-client", {}, format="json").status_code, 403,
+        )
+        self.auth(self.doctor)
+        r = self.client.post(f"{API}/facility/boarding/{ref}/confirm-client", {}, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(
+            self.client.post(f"{API}/facility/boarding/BRD-NOPE/confirm-client", {}, format="json").status_code, 404,
+        )
+
+    def test_convert_that_creates_the_owner_links_it_verified(self):
+        ref = self._anon_stay(ownerPhone="9811100002", ownerEmail="fresh@example.com")
+        self._convert_stay(ref)
+        stay = BoardingBooking.objects.get(reference=ref)
+        self.assertTrue(stay.owner_verified)
+        self.assertFalse(stay.owner.has_usable_password())
+        self.assertEqual([b["reference"] for b in self._bookings(stay.owner)["boarding"]], [ref])
+
+    def test_enquiry_converted_onto_an_email_matched_account_is_not_shown(self):
         r = self.anon().post(f"{API}/enquiries", _enquiry_body(email="a@example.com"), format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.auth(self.doctor)
@@ -312,11 +373,36 @@ class OwnerBookingsPrivacyTests(ApiTestCase):
             {"date": _future(), "time": "10:30", "visit_type": "Initial"}, format="json",
         )
         self.assertEqual(c.status_code, 200, c.content)
-        self.assertEqual(Enquiry.objects.get(pk=r.data["id"]).owner_id, self.owner_a.id)
-        data = self._bookings(self.owner_a)
-        self.assertEqual([q["reference"] for q in data["requests"]], [r.data["reference"]])
-        # And not to anyone else who happens to share the phone.
+        enq = Enquiry.objects.get(pk=r.data["id"])
+        self.assertEqual(enq.owner_id, self.owner_a.id)
+        self.assertFalse(enq.owner_verified)
+        self.assertEqual(self._bookings(self.owner_a)["requests"], [])
+        self.assertEqual(c.data["owner_account"]["email"], "a@example.com")
+
+        # Explicit confirm by the clinic publishes it -- to that owner only.
+        self.auth(self.doctor)
+        cc = self.client.post(f"{API}/enquiries/{r.data['id']}/confirm-client", {}, format="json")
+        self.assertEqual(cc.status_code, 200, cc.content)
+        self.assertEqual([q["reference"] for q in self._bookings(self.owner_a)["requests"]], [r.data["reference"]])
         self.assertEqual(self._bookings(self._stranger())["requests"], [])
+
+    def test_enquiry_confirm_client_requires_a_converted_enquiry_and_a_doctor(self):
+        e = Enquiry.objects.create(first_name="P", pet_name="B", email="zz@example.com", phone="9876543210")
+        self.auth(self.owner_a)
+        self.assertEqual(self.client.post(f"{API}/enquiries/{e.id}/confirm-client", {}, format="json").status_code, 403)
+        self.auth(self.doctor)
+        self.assertEqual(self.client.post(f"{API}/enquiries/{e.id}/confirm-client", {}, format="json").status_code, 400)
+
+    def test_enquiry_convert_that_creates_the_owner_links_it_verified(self):
+        r = self.anon().post(f"{API}/enquiries", _enquiry_body(email="brandnew@example.com"), format="json")
+        self.auth(self.doctor)
+        self.client.post(
+            f"{API}/enquiries/{r.data['id']}/convert",
+            {"date": _future(), "time": "10:30", "visit_type": "Initial"}, format="json",
+        )
+        enq = Enquiry.objects.get(pk=r.data["id"])
+        self.assertTrue(enq.owner_verified)
+        self.assertEqual([q["reference"] for q in self._bookings(enq.owner)["requests"]], [r.data["reference"]])
 
     def test_bookings_made_while_signed_in_are_linked_to_that_owner(self):
         self.auth(self.owner_a)
@@ -330,6 +416,7 @@ class OwnerBookingsPrivacyTests(ApiTestCase):
         self.assertEqual(b.status_code, 201, b.content)
 
         self.assertEqual(Enquiry.objects.get(pk=e.data["id"]).owner_id, self.owner_a.id)
+        self.assertTrue(Enquiry.objects.get(pk=e.data["id"]).owner_verified)
         self.assertTrue(FacilityBooking.objects.filter(reference=f.data["reference"], owner=self.owner_a).exists())
         stay = BoardingBooking.objects.get(reference=b.data["reference"])
         self.assertEqual(stay.owner_id, self.owner_a.id)
@@ -348,6 +435,73 @@ class OwnerBookingsPrivacyTests(ApiTestCase):
         signed = self.client.post(f"{API}/facility/boarding", _boarding_body(), format="json")
         self.assertEqual(set(anon.data), set(signed.data))
         self.assertNotIn("owner_id", signed.data)
+
+
+class VoidPaymentRaceTests(ApiTestCase):
+    """Review fix: payments re-read the invoice under a row lock, so a payment
+    racing a void sees the void and is refused."""
+
+    def test_payment_locks_the_invoice_row_before_checking(self):
+        from unittest import mock
+        from django.db.models import QuerySet
+        seen = []
+        real = QuerySet.select_for_update
+
+        def spy(qs, *a, **kw):
+            seen.append((qs.model.__name__, kw.get("of")))
+            return real(qs, *a, **kw)
+
+        self.auth(self.doctor)
+        with mock.patch.object(QuerySet, "select_for_update", spy):
+            r = self.client.post(
+                f"{API}/invoices/{self.invoice_a.id}/payments",
+                {"amount_paid": "100", "idempotency_key": "k-lock-1"}, format="json",
+            )
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertIn(("Invoice", ("self",)), seen)
+
+    def test_invoice_voided_after_the_first_read_still_refuses_payment(self):
+        """Simulate the race: the void lands between the scoped lookup and the
+        locked re-read -- the locked re-read must win."""
+        from unittest import mock
+        from appointments.views import billing as billing_views
+        real = billing_views._locked_invoice
+
+        def void_then_lock(pk):
+            Invoice.objects.filter(pk=pk).update(voided_at=timezone.now())
+            return real(pk)
+
+        self.auth(self.doctor)
+        with mock.patch.object(billing_views, "_locked_invoice", void_then_lock):
+            r = self.client.post(
+                f"{API}/invoices/{self.invoice_a.id}/payments",
+                {"amount_paid": "100", "idempotency_key": "k-race-1"}, format="json",
+            )
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertFalse(Payment.objects.filter(invoice=self.invoice_a).exists())
+
+
+class LazyMatchQueryTests(ApiTestCase):
+    """Review fix: the lazy match must not scan every owner on each GET."""
+
+    def test_lazy_match_only_reads_candidates_with_matching_digits(self):
+        for i in range(30):
+            UserProfile.objects.create_user(
+                username=f"o{i}", password="x-Pass-123", role="OWNER", phone=f"91234{i:05d}",
+            )
+        self.anon().post(f"{API}/facility/boarding", _boarding_body(), format="json")
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self.auth(self.doctor)
+        with CaptureQueriesContext(connection) as ctx:
+            self.client.get(f"{API}/facility/boarding")
+        owner_sql = [
+            q["sql"] for q in ctx.captured_queries
+            if "appointments_userprofile" in q["sql"] and '"phone"' in q["sql"].split("WHERE", 1)[-1]
+            and "WHERE" in q["sql"]
+        ]
+        self.assertTrue(owner_sql)
+        self.assertTrue(all("LIKE" in q.upper() for q in owner_sql), owner_sql)
 
 
 class BoardingCopyTests(ApiTestCase):
@@ -395,3 +549,41 @@ class BoardingDepartureTests(ApiTestCase):
         self.assertEqual(departure_for(d, "48h"), date(2026, 10, 10))
         self.assertEqual(departure_for(d, "1week"), date(2026, 10, 15))
         self.assertEqual(departure_for(d, "12h"), d)
+
+
+class EnquiryBackfillTests(ApiTestCase):
+    """Migration 0021 links a converted enquiry only when convert created the
+    owner account; an email-matched existing account is left unlinked."""
+
+    def _converted(self, owner, email):
+        pet = Pet.objects.create(owner=owner, doctor=self.doctor, name="Bruno", owner_phone="9876543210")
+        appt = Appointment.objects.create(
+            pet=pet, doctor=self.doctor, pet_name="Bruno", owner_name="x", owner_phone="9876543210",
+            date=_future(), time="10:00",
+        )
+        return Enquiry.objects.create(
+            first_name="P", pet_name="Bruno", email=email, phone="9876543210",
+            status="CONVERTED", converted_appointment=appt,
+        )
+
+    def test_backfill_links_only_convert_created_accounts(self):
+        import importlib
+        from django.apps import apps as global_apps
+        mig = importlib.import_module("appointments.migrations.0021_live_qa_fixes")
+        matched = self._converted(self.owner_a, "a@example.com")  # pre-existing, usable password
+        created_owner = UserProfile(username="madebyconvert", role="OWNER", email="new@example.com")
+        created_owner.set_unusable_password()
+        created_owner.save()
+        created = self._converted(created_owner, "new@example.com")
+        # In real life convert makes the account after the enquiry arrived.
+        UserProfile.objects.filter(pk=created_owner.pk).update(
+            date_joined=created.created_at + timedelta(minutes=5),
+        )
+
+        mig.link_converted_enquiries(global_apps, None)
+        matched.refresh_from_db()
+        created.refresh_from_db()
+        self.assertIsNone(matched.owner_id)
+        self.assertFalse(matched.owner_verified)
+        self.assertEqual(created.owner_id, created_owner.id)
+        self.assertTrue(created.owner_verified)

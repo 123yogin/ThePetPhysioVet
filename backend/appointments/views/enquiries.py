@@ -90,7 +90,8 @@ def _enquiry_create(request):
 
     # Linked to an account only when sent while signed in as that owner; the
     # response is identical either way.
-    enquiry = serializer.save(owner=maybe_owner(request))
+    account = maybe_owner(request)
+    enquiry = serializer.save(owner=account, owner_verified=account is not None)
     reference = enquiry.reference
     notify_doctor(
         kind="enquiry",
@@ -225,6 +226,10 @@ def enquiry_convert_view(request, pk):
         owner_name = f"{enquiry.first_name} {enquiry.last_name}".strip()
 
         owner = UserProfile.objects.filter(email__iexact=email, role="OWNER").first()
+        # Matching an EXISTING account by email (unverified at signup) is a
+        # staff link only; convert vouches for the account only if it creates
+        # it here (live QA D1 review).
+        created_owner = owner is None
         if owner is None:
             owner = UserProfile(
                 username=_unique_owner_username(email),
@@ -272,10 +277,30 @@ def enquiry_convert_view(request, pk):
         # The clinic's own link -- what lets the owner see this request in
         # /owner/bookings (phone matching no longer does; live QA D1).
         enquiry.owner = owner
+        enquiry.owner_verified = enquiry.owner_verified or created_owner
         enquiry.actioned_by = request.user
         enquiry.actioned_at = timezone.now()
         enquiry.save()
 
+    return Response(EnquirySerializer(enquiry).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsDoctor])
+def enquiry_confirm_client_view(request, pk):
+    """POST /enquiries/:id/confirm-client -- DOCTOR only. Staff have checked the
+    linked account (`owner_account` on the enquiry) really is this client, so
+    the request may appear in that owner's /owner/bookings. The only way an
+    email-matched existing account becomes verified. 400 until converted."""
+    enquiry = get_object_or_404(Enquiry, pk=pk)
+    if enquiry.owner_id is None:
+        return problem(
+            400, "No client linked",
+            "This enquiry is not linked to a client account yet — convert it first.",
+        )
+    if not enquiry.owner_verified:
+        enquiry.owner_verified = True
+        enquiry.save(update_fields=["owner_verified"])
     return Response(EnquirySerializer(enquiry).data)
 
 

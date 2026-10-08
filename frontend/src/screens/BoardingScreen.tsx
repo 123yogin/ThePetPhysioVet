@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  fetchBoardings, fetchBoardingMenu, updateBoardingStatus, createBoarding, convertBoarding,
+  fetchBoardings, fetchBoardingMenu, updateBoardingStatus, createBoarding, convertBoarding, confirmBoardingClient,
   boardingQueryKey, Boarding, BoardingAction,
 } from '../api/boarding';
 import { useFlash } from '../lib/flash';
@@ -91,6 +91,15 @@ export const BoardingScreen: React.FC = () => {
   // Live QA B4: Cancel freed the bed on a single tap. It now asks first.
   const [cancelTarget, setCancelTarget] = useState<Boarding | null>(null);
 
+  const confirmClient = useMutation({
+    mutationFn: (reference: string) => confirmBoardingClient(reference),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['boarding'] });
+      addFlash('Client confirmed — the stay now shows in their app.', 'success');
+    },
+    onError: (e: any) => addFlash(e?.message || 'Could not confirm the client.', 'error'),
+  });
+
   // Reference of the stay just converted, so its "Open pet record" link takes focus.
   const [justConverted, setJustConverted] = useState<string | null>(null);
 
@@ -140,6 +149,8 @@ export const BoardingScreen: React.FC = () => {
             )}
             converting={convert.isPending && convert.variables === g.reference}
             onConvert={() => convert.mutate(g.reference)}
+            confirming={confirmClient.isPending && confirmClient.variables === g.reference}
+            onConfirmClient={() => confirmClient.mutate(g.reference)}
             focusRecord={justConverted === g.reference}
           />
         ))}
@@ -181,8 +192,10 @@ const BoardingCard: React.FC<{
   onAction: (act: BoardingAction, intake?: Record<string, string>) => void;
   converting: boolean;
   onConvert: () => void;
+  confirming: boolean;
+  onConfirmClient: () => void;
   focusRecord: boolean;
-}> = ({ g, busy, highlight, onAction, converting, onConvert, focusRecord }) => {
+}> = ({ g, busy, highlight, onAction, converting, onConvert, confirming, onConfirmClient, focusRecord }) => {
   const actions = NEXT_ACTIONS[g.status] ?? [];
   const editable = actions.length > 0;
   const [intake, setIntake] = useState<Record<string, string>>({
@@ -239,7 +252,10 @@ const BoardingCard: React.FC<{
         </div>
       </div>
 
-      <ClientMatch g={g} converting={converting} onConvert={onConvert} focusRecord={focusRecord} />
+      <ClientMatch
+        g={g} converting={converting} onConvert={onConvert}
+        confirming={confirming} onConfirmClient={onConfirmClient} focusRecord={focusRecord}
+      />
 
       <div className="page-sub" style={{ fontSize: '0.85rem', margin: 0 }}>
         {/* check_out is the last bed-night; show the day the pet goes home (D4). */}
@@ -328,7 +344,10 @@ const BoardingCard: React.FC<{
 
 /* ---- Client match: badge, convert, previous reports ---- */
 
-const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () => void; focusRecord?: boolean }> = ({ g, converting, onConvert, focusRecord }) => {
+const ClientMatch: React.FC<{
+  g: Boarding; converting: boolean; onConvert: () => void;
+  confirming: boolean; onConfirmClient: () => void; focusRecord?: boolean;
+}> = ({ g, converting, onConvert, confirming, onConfirmClient, focusRecord }) => {
   const recordLink = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
     if (focusRecord) recordLink.current?.focus();
@@ -350,18 +369,23 @@ const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () =>
             {converting ? 'Converting…' : 'Convert to patient'}
           </button>
         )}
-        {/* A phone match is only a hint (signup does not verify phones), so the
+        {/* A phone/email match is only a hint (signup verifies neither), so the
             stay is not shown in that owner's portal until staff confirm it. */}
-        {status === 'linked' && g.owner_verified === false && (
-          <button type="button" className="btn btn-ghost btn-sm" disabled={converting} onClick={onConvert}>
-            {converting ? 'Linking…' : 'Confirm client'}
+        {g.owner_account && !g.owner_verified && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={confirming} onClick={onConfirmClient}>
+            {confirming ? 'Confirming…' : 'Confirm client'}
           </button>
         )}
       </div>
-      {status !== 'unlinked' && !g.owner_verified && (
-        <span className="page-sub" style={{ fontSize: '0.78rem' }}>
-          Matched by phone — verify with the owner, then confirm to show it in their app
-        </span>
+      {g.owner_account && (
+        <div className="page-sub" style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>
+          <b>Linked account:</b> {g.owner_account.name || '—'}
+          {g.owner_account.email && <> · {g.owner_account.email}</>}
+          {g.owner_account.phone && <> · {g.owner_account.phone}</>}
+          {!g.owner_verified && (
+            <div>Matched automatically — check these details with the owner, then Confirm client to show the stay in their app.</div>
+          )}
+        </div>
       )}
       {reports && reports.length > 0 && (
         <details style={{ fontSize: '0.82rem' }}>

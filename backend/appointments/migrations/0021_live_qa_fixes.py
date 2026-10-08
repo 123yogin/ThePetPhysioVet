@@ -6,18 +6,26 @@ from django.db import migrations, models
 
 
 def link_converted_enquiries(apps, schema_editor):
-    """A converted enquiry was linked to an owner by the clinic's own action --
-    carry that link onto the new `owner` column so the owner keeps seeing it once
-    phone matching is removed from /owner/bookings. Nothing else is backfilled:
-    an automatic phone match is not proof of identity (live QA D1)."""
+    """Carry the clinic's own link onto the new `owner` column -- but only where
+    convert CREATED that owner account (unusable password, joined no earlier
+    than the enquiry). An enquiry converted onto an account that already
+    existed was matched by unverified email and stays unlinked until staff
+    explicitly confirm the client (live QA D1 review)."""
     Enquiry = apps.get_model("appointments", "Enquiry")
     for enquiry in Enquiry.objects.filter(
         status="CONVERTED", owner__isnull=True, converted_appointment__isnull=False,
-    ).select_related("converted_appointment__pet"):
+    ).select_related("converted_appointment__pet__owner"):
         pet = enquiry.converted_appointment.pet
-        if pet is not None and pet.owner_id:
-            enquiry.owner_id = pet.owner_id
-            enquiry.save(update_fields=["owner"])
+        owner = pet.owner if pet is not None else None
+        if owner is None:
+            continue
+        created_by_convert = (
+            (owner.password or "").startswith("!") and owner.date_joined >= enquiry.created_at
+        )
+        if created_by_convert:
+            enquiry.owner_id = owner.id
+            enquiry.owner_verified = True
+            enquiry.save(update_fields=["owner", "owner_verified"])
 
 
 class Migration(migrations.Migration):
@@ -56,6 +64,11 @@ class Migration(migrations.Migration):
             model_name='invoice',
             name='voided_at',
             field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name='enquiry',
+            name='owner_verified',
+            field=models.BooleanField(default=False),
         ),
         migrations.RunPython(link_converted_enquiries, migrations.RunPython.noop),
     ]

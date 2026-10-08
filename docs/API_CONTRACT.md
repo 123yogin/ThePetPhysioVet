@@ -399,13 +399,17 @@ auto-linked to a pet, creates nothing. The owner-portal `GET /owner/bookings` ex
 
 **Owner visibility (amended 2026-10-08, live QA D1 — privacy).** The automatic phone match above is a
 **staff hint only**: signup does not verify a phone, so it never makes a stay visible to the matched account.
-`Booking` JSON adds `owner_verified` (bool). It is `true` only when the link was made explicitly — by the
-clinic's `convert` (which also verifies an already auto-matched owner), or because the stay was created/confirmed
-with a valid OWNER bearer token (that account is linked, verified). `GET /owner/bookings` returns only:
-facility bookings and enquiries whose new nullable `owner` FK is the caller (set on a signed-in create, and for
-enquiries on doctor convert; migration 0021 backfills converted enquiries from their appointment's pet owner),
-and boarding stays with `owner = caller AND owner_verified`. Phone-only matching is gone from the owner view.
-Public responses are unchanged for signed-in and anonymous callers.
+`Booking` JSON adds `owner_verified` (bool) and `owner_account` (`{id, name, email, phone}` of the linked
+account, or null — doctor routes only, so staff can check who it is). `owner_verified` is `true` only when the
+stay was created/confirmed with a valid OWNER bearer token, when `convert` **created** the owner account itself,
+or after staff call **`POST /facility/boarding/:ref/confirm-client`** (doctor; 400 when no account is linked;
+404 unknown/HELD; idempotent; returns the `Booking`). `convert` finding an EXISTING account by phone or email
+does **not** verify it (signup verifies neither). Enquiries follow the same rule: `Enquiry.owner` +
+`owner_verified` (+ `owner_account` on the doctor JSON); convert verifies only an owner it created; otherwise
+staff call **`POST /enquiries/:id/confirm-client`** (doctor; 400 until converted). `GET /owner/bookings` returns
+only facility bookings whose `owner` is the caller (signed-in create), and enquiries/stays with `owner = caller
+AND owner_verified`. Migration 0021 backfills converted enquiries only where convert created the owner account
+(unusable password, joined after the enquiry); others stay unlinked. Public responses are unchanged.
 
 **Lazy matching (2026-10-08, live QA B3).** `GET /facility/boarding` (doctor) re-runs the same match for active
 (`PENDING`/`CONFIRMED`/`CHECKED_IN`) stays with no owner and persists the result (unverified), so a client who
@@ -415,7 +419,7 @@ signed up after booking is recognised. Ambiguous phones stay unlinked. Public ro
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
 | POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |
 | GET | `/invoices/:id` | | `Invoice` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up: previously reachable by any doctor by ID) |
-| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID). 400 on a voided invoice. |
+| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID). 400 on a voided invoice; the void and balance checks run under a row lock on the invoice (shared with `/void`), so a payment and a void cannot interleave. |
 | POST | `/invoices/:id/void` | `{reason?}` | `Invoice` with `payment_status: "VOID"`, `balance_due: 0`, `voided_at`, `void_reason` — **new, 2026-10-08 (live QA B7)**, doctor-scoped. Only an invoice with nothing paid (400 otherwise). Idempotent (repeat returns the voided invoice). The invoice keeps its number and lines; it is excluded from `/revenue` and owes nothing. |
 
 **Doctor-scoping and orphan invoices (amended 2026-08-21 — L1, extended to detail
