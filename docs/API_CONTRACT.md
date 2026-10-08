@@ -347,6 +347,18 @@ Max span 366 days. The owner `GET /owner/pets/:id` payload carries both, read-on
 
 Session routes are doctor-only: owner 403, another practice's session 404.
 
+Plan lifecycle (amended 2026-10-08, final review):
+- `PATCH /treatment-plans/:id {status}`: moving away from `ACTIVE` (`COMPLETED` / `PAUSED`) deletes the plan's
+  `DUE` sessions with `planned_date >= today` (so they can never turn MISSED); DONE/SKIPPED and past DUE rows
+  stay. Moving back to `ACTIVE` regenerates future sessions from today (no past backfill). `completed_at` is
+  set when the status becomes `COMPLETED` and cleared when it returns to `ACTIVE`.
+- `POST /treatment-plans/:id/extend {days}`: `new_end = max(old_end, today - 1) + days`; sessions are created
+  only from that base + 1 (a lapsed plan never gets past MISSED rows). Cadence stays anchored on the original
+  `start_date`.
+- `PATCH` with a `start_date` different from the stored one is **400** (`errors.start_date`) once the plan has
+  any sessions. Re-sending the same value is accepted.
+- Plan creation (plan row + sessions) is atomic.
+
 ### Billing
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
 | POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |

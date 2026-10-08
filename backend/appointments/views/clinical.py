@@ -68,7 +68,8 @@ def pet_treatment_plans_view(request, pk):
 
     serializer = TreatmentPlanSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    plan = serializer.save(pet=pet)
+    with transaction.atomic():
+        plan = serializer.save(pet=pet)
     return Response(TreatmentPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
 
 
@@ -103,13 +104,17 @@ def treatment_plan_extend_view(request, pk):
         serializer = _ExtendSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         old_end = plan.end_date or (plan.start_date + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1))
-        new_end = old_end + timedelta(days=serializer.validated_data["days"])
+        # A lapsed plan extends from yesterday, not from its stale end date, so
+        # the new window never starts in the past (no instantly-MISSED rows).
+        today = timezone.localdate()
+        base = max(old_end, today - timedelta(days=1))
+        new_end = base + timedelta(days=serializer.validated_data["days"])
         if (new_end - plan.start_date).days + 1 > rehab.MAX_PLAN_DAYS:
             raise serializers.ValidationError({"days": "A plan can span at most 366 days."})
         plan.end_date = new_end
         plan.save(update_fields=["end_date", "updated_at"])
         rehab.sync_sessions(
-            plan, timezone.localdate(), backfill_from=old_end + timedelta(days=1),
+            plan, timezone.localdate(), backfill_from=base + timedelta(days=1),
         )
     return Response(TreatmentPlanSerializer(plan).data)
 

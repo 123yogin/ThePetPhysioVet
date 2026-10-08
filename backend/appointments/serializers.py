@@ -589,6 +589,12 @@ class TreatmentPlanSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"end_date": "End date is before the start date."})
             if (end - start).days + 1 > rehab.MAX_PLAN_DAYS:
                 raise serializers.ValidationError({"end_date": "A plan can span at most 366 days."})
+        if (inst is not None and attrs.get("start_date") not in (None, inst.start_date)
+                and inst.sessions.exists()):
+            raise serializers.ValidationError({
+                "start_date": "Start date can't be changed once the plan has sessions; "
+                              "create a new plan instead.",
+            })
         schedule = attrs.get("schedule")
         if schedule and not attrs.get("therapies"):
             attrs["therapies"] = [e["therapy"] for e in schedule]
@@ -601,7 +607,21 @@ class TreatmentPlanSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         old_end = instance.end_date
+        old_status = instance.status
+        new_status = validated_data.get("status", old_status)
+        if new_status != old_status:
+            if new_status == "COMPLETED":
+                validated_data["completed_at"] = timezone.now()
+            elif new_status == "ACTIVE":
+                validated_data["completed_at"] = None
         plan = super().update(instance, validated_data)
+        today = timezone.localdate()
+        if plan.status != "ACTIVE":
+            # Not being worked: drop future DUE rows so they can't turn MISSED.
+            # Re-assert status/date in the DELETE (a tick may race in).
+            if old_status == "ACTIVE":
+                plan.sessions.filter(status="DUE", planned_date__gte=today).delete()
+            return plan
         grew = old_end is not None and plan.end_date and plan.end_date > old_end
         rehab.sync_sessions(
             plan, timezone.localdate(),

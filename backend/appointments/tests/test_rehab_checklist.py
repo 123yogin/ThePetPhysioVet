@@ -364,6 +364,66 @@ class EditAndExtendTests(RehabBase):
         self.assertEqual(plan.sessions.count(), 7)
 
 
+class LifecycleTests(RehabBase):
+    def patch(self, plan_id, **body):
+        return self.client.patch(f"{API}/treatment-plans/{plan_id}", body, format="json")
+
+    def due_future(self, plan_id):
+        return RehabSession.objects.filter(plan_id=plan_id, status="DUE", planned_date__gte=WED)
+
+    def test_complete_early_removes_future_due_and_sets_completed_at(self):
+        plan = self.make_plan(start_date="2026-10-05", end_date="2026-10-11")
+        done = self.sess(plan["id"], day=7)
+        self.client.post(f"{API}/rehab/sessions/{done.id}/done", {}, format="json")
+        r = self.patch(plan["id"], status="COMPLETED")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIsNotNone(r.json()["completed_at"])
+        self.assertEqual(self.due_future(plan["id"]).count(), 0)
+        done.refresh_from_db()
+        self.assertEqual(done.status, "DONE")
+        # Past DUE history (5, 6) is kept; nothing dated today or later is DUE,
+        # so nothing turns MISSED tomorrow.
+        left = RehabSession.objects.filter(plan_id=plan["id"], status="DUE")
+        self.assertEqual(sorted(s.planned_date.day for s in left), [5, 6])
+
+    def test_pause_then_resume_regenerates_future_only(self):
+        plan = self.make_plan(start_date="2026-10-05", end_date="2026-10-11")
+        self.patch(plan["id"], status="PAUSED")
+        self.assertEqual(self.due_future(plan["id"]).count(), 0)
+        r = self.patch(plan["id"], status="ACTIVE")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIsNone(r.json()["completed_at"])
+        days = sorted(s.planned_date.day for s in RehabSession.objects.filter(plan_id=plan["id"]))
+        self.assertEqual(days, [5, 6, 7, 8, 9, 10, 11])
+        self.assertEqual(self.due_future(plan["id"]).count(), 5)
+
+    def test_resume_does_not_backfill_past(self):
+        plan = self.make_plan(start_date="2026-10-05", end_date="2026-10-11")
+        RehabSession.objects.filter(plan_id=plan["id"], planned_date__lt=WED).delete()
+        self.patch(plan["id"], status="PAUSED")
+        self.patch(plan["id"], status="ACTIVE")
+        days = sorted(s.planned_date.day for s in RehabSession.objects.filter(plan_id=plan["id"]))
+        self.assertEqual(days, [7, 8, 9, 10, 11])
+
+    def test_extend_lapsed_plan_creates_only_today_forward(self):
+        plan = self.make_plan(start_date="2026-09-20", end_date="2026-09-27")
+        before = set(RehabSession.objects.filter(plan_id=plan["id"]).values_list("id", flat=True))
+        r = self.client.post(f"{API}/treatment-plans/{plan['id']}/extend", {"days": 14}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["end_date"], "2026-10-20")
+        new = RehabSession.objects.filter(plan_id=plan["id"]).exclude(id__in=before)
+        self.assertEqual(sorted(s.planned_date for s in new), [d(i) for i in range(7, 21)])
+        self.assertTrue(all(s.status == "DUE" for s in new))
+
+    def test_changing_start_date_with_sessions_is_400(self):
+        plan = self.make_plan()
+        r = self.patch(plan["id"], start_date="2026-10-08")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("start_date", r.json()["errors"])
+        # Re-sending the same value is fine.
+        self.assertEqual(self.patch(plan["id"], start_date="2026-10-07").status_code, 200)
+
+
 class CatalogueAndTodayTests(RehabBase):
     def test_therapies_catalogue_any_authenticated_user(self):
         for u in (self.doctor, self.owner_a):
