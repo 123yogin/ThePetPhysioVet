@@ -1,4 +1,6 @@
 import os
+import re
+import sys
 from pathlib import Path
 from datetime import timedelta
 
@@ -329,6 +331,137 @@ if EMAIL_USE_SSL:
 # are set. A send failure must never break the booking (see appointments/notify.py).
 NOTIFY_DOCTOR = _env_bool("NOTIFY_DOCTOR", default=False)
 DOCTOR_EMAIL = os.environ.get("DOCTOR_EMAIL", "")
+
+# --- Transactional SMS (appointments/sms/) ---------------------------------
+# Owners get texted when a visit/stay is confirmed and the day before a visit.
+# The default sender is an Android phone running capcom6 "SMS Gateway for
+# Android" in Cloud mode; the backend is chosen by SMS_BACKEND so a
+# DLT-registered Indian provider can replace it later (see DEPLOYMENT.md).
+#
+#   console          log only, nothing leaves the server (default when DEBUG)
+#   disabled         record each message as SKIPPED_DISABLED (default in any
+#                    deployed environment that has no gateway credentials)
+#   android_gateway  POST {SMS_GATEWAY_URL}/messages with HTTP Basic auth
+#
+# Explicitly asking for the gateway without its credentials fails at boot,
+# like EMAIL_BACKEND above: a silently-disabled sender looks like it works.
+SMS_BACKENDS = ("console", "disabled", "android_gateway")
+SMS_DEFAULT_GATEWAY_URL = "https://api.sms-gate.app/3rdparty/v1"
+
+
+def _sms_backend_choice(environ, debug):
+    choice = (environ.get("SMS_BACKEND") or "").strip().lower()
+    has_creds = bool(environ.get("SMS_GATEWAY_USERNAME") and environ.get("SMS_GATEWAY_PASSWORD"))
+    if not choice:
+        if debug:
+            return "console"
+        # Only the real production deployment texts real people by default.
+        # Preview/development builds share env vars too easily (security
+        # review M2); they stay disabled unless SMS_BACKEND says otherwise.
+        is_production = environ.get("VERCEL_ENV") == "production"
+        return "android_gateway" if (has_creds and is_production) else "disabled"
+    if choice not in SMS_BACKENDS:
+        raise ImproperlyConfigured(
+            f"SMS_BACKEND must be one of {', '.join(SMS_BACKENDS)}, got {choice!r}."
+        )
+    if choice == "android_gateway" and not has_creds:
+        raise ImproperlyConfigured(
+            "SMS_BACKEND=android_gateway needs SMS_GATEWAY_USERNAME and "
+            "SMS_GATEWAY_PASSWORD (shown in the gateway app's Cloud server section)."
+        )
+    return choice
+
+
+def _sms_daily_limit(environ):
+    """Ordinary Indian SIMs are throttled at about 100 SMS a day (TRAI), so the
+    default leaves headroom for the clinic's own texting."""
+    raw = (environ.get("SMS_DAILY_LIMIT") or "90").strip()
+    try:
+        limit = int(raw)
+    except ValueError:
+        limit = 0
+    if limit <= 0:
+        raise ImproperlyConfigured(f"SMS_DAILY_LIMIT must be a positive integer, got {raw!r}.")
+    return limit
+
+
+def _sms_per_phone_daily_limit(environ):
+    """Texts one number may receive per day -- caps any single relay."""
+    raw = (environ.get("SMS_PER_PHONE_DAILY_LIMIT") or "3").strip()
+    try:
+        limit = int(raw)
+    except ValueError:
+        limit = 0
+    if limit <= 0:
+        raise ImproperlyConfigured(f"SMS_PER_PHONE_DAILY_LIMIT must be a positive integer, got {raw!r}.")
+    return limit
+
+
+def _sms_allowed_country_codes(environ):
+    """Calling codes the clinic may text, e.g. "+91" or "+91,+44". Anything
+    else is recorded as SKIPPED_COUNTRY and never sent."""
+    raw = environ.get("SMS_ALLOWED_COUNTRY_CODES") or "+91"
+    codes = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        code = "+" + item.lstrip("+")
+        if not re.fullmatch(r"\+[1-9]\d{0,3}", code):
+            raise ImproperlyConfigured(
+                f"SMS_ALLOWED_COUNTRY_CODES must be calling codes like +91, got {item!r}."
+            )
+        codes.append(code)
+    if not codes:
+        raise ImproperlyConfigured("SMS_ALLOWED_COUNTRY_CODES must list at least one code.")
+    return tuple(codes)
+
+
+def _sms_gateway_url(environ):
+    url = (environ.get("SMS_GATEWAY_URL") or SMS_DEFAULT_GATEWAY_URL).strip().rstrip("/")
+    if not url.startswith("https://"):
+        # Basic-auth credentials and patients' phone numbers ride on this call.
+        raise ImproperlyConfigured("SMS_GATEWAY_URL must be an https:// URL.")
+    return url
+
+
+SMS_BACKEND = _sms_backend_choice(os.environ, DEBUG)
+SMS_GATEWAY_URL = _sms_gateway_url(os.environ)
+SMS_GATEWAY_USERNAME = os.environ.get("SMS_GATEWAY_USERNAME", "")
+SMS_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "")
+SMS_DAILY_LIMIT = _sms_daily_limit(os.environ)
+SMS_PER_PHONE_DAILY_LIMIT = _sms_per_phone_daily_limit(os.environ)
+SMS_ALLOWED_COUNTRY_CODES = _sms_allowed_country_codes(os.environ)
+SMS_TIMEOUT_SECONDS = 5
+# HMAC key from the gateway app (Settings -> Webhooks -> Signing Key). The
+# delivery-status webhook answers 404 until it is set.
+SMS_WEBHOOK_SIGNING_KEY = os.environ.get("SMS_WEBHOOK_SIGNING_KEY", "")
+# Vercel Cron sends `Authorization: Bearer $CRON_SECRET`. Unset = the cron
+# endpoint rejects every caller.
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+# Who the texts say they are from. Defaults match the public site
+# (landing/src/seo/siteConfig.ts).
+CLINIC_NAME = os.environ.get("CLINIC_NAME", "Pet Physio Vet")
+CLINIC_PHONE = os.environ.get("CLINIC_PHONE", "+91 72840 73241")
+
+# Without this, Django's default config drops INFO, so the console backend
+# printed nothing and SENT/SKIPPED outcomes left no trace in Vercel's logs.
+# Phones are masked and credentials never logged (appointments/sms/). Quiet
+# under `manage.py test`, which would otherwise print every console "send".
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "appointments.sms": {
+            "handlers": ["console"],
+            "level": os.environ.get(
+                "SMS_LOG_LEVEL", "WARNING" if "test" in sys.argv[1:2] else "INFO"
+            ),
+            "propagate": False,
+        },
+    },
+}
 
 if EMAIL_BACKEND.endswith("smtp.EmailBackend") and not EMAIL_HOST:
     raise ImproperlyConfigured(

@@ -20,6 +20,7 @@ from ..models import (
     Appointment,
 )
 from ..permissions import IsDoctor
+from ..sms import triggers as sms_triggers
 from ..serializers import (
     AppointmentSerializer,
 )
@@ -56,7 +57,8 @@ def appointments_view(request):
 
     serializer = AppointmentSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    appt = serializer.save(doctor=request.user)
+    from django.utils import timezone
+    appt = serializer.save(doctor=request.user, confirmed_at=timezone.now(), confirmed_by=request.user)
     return Response(AppointmentSerializer(appt).data, status=status.HTTP_201_CREATED)
 
 
@@ -100,7 +102,9 @@ def appointment_reschedule_view(request, pk):
     appt.requested_date = None
     appt.requested_time = None
     appt.status = "Rescheduled"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
+    sms_triggers.appointment_moved(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
@@ -135,7 +139,9 @@ def appointment_confirm_view(request, pk):
             f"Appointment {appt.id} has status '{appt.status}', not 'Pending'.",
         )
     appt.status = "Confirmed"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
+    sms_triggers.appointment_confirmed(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
@@ -180,7 +186,9 @@ def appointment_reschedule_approve_view(request, pk):
     appt.requested_time = None
     appt.reschedule_reason = ""
     appt.status = "Confirmed"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
+    sms_triggers.appointment_moved(appt)
     return Response(AppointmentSerializer(appt).data)
 
 
@@ -195,6 +203,7 @@ def appointment_reschedule_reject_view(request, pk):
     appt.requested_date = None
     appt.requested_time = None
     appt.status = "Confirmed"
+    appt.mark_doctor_confirmed(request.user)
     appt.save()
     return Response(AppointmentSerializer(appt).data)
 
