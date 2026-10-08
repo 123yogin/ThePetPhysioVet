@@ -922,8 +922,7 @@ class BoardingCreateSerializer(serializers.Serializer):
     website = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate_checkIn(self, value):
-        from datetime import date as _date
-        if value < _date.today():
+        if value < timezone.localdate():
             raise serializers.ValidationError("Choose today or a future date.")
         return value
 

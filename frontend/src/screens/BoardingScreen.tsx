@@ -6,6 +6,7 @@ import {
   boardingQueryKey, Boarding, BoardingAction,
 } from '../api/boarding';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { friendlyDate, formatMoney } from '../lib/labels';
 import { isValidAadhaar } from '../lib/aadhaar';
@@ -290,7 +291,7 @@ const ITEMS: { field: string; label: string }[] = [
 const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const { addFlash } = useFlash();
   const { data: menu } = useQuery({ queryKey: ['boarding-menu'], queryFn: () => fetchBoardingMenu() });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [f, setF] = useState<Record<string, string>>({
     petName: '', ownerName: '', ownerPhone: '', checkIn: today, duration: '',
     foodBy: 'owner', utensilsBy: 'owner', medicinesBy: 'owner', blanketBy: 'owner',

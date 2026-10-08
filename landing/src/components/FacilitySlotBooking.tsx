@@ -22,7 +22,7 @@ import { CalendarCheck, Check, Loader2, Clock, AlertCircle } from 'lucide-react'
  * — this is a reservation, not a paid ticket, and the copy says so.
  */
 
-import { CLINIC_API, isoDate } from '../lib/clinicApi';
+import { CLINIC_API, addDays, getJson, isoDate } from '../lib/clinicApi';
 
 interface Slot {
   slot: number;
@@ -60,13 +60,7 @@ interface Props {
 /** YYYY-MM-DD for a date `offsetDays` from today, in the visitor's own zone. */
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
-
-/** The calendar day after a `YYYY-MM-DD` string, as `YYYY-MM-DD` (local). */
-function nextDay(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const n = new Date(y, m - 1, d + 1);
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-}
+import { pad2 } from '../lib/format';
 
 export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) => {
   type Phase = 'select' | 'confirm' | 'done';
@@ -95,8 +89,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   // ---- Step 1: availability -------------------------------------------------
   const loadAvailability = React.useCallback((forDate: string) => {
     setLoading(true);
-    return fetch(`${CLINIC_API}/facility/availability?date=${forDate}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    return getJson(`/facility/availability?date=${forDate}`)
       .then((d: Availability) => setAvail(d))
       .catch(() => setAvail(null))
       .finally(() => setLoading(false));
@@ -108,15 +101,14 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
     setError('');
     let cancelled = false;
     setLoading(true);
-    fetch(`${CLINIC_API}/facility/availability?date=${date}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    getJson(`/facility/availability?date=${date}`)
       .then((d: Availability) => {
         if (cancelled) return;
         setAvail(d);
         // Nothing bookable left (all started or full): move on to the next day.
         if (!userPickedDate.current && date < maxDate && d.slots.every((s) => s.past || s.available <= 0)) {
           setAdvancedFrom((prev) => prev ?? date);
-          setDate(nextDay(date));
+          setDate(addDays(date, 1));
         }
       })
       .catch(() => !cancelled && setAvail(null))
@@ -136,9 +128,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   }, [phase, hold]);
 
   const expired = phase === 'confirm' && secondsLeft <= 0;
-  const mmss = `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(
-    secondsLeft % 60,
-  ).padStart(2, '0')}`;
+  const mmss = `${pad2(Math.floor(secondsLeft / 60))}:${pad2(secondsLeft % 60)}`;
 
   const toggleSlot = (slot: number, available: number, past?: boolean) => {
     if (past || available <= 0) return;

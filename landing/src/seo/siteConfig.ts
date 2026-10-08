@@ -287,21 +287,6 @@ export function primaryLocality(): string {
   return SITE.address.addressLocality;
 }
 
-/**
- * One-line opening-hours summary for inline copy, e.g.
- * "Mon–Fri 08:00–18:00 | Sat 09:00–14:00".
- *
- * Derived from the same array that produces the openingHoursSpecification in the
- * JSON-LD, so the visible hours and the marked-up hours cannot disagree.
- */
-export function serviceHoursSummary(): string {
-  const h = SITE.serviceHours;
-  if (!h.window) return '';
-  const parts = [h.label ? `${h.label} ${h.window}` : h.window];
-  if (h.appointmentOnly) parts.push('by appointment only');
-  return parts.join(' \u00b7 ');
-}
-
 export function openingHoursSummary(): string {
   const short = (day: string) => day.slice(0, 3);
   return SITE.openingHours

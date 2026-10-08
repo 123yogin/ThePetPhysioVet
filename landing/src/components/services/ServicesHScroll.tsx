@@ -3,6 +3,7 @@ import { SERVICES } from '../../data/clinicData';
 import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { onFrame, track, prefersReducedMotion, type Box } from '../../motion/engine';
+import { pad2 } from '../../lib/format';
 
 /**
  * "hscroll" variant of the services section body: a pinned horizontal-scroll
@@ -43,7 +44,6 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
   },
 };
 const FALLBACK_PHOTO = { src: '/photos/home-visit-indie.webp', alt: 'A dog with Dr. Dhanvi Patel during a home visit' };
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 interface CardProps {
   id: string;

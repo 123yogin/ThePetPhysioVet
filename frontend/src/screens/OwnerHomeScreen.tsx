@@ -6,6 +6,7 @@ import { createBoarding } from '../api/boarding';
 import { fetchAppointmentOptions } from '../api/appointments';
 import { fetchMe } from '../api/auth';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { isValidAadhaar } from '../lib/aadhaar';
 import { Icon } from '../components/Icon';
 import { petEmoji, friendlyDate, friendlyTime } from '../lib/labels';
@@ -101,7 +102,7 @@ export const OwnerHomeScreen: React.FC = () => {
 
   // New Appointment State
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
-  const [apptDate, setApptDate] = useState(new Date().toISOString().slice(0, 10));
+  const [apptDate, setApptDate] = useState(todayISO());
   const [visitType, setVisitType] = useState('');
   const [reasonNotes, setReasonNotes] = useState('');
   // Website-like, per-service extras — each service books its own way, so only
@@ -194,7 +195,7 @@ export const OwnerHomeScreen: React.FC = () => {
   // answered on the home screen instead of three taps away.
   const nextApptByPet = new Map<string, Appointment>();
   if (appointments) {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayISO();
     for (const a of appointments) {
       if (a.status === 'Cancelled' || a.status === 'Completed') continue;
       if (a.date < todayStr) continue;

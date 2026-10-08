@@ -5,6 +5,7 @@ import { useRouter } from '../seo/router';
 import { bookingHref } from './BookingPanel';
 import { SplitWords, useStagger } from '../motion';
 import { Pulse } from '../motion/extras';
+import { rupee } from '../lib/format';
 
 /**
  * The bookable services as a bento grid.
@@ -121,7 +122,7 @@ const Tile: React.FC<{
             >
               <span>{p.label}</span>
               <span className="text-(--c-ink) font-medium whitespace-nowrap">
-                &#8377;{p.price.toLocaleString('en-IN')}
+                {rupee(p.price)}
               </span>
             </span>
           ))}

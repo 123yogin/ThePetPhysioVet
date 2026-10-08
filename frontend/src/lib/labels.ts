@@ -92,7 +92,7 @@ export function formatMoney(amount?: number | string | null, currency = 'INR'): 
   const n = typeof amount === 'string' ? Number(amount) : amount ?? 0;
   const value = Number.isFinite(n as number) ? (n as number) : 0;
   const symbol = CURRENCY_SYMBOLS[currency];
-  const digits = value.toLocaleString(undefined, {
+  const digits = value.toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });

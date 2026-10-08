@@ -8,6 +8,7 @@ import { fetchPetTreatmentPlans, createTreatmentPlan, addProgressNote } from '..
 import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { ProgressChart } from '../components/ProgressChart';
 import { humanizeStatus, petEmoji, friendlyDate } from '../lib/labels';
@@ -159,7 +160,7 @@ export const PetDetailScreen: React.FC = () => {
         therapies: therapies.split(',').map((s) => s.trim()).filter(Boolean),
         frequency,
         duration,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: todayISO(),
       });
       addFlash('Treatment plan created', 'success');
       setTherapies('');

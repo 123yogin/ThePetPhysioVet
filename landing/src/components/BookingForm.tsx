@@ -7,7 +7,7 @@ import { SITE, formattedAddress, openingHoursSummary } from '../seo/siteConfig';
 // Same-origin in production: the landing page is served from the clinic
 // app's own domain, so /api/v1 is the same deployment. Overridable for
 // local development, where the API runs on :8000 and Vite on :3000.
-import { CLINIC_API, postEnquiry } from '../lib/clinicApi';
+import { getJson, postEnquiry } from '../lib/clinicApi';
 
 interface BookingFormProps {
   initialSpecialist?: string;
@@ -61,8 +61,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const [services, setServices] = useState<{ value: string; label: string }[]>([]);
   useEffect(() => {
     let cancelled = false;
-    fetch(`${CLINIC_API}/appointment-options`)
-      .then((r) => (r.ok ? r.json() : null))
+    getJson('/appointment-options')
       .then((d) => {
         if (cancelled || !d?.visit_types) return;
         // Only the ones the clinic marks public. Initial Consultation,

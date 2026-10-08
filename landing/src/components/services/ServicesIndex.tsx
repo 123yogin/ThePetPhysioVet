@@ -4,6 +4,7 @@ import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { SERVICES } from '../../data/clinicData';
 import { onFrame, wake, prefersReducedMotion } from '../../motion/engine';
+import { pad2 } from '../../lib/format';
 
 /**
  * One photo per service, chosen from the clinic's own supplied set -- there is
@@ -198,7 +199,7 @@ const ServicesIndex: React.FC = () => {
               className="group relative flex items-center gap-4 py-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-(--c-accent) focus-visible:outline-offset-4 sm:gap-8 sm:py-8"
             >
               <span className="w-8 shrink-0 font-(family-name:--f-display) italic text-lg text-(--c-accent)/50 sm:w-14 sm:text-2xl">
-                {String(i + 1).padStart(2, '0')}
+                {pad2(i + 1)}
               </span>
               <h3 className="min-w-0 flex-1 font-(family-name:--f-display) text-xl font-light text-(--c-ink) transition-all duration-300 group-hover:translate-x-3 group-hover:text-(--c-accent) group-focus-visible:translate-x-3 group-focus-visible:text-(--c-accent) sm:text-3xl lg:text-5xl">
                 {service.title}
