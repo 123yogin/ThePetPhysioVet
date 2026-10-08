@@ -11,14 +11,11 @@
  *  • FAQPage is still emitted for machine comprehension even though Google removed
  *    FAQ *rich results* in May 2026 — it costs nothing and no longer promises a SERP
  *    accordion. Do not treat it as a visibility feature.
- *  • AggregateRating / Review ARE emitted now: SUCCESS_STORIES in
- *    data/clinicData.ts holds genuine, verbatim excerpts from the clinic's
- *    Google Business Profile, published at the business owner's direction
- *    (the owner manages that profile). GOOGLE_RATING in the same file is the
- *    live ratingValue/reviewCount — it is a hand-kept fact, not derived from
- *    SUCCESS_STORIES, and MUST be kept in sync with the live Google listing
- *    by whoever updates clinicData.ts. Still never mark up a rating you
- *    don't have: if SUCCESS_STORIES is ever emptied again, both are omitted.
+ *  • AggregateRating / Review are deliberately NOT emitted, even though the
+ *    homepage shows genuine Google reviews (SUCCESS_STORIES). Google treats
+ *    ratings a LocalBusiness publishes about itself as "self-serving" — they
+ *    never earn review stars and can be flagged as spammy structured data.
+ *    The stars in search come from the Google Business Profile itself.
  */
 
 import { SITE, absoluteUrl } from './siteConfig';
@@ -29,15 +26,13 @@ import {
   FAQS,
   SERVICES,
   SPECIALISTS,
-  SUCCESS_STORIES,
-  GOOGLE_RATING,
   HERO_IMAGE,
   servicesForCondition,
   CONTENT_REVIEWED_DATE,
 } from '../data/clinicData';
 import { conditionFaqs } from '../data/conditionFaqs';
 import { TREATMENT_CONTENT, plainText } from '../data/treatmentContent';
-import type { ConditionItem, ServiceItem, Specialist, SuccessStory } from '../types';
+import type { ConditionItem, ServiceItem, Specialist } from '../types';
 
 /** Loosely-typed JSON-LD node. */
 type Node = Record<string, unknown>;
@@ -69,25 +64,6 @@ function openingHoursSpecification(): Node[] {
       opens: slot.opens,
       closes: slot.closes,
     }));
-}
-
-/**
- * A single genuine review as a schema.org Review node, nested under the
- * business node's `review` property. `itemReviewed` references the business
- * node's own @id rather than duplicating it — both live in the same @graph.
- */
-function reviewNode(story: SuccessStory): Node {
-  return {
-    '@type': 'Review',
-    itemReviewed: { '@id': ID.business() },
-    author: { '@type': 'Person', name: story.ownerName },
-    reviewRating: {
-      '@type': 'Rating',
-      ratingValue: story.rating,
-      bestRating: 5,
-    },
-    reviewBody: story.quote,
-  };
 }
 
 /** The business node — the anchor of the whole entity graph. */
@@ -157,20 +133,6 @@ export function businessNode(): Node {
     // authoritative source for the pin and the hours this file cannot assert.
     ...(SITE.mapUrl ? { hasMap: SITE.mapUrl } : {}),
     ...(SITE.sameAs.length ? { sameAs: SITE.sameAs } : {}),
-    // Real, permissioned reviews only (see SUCCESS_STORIES) — gated on the
-    // array actually holding entries so an emptied list omits both rather
-    // than publishing a rating with no reviews behind it.
-    ...(SUCCESS_STORIES.length
-      ? {
-          aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: GOOGLE_RATING.ratingValue,
-            bestRating: GOOGLE_RATING.bestRating,
-            reviewCount: GOOGLE_RATING.reviewCount,
-          },
-          review: SUCCESS_STORIES.map(reviewNode),
-        }
-      : {}),
     employee: SPECIALISTS.map((p) => ({ '@id': ID.person(p.id) })),
     // Mirrors the visible treatment list, so the graph matches the page.
     hasOfferCatalog: {

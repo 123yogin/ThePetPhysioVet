@@ -9,6 +9,10 @@
  * &btn=&eye=&svc=&jour=&doc=&foot=, or ?lab to show the switcher), the preset
  * lists and the panel are fetched as a separate chunk, the choice is applied
  * to the tokens on <html>, and the components re-render the chosen variants.
+ *
+ * The lab is disabled on the production domain: some font presets load from
+ * fonts.googleapis.com, and the privacy policy promises visitors that no font
+ * company sees their IP address. Use it on localhost or a Vercel preview.
  */
 import React, { createContext, lazy, Suspense, useContext, useEffect, useState } from 'react';
 import { useRouter } from '../seo/router';
@@ -27,7 +31,8 @@ export const LabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     const q = new URLSearchParams(search);
-    if (!LAB_KEYS.some((k) => q.has(k))) {
+    const onProduction = /(^|\.)thepetphysiovet\.com$/i.test(window.location.hostname);
+    if (onProduction || !LAB_KEYS.some((k) => q.has(k))) {
       setState(DEFAULT_LAB);
       setPanel(false);
       return;

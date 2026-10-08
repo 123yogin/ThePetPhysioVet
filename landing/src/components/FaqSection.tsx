@@ -58,19 +58,21 @@ export const FaqSection: React.FC = () => {
                   key={faq.id}
                   className="bg-(--c-card) border border-(--c-line)/40 transition-all"
                 >
-                  <button
-                    onClick={() => toggleAccordion(faq.id)}
-                    aria-expanded={isOpen}
-                    aria-controls={`${faq.id}-answer`}
-                    className="w-full flex items-center justify-between p-6 text-left cursor-pointer group"
-                  >
-                    <span className="font-(family-name:--f-display) text-lg sm:text-xl text-(--c-ink) font-medium group-hover:text-(--c-accent) transition-colors pr-4">
-                      <h3 className="contents">{faq.question}</h3>
-                    </span>
-                    <span className={`p-1 text-(--c-ink) transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
-                      <ChevronDown className="w-5 h-5" />
-                    </span>
-                  </button>
+                  <h3>
+                    <button
+                      onClick={() => toggleAccordion(faq.id)}
+                      aria-expanded={isOpen}
+                      aria-controls={`${faq.id}-answer`}
+                      className="w-full flex items-center justify-between p-6 text-left cursor-pointer group"
+                    >
+                      <span className="font-(family-name:--f-display) text-lg sm:text-xl text-(--c-ink) font-medium group-hover:text-(--c-accent) transition-colors pr-4">
+                        {faq.question}
+                      </span>
+                      <span className={`p-1 text-(--c-ink) transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+                        <ChevronDown className="w-5 h-5" />
+                      </span>
+                    </button>
+                  </h3>
 
                   {/* Always rendered, animated open and shut by its grid row
                       (0fr to 1fr), so the answer eases in rather than popping.

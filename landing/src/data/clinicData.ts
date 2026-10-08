@@ -130,7 +130,7 @@ export const CONDITIONS: ConditionItem[] = [
     id: 'obesity-rehab',
     title: 'Obesity Rehab',
     seoH1: 'Weight loss and obesity rehabilitation for dogs in Ahmedabad',
-    seoTitle: 'Dog Obesity & Weight Loss Programme in Ahmedabad, Shilaj',
+    seoTitle: 'Dog Obesity & Weight Loss Programme in Shilaj, Ahmedabad',
     seoDescription:
       'Dog obesity and weight-loss rehab in Ahmedabad: low-impact swimming in our indoor pool, structured exercise and weight milestones for overweight dogs and cats.',
     category: 'lifestyle',
@@ -319,8 +319,8 @@ export const JOURNEY_STEPS: JourneyStep[] = [
 ];
 
 /**
- * The clinic's current Google Business Profile rating. Feeds `aggregateRating`
- * in seo/schema.ts. The clinic's owner manages that profile directly, so this
+ * The clinic's current Google Business Profile rating, shown above the
+ * reviews on the homepage (not emitted as schema — see seo/schema.ts). The clinic's owner manages that profile directly, so this
  * is confirmed from the live listing rather than scraped or estimated.
  *
  * MUST BE KEPT IN SYNC BY HAND with the live profile
@@ -352,9 +352,9 @@ export const GOOGLE_RATING = {
  * out entirely because none of these three reviewers stated them — the
  * `SuccessStory` type makes those fields optional for exactly this case.
  *
- * These ARE emitted as Review + AggregateRating schema (see
- * seo/schema.ts) — unlike the fiction they replace, they are real and the
- * business owner has authorized publishing them.
+ * They are shown on the page only. They are NOT emitted as Review /
+ * AggregateRating schema: Google treats a business's own reviews of itself
+ * as self-serving (see the header of seo/schema.ts).
  */
 export const SUCCESS_STORIES: SuccessStory[] = [
   {
@@ -411,9 +411,8 @@ export const SPECIALISTS: Specialist[] = [
   // `experienceYears` was left at 0 because no source stated a number at the
   // time; the doctor has since confirmed 2+ years of clinical practice before
   // this website existed (the clinic predates the site), so it is now set to
-  // 2 -- a stated fact, not a guess. `imageUrl` stays empty because no source
-  // states it, and a stock photograph of someone else is exactly the failure
-  // this replacement exists to undo.
+  // 2 -- a stated fact, not a guess. Both photos below are her own, supplied
+  // by the clinic -- never a stock photograph of someone else.
   {
     id: 'dhanvi-patel',
     name: 'Dr. Dhanvi Patel',

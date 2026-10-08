@@ -21,7 +21,7 @@
  *
  * Bump VERSION to drop every cache on the next visit.
  */
-const VERSION = 'pp-landing-v3';
+const VERSION = 'pp-landing-v4';
 const STATIC = `${VERSION}-static`;
 const RUNTIME = `${VERSION}-runtime`;
 const PAGES = `${VERSION}-pages`;

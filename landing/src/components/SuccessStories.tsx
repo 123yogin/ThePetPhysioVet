@@ -1,15 +1,18 @@
 import React from 'react';
 import { SUCCESS_STORIES, GOOGLE_RATING } from '../data/clinicData';
-import { Quote, Star } from 'lucide-react';
+import { Quote, Star, Pause, Play } from 'lucide-react';
 
 /**
  * Reviews as a single-row, auto-scrolling marquee. The track holds the reviews
  * duplicated so translateX(-50%) lands exactly on the start of the second copy —
- * a seamless, gapless loop. It pauses on hover and stops entirely under
+ * a seamless, gapless loop. It pauses on hover or focus, has a visible
+ * Pause/Play button (WCAG 2.2.2 — touch and keyboard users can't hover), and stops entirely under
  * prefers-reduced-motion (keyframes + the reduced-motion guard live in the
  * scoped <style> below so the whole effect is self-contained in this file).
  */
 export const SuccessStories: React.FC = () => {
+  const [paused, setPaused] = React.useState(false);
+
   // "Loved by pet parents" over an empty row is worse than no section at all.
   if (SUCCESS_STORIES.length === 0) return null;
 
@@ -42,7 +45,7 @@ export const SuccessStories: React.FC = () => {
       </div>
 
       {/* Marquee */}
-      <div className="testi-marquee relative">
+      <div className={`testi-marquee relative${paused ? ' is-paused' : ''}`}>
         {/* Edge fades */}
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-40 bg-gradient-to-r from-(--c-card) to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 sm:w-40 bg-gradient-to-l from-(--c-card) to-transparent" />
@@ -68,20 +71,32 @@ export const SuccessStories: React.FC = () => {
                   {story.quote}
                 </p>
               </div>
-              <figcaption className="mt-6 pt-4 border-t border-(--c-line)/20 flex items-center gap-2 text-[11px] uppercase tracking-widest">
+              <div className="mt-6 pt-4 border-t border-(--c-line)/20 flex items-center gap-2 text-[11px] uppercase tracking-widest">
                 <span className="font-semibold text-(--c-ink)">
                   {[story.petName, story.ownerName].filter(Boolean).join(' • ')}
                 </span>
                 <span className="text-(--c-accent)">· {story.source}</span>
-              </figcaption>
+              </div>
             </li>
           ))}
         </ul>
       </div>
 
+      <div className="mt-6 flex justify-center motion-reduce:hidden">
+        <button
+          type="button"
+          onClick={() => setPaused((p) => !p)}
+          aria-pressed={paused}
+          className="inline-flex items-center gap-2 px-4 py-2 border border-(--c-line) text-(--c-ink) text-xs uppercase tracking-widest hover:border-(--c-accent) transition-colors"
+        >
+          {paused ? <Play className="w-3.5 h-3.5" aria-hidden="true" /> : <Pause className="w-3.5 h-3.5" aria-hidden="true" />}
+          {paused ? 'Play reviews' : 'Pause reviews'}
+        </button>
+      </div>
+
       <style>{`
         .marquee-track { animation: testimonial-scroll 48s linear infinite; }
-        .testi-marquee:hover .marquee-track { animation-play-state: paused; }
+        .testi-marquee:hover .marquee-track, .testi-marquee:focus-within .marquee-track, .testi-marquee.is-paused .marquee-track { animation-play-state: paused; }
         @keyframes testimonial-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         @media (prefers-reduced-motion: reduce) {
           .marquee-track { animation: none; transform: none; }
