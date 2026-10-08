@@ -44,6 +44,8 @@ export interface Boarding {
   owner_account?: { id: string; name: string; email: string; phone: string } | null;
   /** null when no pet is linked; [] when the pet belongs to another practice. */
   previous_reports?: Diagnosis[] | null;
+  /** True only when the linked pet belongs to another doctor (the [] means "not yours to see"). */
+  previous_reports_restricted?: boolean;
 }
 
 export interface BoardingListResponse {
