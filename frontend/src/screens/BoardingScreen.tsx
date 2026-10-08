@@ -79,12 +79,17 @@ export const BoardingScreen: React.FC = () => {
 
   const convert = useMutation({
     mutationFn: (reference: string) => convertBoarding(reference),
-    onSuccess: () => {
+    onSuccess: (_r, reference) => {
       qc.invalidateQueries({ queryKey: ['boarding'] });
+      qc.invalidateQueries({ queryKey: ['pets'] });
       addFlash('Converted to patient.', 'success');
+      setJustConverted(reference);
     },
-    onError: (e: any) => addFlash(e?.detail || 'Could not convert to patient.', 'error'),
+    onError: (e: any) => addFlash(e?.detail || e?.message || 'Could not convert to patient.', 'error'),
   });
+
+  // Reference of the stay just converted, so its "Open pet record" link takes focus.
+  const [justConverted, setJustConverted] = useState<string | null>(null);
 
   const rows: Boarding[] = data?.results ?? [];
 
@@ -130,6 +135,7 @@ export const BoardingScreen: React.FC = () => {
             onAction={(act, intake) => action.mutate({ reference: g.reference, act, intake })}
             converting={convert.isPending && convert.variables === g.reference}
             onConvert={() => convert.mutate(g.reference)}
+            focusRecord={justConverted === g.reference}
           />
         ))}
       </div>
@@ -153,7 +159,8 @@ const BoardingCard: React.FC<{
   onAction: (act: BoardingAction, intake?: Record<string, string>) => void;
   converting: boolean;
   onConvert: () => void;
-}> = ({ g, busy, highlight, onAction, converting, onConvert }) => {
+  focusRecord: boolean;
+}> = ({ g, busy, highlight, onAction, converting, onConvert, focusRecord }) => {
   const actions = NEXT_ACTIONS[g.status] ?? [];
   const editable = actions.length > 0;
   const [intake, setIntake] = useState<Record<string, string>>({
@@ -210,7 +217,7 @@ const BoardingCard: React.FC<{
         </div>
       </div>
 
-      <ClientMatch g={g} converting={converting} onConvert={onConvert} />
+      <ClientMatch g={g} converting={converting} onConvert={onConvert} focusRecord={focusRecord} />
 
       <div className="page-sub" style={{ fontSize: '0.85rem', margin: 0 }}>
         <Icon name="clock" size={12} /> {friendlyDate(g.check_in)}
@@ -298,18 +305,22 @@ const BoardingCard: React.FC<{
 
 /* ---- Client match: badge, convert, previous reports ---- */
 
-const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () => void }> = ({ g, converting, onConvert }) => {
+const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () => void; focusRecord?: boolean }> = ({ g, converting, onConvert, focusRecord }) => {
+  const recordLink = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (focusRecord) recordLink.current?.focus();
+  }, [focusRecord, g.pet_id]);
   const status = g.pet_link_status ?? 'unlinked';
   if (g.status === 'CANCELLED' && status === 'unlinked') return null;
   const reports = g.previous_reports;
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        {status === 'linked' && <span className="badge badge-confirmed">Existing client · {g.pet_name}</span>}
-        {status === 'owner_only' && <span className="badge badge-confirmed">Existing client · new pet</span>}
+        {status === 'linked' && <span className="badge badge-confirmed">Matches existing client · {g.pet_name}</span>}
+        {status === 'owner_only' && <span className="badge badge-confirmed">Matches existing client · new pet</span>}
         {status === 'unlinked' && <span className="badge badge-pending">New client</span>}
         {status === 'linked' && g.pet_id && (
-          <Link to={`/patients/${g.pet_id}`} className="btn btn-ghost btn-sm">Open pet record</Link>
+          <Link ref={recordLink} to={`/patients/${g.pet_id}`} className="btn btn-ghost btn-sm">Open pet record</Link>
         )}
         {status !== 'linked' && (
           <button type="button" className="btn btn-secondary btn-sm" disabled={converting} onClick={onConvert}>
@@ -317,6 +328,9 @@ const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () =>
           </button>
         )}
       </div>
+      {status !== 'unlinked' && (
+        <span className="page-sub" style={{ fontSize: '0.78rem' }}>Verify with the owner before relying on it</span>
+      )}
       {reports && reports.length > 0 && (
         <details style={{ fontSize: '0.82rem' }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Previous reports ({reports.length})</summary>
@@ -326,7 +340,7 @@ const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () =>
                 <span className="badge badge-confirmed">
                   {REPORT_TYPES.find((t) => t.value === r.report_type)?.label ?? r.report_type_display ?? r.report_type}
                 </span>
-                <span className="page-sub">{r.uploaded_at?.substring(0, 10) || '—'}</span>
+                <span className="page-sub">{friendlyDate(r.uploaded_at)}</span>
                 {r.file_url && <ExternalLink href={r.file_url}>Open file</ExternalLink>}
               </li>
             ))}
@@ -334,7 +348,7 @@ const ClientMatch: React.FC<{ g: Boarding; converting: boolean; onConvert: () =>
         </details>
       )}
       {reports && reports.length === 0 && status === 'linked' && (
-        <span className="page-sub" style={{ fontSize: '0.8rem' }}>No previous reports on file.</span>
+        <span className="page-sub" style={{ fontSize: '0.8rem' }}>No reports visible to you</span>
       )}
     </div>
   );
