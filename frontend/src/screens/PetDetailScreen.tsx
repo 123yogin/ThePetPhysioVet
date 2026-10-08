@@ -4,11 +4,12 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPetDetail } from '../api/pets';
 import { fetchPetDiagnoses, createDiagnosis, deleteDiagnosis } from '../api/diagnoses';
-import { fetchPetTreatmentPlans, createTreatmentPlan, addProgressNote } from '../api/treatment';
+import { fetchPetTreatmentPlans, createTreatmentPlan, updateTreatmentPlan, addProgressNote, TreatmentPlanInput } from '../api/treatment';
+import { PlanBuilder } from '../components/rehab/PlanBuilder';
+import { PlanGrid } from '../components/rehab/PlanGrid';
 import { fetchInvoices } from '../api/billing';
 import { fetchPetQueries, sendQueryMessage } from '../api/queries';
 import { useFlash } from '../lib/flash';
-import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { ProgressChart } from '../components/ProgressChart';
 import { humanizeStatus, petEmoji, friendlyDate, REPORT_TYPES } from '../lib/labels';
@@ -61,10 +62,8 @@ export const PetDetailScreen: React.FC = () => {
   const [deletingDiagnosisId, setDeletingDiagnosisId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const [therapies, setTherapies] = useState('');
-  const [frequency, setFrequency] = useState('WEEKLY');
-  const [duration, setDuration] = useState('4WK');
   const [creatingPlan, setCreatingPlan] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
 
   const [noteTextByPlan, setNoteTextByPlan] = useState<Record<string, string>>({});
   const [savingNotePlanId, setSavingNotePlanId] = useState<string | null>(null);
@@ -151,22 +150,28 @@ export const PetDetailScreen: React.FC = () => {
     }
   };
 
-  const handleCreatePlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!therapies.trim()) return addFlash('Please enter at least one therapy', 'error');
+  const handleCreatePlan = async (payload: TreatmentPlanInput) => {
     setCreatingPlan(true);
     try {
-      await createTreatmentPlan(petId, {
-        therapies: therapies.split(',').map((s) => s.trim()).filter(Boolean),
-        frequency,
-        duration,
-        start_date: todayISO(),
-      });
+      await createTreatmentPlan(petId, payload);
       addFlash('Treatment plan created', 'success');
-      setTherapies('');
       refetchPlans();
     } catch (err: any) {
       addFlash(err.message || 'Failed to create plan', 'error');
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
+
+  const handleUpdatePlan = async (planId: string, payload: TreatmentPlanInput) => {
+    setCreatingPlan(true);
+    try {
+      await updateTreatmentPlan(planId, payload);
+      addFlash('Treatment plan updated', 'success');
+      setEditingPlanId(null);
+      refetchPlans();
+    } catch (err: any) {
+      addFlash(err.message || 'Failed to update plan', 'error');
     } finally {
       setCreatingPlan(false);
     }
@@ -440,39 +445,7 @@ export const PetDetailScreen: React.FC = () => {
         <div>
           <div className="glass-card" style={{ marginBottom: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>Create New Physical Therapy Plan</h3>
-            <form onSubmit={handleCreatePlan}>
-              <div className="form-row-3" style={{ marginBottom: '16px' }}>
-                <div className="field">
-                  <label>Therapies (separate multiple with a comma)</label>
-                  <input
-                    className="input-glass"
-                    value={therapies}
-                    onChange={(e) => setTherapies(e.target.value)}
-                    placeholder="e.g. Laser, Stretching, Hydrotherapy"
-                    disabled={creatingPlan}
-                  />
-                </div>
-                <div className="field">
-                  <label>Frequency</label>
-                  <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="input-glass">
-                    <option value="WEEKLY">Weekly</option>
-                    <option value="TWICE_WEEKLY">Twice Weekly</option>
-                    <option value="BIWEEKLY">Bi-weekly</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Duration</label>
-                  <select value={duration} onChange={(e) => setDuration(e.target.value)} className="input-glass">
-                    <option value="2WK">2 Weeks</option>
-                    <option value="4WK">4 Weeks</option>
-                    <option value="8WK">8 Weeks</option>
-                  </select>
-                </div>
-              </div>
-              <button type="submit" className="btn btn-primary" disabled={creatingPlan}>
-                {creatingPlan ? 'Saving…' : 'Save Treatment Plan'}
-              </button>
-            </form>
+            <PlanBuilder submitting={creatingPlan} submitLabel="Save Treatment Plan" onSubmit={handleCreatePlan} />
           </div>
 
           {plansError && (
@@ -494,8 +467,34 @@ export const PetDetailScreen: React.FC = () => {
                 <h4 style={{ margin: 0, fontSize: '16px' }}>Plan started {friendlyDate(plan.start_date)}</h4>
                 <span className={`badge badge-${(plan.status || 'unknown').toLowerCase()}`}>{humanizeStatus(plan.status) || 'Unknown'}</span>
               </div>
-              <p><strong>Therapies:</strong> {plan.therapies?.join(', ') || '—'}</p>
-              <p><strong>Frequency & Duration:</strong> {humanizeStatus(plan.frequency) || '—'} &bull; {humanizeStatus(plan.duration) || '—'}</p>
+              {plan.schedule && plan.schedule.length > 0 ? (
+                editingPlanId === plan.id ? (
+                  <PlanBuilder
+                    plan={plan}
+                    submitting={creatingPlan}
+                    submitLabel="Save changes"
+                    onSubmit={(payload) => handleUpdatePlan(plan.id, payload)}
+                    onCancel={() => setEditingPlanId(null)}
+                  />
+                ) : (
+                  <>
+                    <p style={{ color: 'var(--brown-500)', margin: '0 0 12px' }}>
+                      {friendlyDate(plan.start_date)} to {plan.end_date ? friendlyDate(plan.end_date) : 'open-ended'}
+                    </p>
+                    <PlanGrid plan={plan} onEdit={() => setEditingPlanId(plan.id)} />
+                    {plan.status === 'ACTIVE' && (
+                      <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => setEditingPlanId(plan.id)}>
+                        Edit plan
+                      </button>
+                    )}
+                  </>
+                )
+              ) : (
+                <>
+                  <p><strong>Therapies:</strong> {plan.therapies?.join(', ') || '—'}</p>
+                  <p><strong>Frequency & Duration:</strong> {humanizeStatus(plan.frequency) || '—'} &bull; {humanizeStatus(plan.duration) || '—'}</p>
+                </>
+              )}
 
               <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
                 <h5 style={{ margin: '0 0 12px 0' }}>Session Progress Notes</h5>
