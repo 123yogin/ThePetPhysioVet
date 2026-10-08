@@ -9,7 +9,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from . import rehab
-from .validators import normalise_phone, validate_aadhaar as _validate_aadhaar
+from .validators import normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
     TreatmentPlan, RehabSession, ProgressNote, Invoice, LineItem, Payment, Package,
@@ -1047,6 +1047,27 @@ class BoardingCreateSerializer(serializers.Serializer):
     termsAccepted = serializers.BooleanField(source="terms_accepted")
     website = serializers.CharField(required=False, allow_blank=True, default="")
 
+    # Emergency contact: the phone is REQUIRED on every new booking.
+    emergencyContactName = serializers.CharField(
+        source="emergency_contact_name", max_length=150, required=False, allow_blank=True,
+        default="", trim_whitespace=True,
+    )
+    emergencyContactPhone = serializers.CharField(
+        source="emergency_contact_phone", max_length=50, trim_whitespace=True,
+    )
+
+    def validate_ownerPhone(self, value):
+        return normalise_phone(value) or _blank_phone_error()
+
+    def validate_emergencyContactPhone(self, value):
+        return normalise_phone(value) or _blank_phone_error()
+
+    def validate(self, attrs):
+        a, b = attrs.get("owner_phone"), attrs.get("emergency_contact_phone")
+        if a and b and phone_key(a) == phone_key(b):
+            raise serializers.ValidationError({"emergencyContactPhone": "Emergency contact must be a different number"})
+        return attrs
+
     def validate_checkIn(self, value):
         if value < timezone.localdate():
             raise serializers.ValidationError("Choose today or a future date.")
@@ -1063,17 +1084,49 @@ class BoardingCreateSerializer(serializers.Serializer):
         return _validate_aadhaar(value)
 
 
+def _blank_phone_error():
+    raise serializers.ValidationError("This field may not be blank.")
+
+
+class BoardingHoldSerializer(serializers.Serializer):
+    """PUBLIC ``POST /facility/boarding/holds`` -- dates only, no personal data."""
+
+    check_in = serializers.DateField()
+    duration = serializers.ChoiceField(choices=list(BOARDING_DURATION_KEYS))
+    website = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_check_in(self, value):
+        if value < timezone.localdate():
+            raise serializers.ValidationError("Choose today or a future date.")
+        return value
+
+
+class BoardingConfirmSerializer(BoardingCreateSerializer):
+    """Intake for ``POST /facility/boarding/holds/<ref>/confirm``. Same body as
+    the direct create, but the dates/duration were fixed by the hold, so any
+    `checkIn`/`duration` sent is ignored rather than trusted."""
+
+    checkIn = None
+    duration = None
+
+
 class BoardingSerializer(serializers.ModelSerializer):
     """Doctor-facing read of one boarding stay (snake_case, this app's internal
     convention). Derived fields (duration label, price) come along so the portal
     needs no pricing table of its own."""
 
     duration_label = serializers.SerializerMethodField()
+    owner_id = serializers.UUIDField(read_only=True)
+    pet_id = serializers.UUIDField(read_only=True)
+    pet_link_status = serializers.SerializerMethodField()
+    previous_reports = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardingBooking
         fields = [
             "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
+            "emergency_contact_name", "emergency_contact_phone",
+            "owner_id", "pet_id", "pet_link_status", "previous_reports", "expires_at",
             "check_in", "check_out", "duration", "duration_label", "price",
             "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
             "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
@@ -1082,3 +1135,21 @@ class BoardingSerializer(serializers.ModelSerializer):
 
     def get_duration_label(self, obj):
         return duration_label(obj.duration)
+
+    def get_pet_link_status(self, obj):
+        if obj.pet_id:
+            return "linked"
+        return "owner_only" if obj.owner_id else "unlinked"
+
+    def get_previous_reports(self, obj):
+        """The linked pet's diagnostic reports (same serializer as the pet page);
+        None when no pet is linked. Doctor-scoped like every report route: a pet
+        that belongs to ANOTHER doctor's practice contributes nothing."""
+        if not obj.pet_id:
+            return None
+        doctor = self.context.get("doctor")
+        if obj.pet.doctor_id is not None and (doctor is None or doctor.id != obj.pet.doctor_id):
+            return []
+        return DiagnosticReportSerializer(
+            obj.pet.diagnostic_reports.all(), many=True, context=self.context,
+        ).data

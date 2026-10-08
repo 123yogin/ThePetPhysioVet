@@ -52,6 +52,23 @@ def normalise_phone(value):
     return cleaned
 
 
+def phone_key(value):
+    """Comparison key for "is this the same phone?": separators stripped, and an
+    Indian number written with +91 / 91 / 0 in front folds to its ten digits, so
+    "+91 98765-43210" and "98765 43210" collide. Used ONLY to compare two numbers
+    (emergency-vs-owner check, client matching); never stored or shown. Returns
+    "" for anything that is not a plausible phone."""
+    cleaned = _strip_separators(value or "")
+    if not _VALID.match(cleaned):
+        return ""
+    digits = cleaned.lstrip("+")
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits[2:]
+    if len(digits) == 11 and digits.startswith("0"):
+        return digits[1:]
+    return digits
+
+
 # ---------------------------------------------------------------- Aadhaar ----
 #
 # The 12th digit of an Aadhaar number is a Verhoeff checksum of the first

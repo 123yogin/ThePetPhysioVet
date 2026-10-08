@@ -328,7 +328,7 @@ def owner_bookings_view(request):
             "status": b.status,
             "walk_times": b.walk_times or [],
         }
-        for b in BoardingBooking.objects.order_by("-created_at")
+        for b in BoardingBooking.objects.exclude(status="HELD").order_by("-created_at")
         if _norm_phone(b.owner_phone) == mine
     ]
 

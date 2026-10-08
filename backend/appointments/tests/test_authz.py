@@ -373,9 +373,19 @@ class PermissionConfigTests(ApiTestCase):
     # for the same split-posture reason but are doctor-only in practice: each
     # authenticates and requires role == DOCTOR by hand before any read/mutation,
     # so a public caller reaches nothing. Widened to exactly sixteen, and no wider.
+    #
+    # AMENDED 2026-10-08 for boarding bed holds: `boarding_hold_view` (POST
+    # /facility/boarding/holds) and `boarding_hold_confirm_view` (POST
+    # .../holds/<ref>/confirm) are PUBLIC for the same reason as the facility
+    # hold pair -- a visitor holding a bed cannot be expected to hold a token --
+    # and are the enquiries category (unauthenticated intake; the hold takes dates
+    # only and neither response reveals any client data). The new
+    # `boarding_convert_view` is NOT AllowAny (IsAuthenticated + IsDoctor).
+    # Widened to exactly eighteen, and no wider.
     ALLOWANY_ALLOWLIST = [
         "appointment_options_view",
         "boarding_availability_view", "boarding_ending_soon_view",
+        "boarding_hold_confirm_view", "boarding_hold_view",
         "boarding_status_view", "boarding_view",
         "enquiries_view",
         "facility_availability_view", "facility_booking_status_view",

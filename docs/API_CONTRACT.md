@@ -359,6 +359,43 @@ Plan lifecycle (amended 2026-10-08, final review):
   any sessions. Re-sending the same value is accepted.
 - Plan creation (plan row + sessions) is atomic.
 
+### Boarding (indoor-facility stays) — amended 2026-10-08
+Six beds, counted per date over a stay's range across active stays **and unexpired holds**. Expired holds
+never count (lazy expiry, no sweeper). Check + insert run under a Postgres advisory lock, so two visitors
+racing for the last bed get one 201 and one 409.
+
+| Auth | Method | Path | Body | Response |
+|---|---|---|---|---|
+| public | POST | `/facility/boarding/holds` | `{check_in, duration}` | 201 `{reference, expires_at, check_out, price}`; 409 full; 400 bad date/duration; 429 IP limit. Holds `FACILITY_HOLD_SECONDS` (600 s). |
+| public | POST | `/facility/boarding/holds/:ref/confirm` | intake body below (`checkIn`/`duration` ignored — fixed by the hold) | 201 same shape as direct create (`{reference, check_in, check_out, duration, price, status:"PENDING", detail}`); **410** `Hold expired`; **404** unknown or not `HELD`; 400 invalid |
+| public / doctor | POST | `/facility/boarding` | intake body below | 201 as above (doctor token: status `CONFIRMED`, `source:"doctor"`); 409 full |
+| doctor | GET | `/facility/boarding?status=&include_held=1` | | `{results: Booking[], pending_count}`; `HELD` rows hidden unless `include_held=1` |
+| doctor | POST | `/facility/boarding/:ref/status` | `{action}` | unchanged; a `HELD` row is 404 |
+| doctor | POST | `/facility/boarding/:ref/convert` | | 200 `Booking` with `owner_id`, `pet_id` set. 404 unknown/HELD; owner role 403 |
+
+Intake body (camelCase): `petName, ownerName, ownerPhone, ownerEmail?, checkIn, duration, foodBy?, utensilsBy?,
+medicinesBy?, blanketBy?, foodPreference?, walkTimes?, aadhaar?, termsAccepted, website?(honeypot)` plus
+**`emergencyContactPhone` (REQUIRED for every new booking, incl. holds-confirm and doctor-entered)** and
+`emergencyContactName?` (<=150). Both phones go through `normalise_phone`; if the emergency number is the same
+number as `ownerPhone` after normalisation (spacing, `+91`, leading `0` ignored) -> 400
+`emergencyContactPhone: Emergency contact must be a different number`. Existing rows default to `""`.
+
+Doctor `Booking` JSON adds: `emergency_contact_name`, `emergency_contact_phone`, `owner_id` (uuid|null),
+`pet_id` (uuid|null), `pet_link_status` (`"linked"` pet set | `"owner_only"` owner set, pet null | `"unlinked"`),
+`previous_reports` (null when no pet linked; else the linked pet's `DiagnosticReport` JSON — same serializer as
+the pet page, newest first: `id, report_type, report_type_display, uploaded_at, file_url, ...` — and `[]` when
+the pet belongs to another doctor's practice), `expires_at` (HELD only), status may be `HELD`.
+
+Matching (server-side, on create / confirm): the normalised `ownerPhone` equals exactly one OWNER's account
+phone or a pet's `owner_phone` (compared ignoring spacing and `+91`) -> `owner`; that owner has exactly one pet
+named `petName` (case-insensitive, trimmed) -> `pet`. Any ambiguity leaves the link empty. **Privacy:** the
+public create/confirm responses are byte-for-byte the same shape/text for known and unknown phones; owner/pet/report
+data appear only on doctor routes.
+
+Convert: find-or-create owner (existing matched owner, else phone, else email; new owners get an unusable
+password) and pet (by name under that owner), link both. Idempotent and serialised: a second call, or a stay already
+auto-linked to a pet, creates nothing. The owner-portal `GET /owner/bookings` excludes `HELD` rows.
+
 ### Billing
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
 | POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |

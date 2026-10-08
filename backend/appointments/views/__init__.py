@@ -130,6 +130,9 @@ from .boarding import (  # noqa: F401
     boarding_view,
     boarding_status_view,
     boarding_ending_soon_view,
+    boarding_hold_view,
+    boarding_hold_confirm_view,
+    boarding_convert_view,
 )
 
 __all__ = [
@@ -198,4 +201,7 @@ __all__ = [
     "boarding_view",
     "boarding_status_view",
     "boarding_ending_soon_view",
+    "boarding_hold_view",
+    "boarding_hold_confirm_view",
+    "boarding_convert_view",
 ]

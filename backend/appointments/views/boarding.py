@@ -4,6 +4,10 @@ Public surface:
   GET  /facility/boarding/availability?check_in=&duration=
        -> the duration menu + walk options + capacity, and (when both params are
           given) free beds / price / check-out for that selection.
+  POST /facility/boarding/holds
+       -> HOLD a bed for FACILITY_HOLD_SECONDS (dates only, no personal data).
+  POST /facility/boarding/holds/<ref>/confirm
+       -> submit the intake inside the window: HELD -> PENDING (410 once lapsed).
   POST /facility/boarding
        -> create a PENDING stay. Owners hit this from the marketing site; a
           signed-in doctor hits the same path from the portal (source="doctor",
@@ -13,42 +17,109 @@ Doctor surface (same endpoints, auth by hand — the split-posture pattern used 
 enquiries and facility bookings):
   GET  /facility/boarding                     the stays inbox
   POST /facility/boarding/<ref>/status        confirm / check-in / complete / cancel
+  POST /facility/boarding/<ref>/convert       find-or-create owner + pet, link them
 
 Capacity is six beds counted per DATE over a stay's range (a month-long stay
-holds a bed on all thirty dates). Unlike the hourly slots this is an
-application-level check, not a DB constraint — acceptable because boarding is
-paid and confirmed at the clinic, so there is no last-bed race to protect.
+holds a bed on all thirty dates), counting active stays AND unexpired holds.
+A range count cannot be a DB constraint (unlike the hourly slots' bed_index),
+so the check + insert run under a transaction-scoped Postgres advisory lock
+(`_lock_boarding_capacity`): two visitors racing for the last bed serialise, the
+second sees the first's row and gets 409. SQLite (tests/dev) serialises writers
+on the file lock.
+
+PRIVACY: whether a phone belongs to an existing client is never revealed to the
+public. Matching happens after the response is decided and only ever lands in
+`owner`/`pet`, which only the doctor serializer exposes.
 """
 import uuid as _uuid
 from datetime import date as date_cls, timedelta
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status as http_status
 
 from ..models import (
     BoardingBooking, BOARDING_BEDS, BOARDING_DURATIONS, BOARDING_DURATION_KEYS,
     BOARDING_WALK_OPTIONS, duration_days, duration_price, duration_label,
+    FACILITY_HOLD_SECONDS, Pet, UserProfile,
 )
-from ..serializers import BoardingCreateSerializer, BoardingSerializer
+from ..permissions import IsDoctor
+from ..serializers import (
+    BoardingConfirmSerializer, BoardingCreateSerializer, BoardingHoldSerializer,
+    BoardingSerializer,
+)
 from ..notify import notify_doctor
+from ..validators import normalise_phone, phone_key
 from ._shared import (
-    _client_ip, _first_error_detail, _rate_limited, problem,
+    _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem,
     maybe_doctor as _maybe_doctor, require_doctor as _require_doctor,
 )
+from .enquiries import _guess_species
 
 BOARDING_WINDOW_SECONDS = 60 * 60
 BOARDING_IP_LIMIT = 15
 BOARDING_PHONE_LIMIT = 6
 
 
+# Arbitrary fixed keys for pg_advisory_xact_lock (one per critical section).
+_CAPACITY_LOCK_KEY = 0x50485931
+_CONVERT_LOCK_KEY = 0x50485932
+
+
+def _advisory_lock(key):
+    """Transaction-scoped lock; released on commit/rollback. Postgres only --
+    SQLite already serialises writers. Must be called inside transaction.atomic()."""
+    if connection.vendor == "postgresql":
+        with connection.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", [key])
+
+
+def _lock_boarding_capacity():
+    """Serialise 'count occupied beds, then insert' across requests."""
+    _advisory_lock(_CAPACITY_LOCK_KEY)
+
+
+def _owner_ids_for_phone(raw_phone):
+    """Ids of OWNER accounts whose account phone or any pet's owner_phone is the
+    same number (compared via `phone_key`, so spacing/+91 do not matter)."""
+    key = phone_key(raw_phone)
+    if not key:
+        return set()
+    ids = {
+        uid for uid, ph in UserProfile.objects.filter(role="OWNER").exclude(phone="")
+        .values_list("id", "phone") if phone_key(ph) == key
+    }
+    ids |= {
+        oid for oid, ph in Pet.objects.filter(owner__isnull=False).exclude(owner_phone="")
+        .values_list("owner_id", "owner_phone") if phone_key(ph) == key
+    }
+    return ids
+
+
+def _match_client(owner_phone, pet_name):
+    """Server-side matching. Returns (owner|None, pet|None).
+
+    Exactly one owner for the phone -> owner. If that owner has exactly one pet
+    whose name matches (case-insensitive, trimmed) -> pet. Any ambiguity leaves
+    that link empty; staff resolve it with convert."""
+    ids = _owner_ids_for_phone(owner_phone)
+    if len(ids) != 1:
+        return None, None
+    owner = UserProfile.objects.filter(pk=next(iter(ids))).first()
+    if owner is None:
+        return None, None
+    wanted = (pet_name or "").strip().casefold()
+    pets = [p for p in Pet.objects.filter(owner=owner) if p.name.strip().casefold() == wanted]
+    return owner, (pets[0] if len(pets) == 1 else None)
+
+
 def _max_concurrent(check_in, check_out, exclude_ref=None):
     """Peak number of active stays occupying any single date in the range."""
     qs = BoardingBooking.objects.filter(
-        BoardingBooking.active_q(), check_in__lte=check_out, check_out__gte=check_in,
+        BoardingBooking.occupies_q(timezone.now()), check_in__lte=check_out, check_out__gte=check_in,
     )
     if exclude_ref:
         qs = qs.exclude(reference=exclude_ref)
@@ -137,63 +208,166 @@ def _boarding_create(request):
 
     check_in = data["check_in"]
     check_out = check_in + timedelta(days=max(0, duration_days(data["duration"]) - 1))
+    owner, pet = _match_client(data["owner_phone"], data["pet_name"])
 
     with transaction.atomic():
+        _lock_boarding_capacity()
         if _max_concurrent(check_in, check_out) >= BOARDING_BEDS:
-            return problem(
-                409, "Fully booked",
-                "All beds are taken for those dates. Please choose a different date or duration.",
-            )
+            return _full_response()
         reference = f"BRD-{_uuid.uuid4().hex[:6].upper()}"
         booking = BoardingBooking(
             reference=reference,
             source="doctor" if doctor else "owner",
             status="CONFIRMED" if doctor else "PENDING",
+            owner=owner, pet=pet,
             **data,
         )
         booking.save()  # derives check_out + price
+    return _created_response(booking)
 
+
+def _full_response():
+    return problem(
+        409, "Fully booked",
+        "All beds are taken for those dates. Please choose a different date or duration.",
+    )
+
+
+def _created_response(booking):
+    """Notify the clinic and build the 201. ONE shape/text for every caller --
+    it must not vary with whether the phone matched an existing client."""
     notify_doctor(
         kind="boarding",
-        subject=f"New boarding — {data['pet_name']} ({reference})",
-        headline=data["pet_name"],
-        subhead=f"({duration_label(data['duration'])})",
+        subject=f"New boarding — {booking.pet_name} ({booking.reference})",
+        headline=booking.pet_name,
+        subhead=f"({duration_label(booking.duration)})",
         lead="A new boarding stay was just requested on the website.",
-        owner_phone=data["owner_phone"],
+        owner_phone=booking.owner_phone,
         rows=[
-            ("Owner", data["owner_name"]),
-            ("Phone", data["owner_phone"]),
-            ("Check-in", check_in.isoformat()),
+            ("Owner", booking.owner_name),
+            ("Phone", booking.owner_phone),
+            ("Emergency contact", f"{booking.emergency_contact_name} {booking.emergency_contact_phone}".strip()),
+            ("Check-in", booking.check_in.isoformat()),
             ("Check-out", booking.check_out.isoformat()),
-            ("Duration", duration_label(data["duration"])),
+            ("Duration", duration_label(booking.duration)),
             ("Price", f"₹{booking.price}"),
-            ("Reference", reference),
+            ("Reference", booking.reference),
             ("Status", booking.status),
         ],
     )
     return Response(
         {
-            "reference": reference,
-            "check_in": check_in.isoformat(),
+            "reference": booking.reference,
+            "check_in": booking.check_in.isoformat(),
             "check_out": booking.check_out.isoformat(),
-            "duration": data["duration"],
+            "duration": booking.duration,
             "price": booking.price,
             "status": booking.status,
             "detail": (
-                f"Thanks, {data['owner_name']}! {data['pet_name']}'s stay is booked "
-                f"(reference {reference}, ₹{booking.price}). The clinic will confirm by phone."
+                f"Thanks, {booking.owner_name}! {booking.pet_name}'s stay is booked "
+                f"(reference {booking.reference}, ₹{booking.price}). The clinic will confirm by phone."
             ),
         },
         status=http_status.HTTP_201_CREATED,
     )
 
 
-def _boarding_list(request):
-    qs = BoardingBooking.objects.all()
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def boarding_hold_view(request):
+    """POST /facility/boarding/holds -- PUBLIC. Holds a bed for
+    FACILITY_HOLD_SECONDS while the visitor fills in the intake. Dates only; no
+    personal data is taken or returned. IP-rate-limited (no phone yet)."""
+    ip = _client_ip(request)
+    if _rate_limited(f"boarding-hold:ip:{ip}", BOARDING_IP_LIMIT, BOARDING_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many booking attempts. Please try again later.")
+    if str(request.data.get("website", "")).strip():
+        # Honeypot: a plausible hold that occupies nothing.
+        return Response(
+            {"reference": "BRD-RECEIVED", "expires_at": None, "check_out": None, "price": 0},
+            status=http_status.HTTP_201_CREATED,
+        )
+    serializer = BoardingHoldSerializer(data=request.data)
+    if not serializer.is_valid():
+        return problem(400, "Invalid input", _first_error_detail(serializer.errors))
+    check_in, duration = serializer.validated_data["check_in"], serializer.validated_data["duration"]
+    check_out = check_in + timedelta(days=max(0, duration_days(duration) - 1))
+
+    with transaction.atomic():
+        _lock_boarding_capacity()
+        if _max_concurrent(check_in, check_out) >= BOARDING_BEDS:
+            return _full_response()
+        booking = BoardingBooking(
+            # 8 hex: the confirm URL finds the row by reference alone.
+            reference=f"BRD-{_uuid.uuid4().hex[:8].upper()}",
+            check_in=check_in, duration=duration, status="HELD", source="owner",
+            expires_at=timezone.now() + timedelta(seconds=FACILITY_HOLD_SECONDS),
+        )
+        booking.save()
+    return Response(
+        {
+            "reference": booking.reference,
+            "expires_at": booking.expires_at.isoformat(),
+            "check_out": booking.check_out.isoformat(),
+            "price": booking.price,
+        },
+        status=http_status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def boarding_hold_confirm_view(request, reference):
+    """POST /facility/boarding/holds/<ref>/confirm -- PUBLIC. Turns a live HELD
+    row into a PENDING stay with the full intake. Dates/duration come from the
+    hold, never the body. 404 unknown / not HELD; 410 once the hold lapsed."""
+    ip = _client_ip(request)
+    if _rate_limited(f"boarding:ip:{ip}", BOARDING_IP_LIMIT, BOARDING_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many booking attempts. Please try again later.")
+    if str(request.data.get("website", "")).strip():
+        return Response(
+            {"reference": "BRD-RECEIVED", "detail": "Thanks! Your boarding request has been received."},
+            status=http_status.HTTP_201_CREATED,
+        )
+    serializer = BoardingConfirmSerializer(data=request.data)
+    if not serializer.is_valid():
+        return problem(400, "Invalid input", _first_error_detail(serializer.errors))
+    data = dict(serializer.validated_data)
+    data.pop("website", None)
+    if _rate_limited(f"boarding:phone:{data['owner_phone']}", BOARDING_PHONE_LIMIT, BOARDING_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many booking attempts. Please try again later.")
+
+    owner, pet = _match_client(data["owner_phone"], data["pet_name"])
+    with transaction.atomic():
+        booking = BoardingBooking.objects.select_for_update().filter(
+            reference=reference, status="HELD",
+        ).first()
+        if booking is None:
+            return problem(404, "Not found", "That hold does not exist or has already been confirmed.")
+        if booking.expires_at is None or booking.expires_at <= timezone.now():
+            return problem(410, "Hold expired", "Hold expired")
+        for field, value in data.items():
+            setattr(booking, field, value)
+        booking.owner, booking.pet = owner, pet
+        booking.status = "PENDING"
+        booking.expires_at = None
+        booking.save()
+    return _created_response(booking)
+
+
+def _boarding_list(request, user):
+    qs = BoardingBooking.objects.select_related("pet").prefetch_related("pet__diagnostic_reports")
+    # HELD rows are transient in-progress holds with no details, not stays.
+    if request.query_params.get("include_held") != "1":
+        qs = qs.exclude(status="HELD")
     status_filter = request.query_params.get("status")
     if status_filter:
         qs = qs.filter(status=status_filter)
-    results = BoardingSerializer(qs, many=True).data
+    results = BoardingSerializer(
+        qs, many=True, context={"request": request, "doctor": user},
+    ).data
     pending_count = BoardingBooking.objects.filter(status="PENDING").count()
     return Response({"results": results, "pending_count": pending_count})
 
@@ -205,10 +379,10 @@ def boarding_view(request):
     """POST = public/doctor intake; GET = doctor inbox."""
     if request.method == "POST":
         return _boarding_create(request)
-    _user, err = _require_doctor(request)
+    user, err = _require_doctor(request)
     if err:
         return err
-    return _boarding_list(request)
+    return _boarding_list(request, user)
 
 
 # Actions a doctor can take, and the status each moves the stay to.
@@ -233,7 +407,8 @@ def boarding_status_view(request, reference):
     new_status = _BOARDING_ACTIONS.get(action)
     if new_status is None:
         return problem(400, "Unknown action", "action must be confirm, check_in, complete or cancel.")
-    booking = BoardingBooking.objects.filter(reference=reference).first()
+    # A HELD row is an unconfirmed hold with no intake; it is not actionable.
+    booking = BoardingBooking.objects.filter(reference=reference).exclude(status="HELD").first()
     if booking is None:
         return problem(404, "Not found", "No boarding booking with that reference.")
 
@@ -297,3 +472,69 @@ def boarding_ending_soon_view(request):
     # Soonest to end (most negative = most overdue) first.
     results.sort(key=lambda r: r["minutes_left"])
     return Response({"results": results, "count": len(results)})
+
+
+def _find_owner_for_convert(owner_phone, owner_email):
+    """Existing OWNER for a stay: by phone (several -> the one whose email
+    matches, else the oldest account), falling back to email."""
+    ids = _owner_ids_for_phone(owner_phone)
+    if ids:
+        candidates = UserProfile.objects.filter(pk__in=ids, role="OWNER").order_by("date_joined", "id")
+        if len(ids) > 1 and owner_email:
+            by_email = candidates.filter(email__iexact=owner_email).first()
+            if by_email:
+                return by_email
+        found = candidates.first()
+        if found:
+            return found
+    if owner_email:
+        return UserProfile.objects.filter(email__iexact=owner_email, role="OWNER").first()
+    return None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsDoctor])
+def boarding_convert_view(request, reference):
+    """POST /facility/boarding/<ref>/convert -- DOCTOR only. Find-or-create the
+    owner (by normalised phone, then email) and the pet (by name under that
+    owner), link them to the stay, return the stay. Idempotent: a stay that is
+    already linked to a pet is returned untouched, and the whole thing runs under
+    a lock so two concurrent converts cannot create two owners/pets."""
+    with transaction.atomic():
+        _advisory_lock(_CONVERT_LOCK_KEY)
+        booking = BoardingBooking.objects.select_for_update().filter(
+            reference=reference,
+        ).exclude(status="HELD").first()
+        if booking is None:
+            return problem(404, "Not found", "No boarding booking with that reference.")
+        if booking.pet_id is None:
+            email = (booking.owner_email or "").strip().lower()
+            phone = normalise_phone(booking.owner_phone) or booking.owner_phone
+            owner = booking.owner or _find_owner_for_convert(booking.owner_phone, email)
+            if owner is None:
+                parts = booking.owner_name.strip().split(None, 1)
+                owner = UserProfile(
+                    username=_unique_owner_username(email or booking.owner_name),
+                    # An email already held by a non-owner account would break the
+                    # unique-email constraint; leave it blank rather than fail.
+                    email="" if (not email or UserProfile.objects.filter(email__iexact=email).exists()) else email,
+                    role="OWNER",
+                    first_name=parts[0] if parts else "",
+                    last_name=parts[1] if len(parts) > 1 else "",
+                    phone=phone,
+                )
+                owner.set_unusable_password()
+                owner.save()
+            name = booking.pet_name.strip()
+            pet = Pet.objects.filter(owner=owner, name__iexact=name).order_by("created_at", "id").first()
+            if pet is None:
+                pet = Pet.objects.create(
+                    owner=owner, doctor=request.user, name=name,
+                    species=_guess_species(""), owner_name=booking.owner_name,
+                    owner_phone=phone, owner_email=email,
+                )
+            booking.owner, booking.pet = owner, pet
+            booking.save(update_fields=["owner", "pet"])
+    return Response(BoardingSerializer(
+        booking, context={"request": request, "doctor": request.user},
+    ).data)
