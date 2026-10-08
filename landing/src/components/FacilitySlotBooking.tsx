@@ -60,6 +60,7 @@ interface Props {
 /** YYYY-MM-DD for a date `offsetDays` from today, in the visitor's own zone. */
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
+import { friendlyApiError, isPlausiblePhone, PHONE_HINT } from '../lib/errors';
 import { pad2 } from '../lib/format';
 
 export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) => {
@@ -154,7 +155,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.detail || 'Those slots could not be held. Please try another time.');
+        setError(friendlyApiError(data.detail, 'Those slots could not be held. Please try another time.'));
         if (res.status === 409 || (res.status === 400 && data.title === 'Slot has started')) {
           loadAvailability(date);
           setChosen([]);
@@ -176,12 +177,20 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   };
 
   // ---- Step 2 → confirm -----------------------------------------------------
-  const canConfirm =
-    !expired && form.petName.trim() && form.ownerName.trim() && form.ownerPhone.trim() && !busy;
+  // Same rule as the service form (live QA D2/D3): the button stays usable and
+  // a press says what is missing, instead of a silent disabled state.
+  const problems = [
+    !form.petName.trim() && 'Enter your pet\u2019s name.',
+    !form.ownerName.trim() && 'Enter your name.',
+    !form.ownerPhone.trim() ? 'Enter a phone number.' : !isPlausiblePhone(form.ownerPhone) && PHONE_HINT,
+  ].filter(Boolean) as string[];
+  const [attempted, setAttempted] = React.useState(false);
 
   const confirmHold = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hold || !canConfirm) return;
+    if (!hold || expired || busy) return;
+    setAttempted(true);
+    if (problems.length) return;
     setBusy(true);
     setError('');
     try {
@@ -197,7 +206,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
       const data = await res.json();
       if (!res.ok) {
         // 410 = the hold lapsed server-side between the timer and the request.
-        setError(data.detail || 'That could not be confirmed. Please try again.');
+        setError(friendlyApiError(data.detail, 'That could not be confirmed. Please try again.'));
         if (res.status === 410) setSecondsLeft(0);
         return;
       }
@@ -214,6 +223,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
     setHold(null);
     setForm({ petName: '', ownerName: '', ownerPhone: '', note: '' });
     setError('');
+    setAttempted(false);
     setPhase('select');
   };
 
@@ -241,7 +251,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
   // ---- Step 2: confirm within the countdown ---------------------------------
   if (phase === 'confirm' && hold) {
     return (
-      <form onSubmit={confirmHold} className="pt-2">
+      <form onSubmit={confirmHold} noValidate className="pt-2">
         {/* Countdown banner — the "seats blocked for 09:59" moment. */}
         <div
           className={`flex items-center justify-between px-4 py-3 mb-6 border ${
@@ -288,7 +298,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
                   className={field}
                   placeholder="e.g. Bruno"
                   value={form.petName}
-                  onChange={(e) => setForm({ ...form, petName: e.target.value })}
+                  onChange={(e) => { setForm({ ...form, petName: e.target.value }); setError(''); }}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -301,7 +311,7 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
                     className={field}
                     placeholder="e.g. Priya"
                     value={form.ownerName}
-                    onChange={(e) => setForm({ ...form, ownerName: e.target.value })}
+                    onChange={(e) => { setForm({ ...form, ownerName: e.target.value }); setError(''); }}
                   />
                 </div>
                 <div>
@@ -310,10 +320,13 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
                   </label>
                   <input
                     id="fac-phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
                     className={field}
                     placeholder="e.g. 98765 43210"
                     value={form.ownerPhone}
-                    onChange={(e) => setForm({ ...form, ownerPhone: e.target.value })}
+                    onChange={(e) => { setForm({ ...form, ownerPhone: e.target.value }); setError(''); }}
                   />
                 </div>
               </div>
@@ -326,14 +339,19 @@ export const FacilitySlotBooking: React.FC<Props> = ({ onClose, serviceLabel }) 
                   className={field}
                   placeholder="Optional"
                   value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                  onChange={(e) => { setForm({ ...form, note: e.target.value }); setError(''); }}
                 />
               </div>
             </div>
 
-            {error && <p className="text-sm text-[#b23b3b] mt-4">{error}</p>}
+            {error && <p role="alert" className="text-sm text-[#b23b3b] mt-4">{error}</p>}
+            {attempted && problems.length > 0 && (
+              <ul role="alert" className="text-sm text-[#b23b3b] mt-4 space-y-1">
+                {problems.map((p) => <li key={p}>{p}</li>)}
+              </ul>
+            )}
 
-            <button type="submit" disabled={!canConfirm} className={`${primaryBtn} mt-6`}>
+            <button type="submit" disabled={busy || expired} aria-busy={busy} className={`${primaryBtn} mt-6`}>
               {busy && <Loader2 className="w-4 h-4 animate-spin" />}
               Confirm booking
             </button>

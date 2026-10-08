@@ -50,6 +50,8 @@ export interface Appointment {
   requested_time?: string | null;
   reschedule_reason?: string;
   reason_notes?: string;
+  /** Why the clinic cancelled (doctor cancel; optional). */
+  cancel_reason?: string;
   share?: {
     whatsapp_url: string;
     sms_url: string;
@@ -179,7 +181,8 @@ export interface Invoice {
   subtotal: number;
   tax: number;
   total: number;
-  payment_status: 'PAID' | 'PENDING' | 'PARTIALLY_PAID' | string;
+  /** 'VOID' once the clinic voids an unpaid invoice — it then owes nothing. */
+  payment_status: 'PAID' | 'PENDING' | 'PARTIALLY_PAID' | 'VOID' | string;
   payment_mode: 'post_treatment' | 'pre_payment' | 'package' | string;
   created_at: string;
   line_items: LineItem[];
@@ -187,6 +190,8 @@ export interface Invoice {
   package?: Package | null;
   amount_paid: number;
   balance_due: number;
+  voided_at?: string | null;
+  void_reason?: string;
 }
 
 export interface QueryAttachment {
@@ -250,6 +255,11 @@ export interface Enquiry {
   created_at: string;
   converted_appointment_id?: string | null;
   appointment?: Appointment | null;
+  /** ENQ-XXXXXXXX — the reference the visitor was given on the website. */
+  reference?: string;
+  /** Whether the linked account may see this in their app (see confirm-client). */
+  owner_verified?: boolean;
+  owner_account?: { id: string; name: string; email: string; phone: string } | null;
 }
 
 export interface EnquiriesResponse {

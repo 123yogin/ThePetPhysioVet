@@ -11,7 +11,7 @@ defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any 
 > read-only, so writing uploads to `MEDIA_ROOT` crashed every diagnostic-report, query
 > attachment and pet-photo upload with an HTML 500. When `VERCEL` is set (or
 > `FILE_STORAGE=db` anywhere else) the bytes are stored in the `StoredFile` table
-> (migration `0021`) and served by the signed `GET /api/v1/files/<token>` route. **They
+> (migration `0022`) and served by the signed `GET /api/v1/files/<token>` route. **They
 > count against Neon's storage quota (1 GB on the free plan)**: uploads are capped at
 > 4 MB each and deleting a report/attachment/photo deletes its bytes, but watch
 > `SELECT pg_size_pretty(sum(size)) FROM appointments_storedfile;` and plan an object

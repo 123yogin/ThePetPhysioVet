@@ -245,7 +245,7 @@ class EnquiryConvertTests(ApiTestCase):
         appt = Appointment.objects.get(pk=self.enquiry.converted_appointment_id)
         self.assertEqual(appt.pet_id, pet.id)
         self.assertEqual(appt.doctor_id, self.doctor.id)
-        self.assertEqual(appt.status, "Pending")
+        self.assertEqual(appt.status, "Confirmed")
         self.assertEqual(appt.visit_type, "Initial")
         self.assertEqual(appt.visit_type_display, "Initial Consultation")
         self.assertEqual(str(appt.date), "2026-10-05")
@@ -267,7 +267,7 @@ class EnquiryConvertTests(ApiTestCase):
 
         pet = Pet.objects.get(owner=self.owner_a, name="Rex2")
         appt = Appointment.objects.get(pet=pet)
-        self.assertEqual(appt.status, "Pending")
+        self.assertEqual(appt.status, "Confirmed")
         # Existing owner's real, usable password must be untouched.
         self.owner_a.refresh_from_db()
         self.assertTrue(self.owner_a.has_usable_password())
@@ -283,7 +283,9 @@ class EnquiryConvertTests(ApiTestCase):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(Pet.objects.filter(owner=self.owner_a).count(), before_pet_count)
 
-        appt = Appointment.objects.get(pet=self.pet_a, doctor=self.doctor, status="Pending")
+        appt = Appointment.objects.exclude(pk=self.appt_a.pk).get(
+            pet=self.pet_a, doctor=self.doctor, status="Confirmed",
+        )
         self.assertEqual(appt.pet_id, self.pet_a.id)
 
     def test_convert_twice_is_idempotent(self):

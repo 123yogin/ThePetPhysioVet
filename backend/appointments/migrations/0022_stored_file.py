@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('appointments', '0020_boarding_hold_requester_hash'),
+        ('appointments', '0021_live_qa_fixes'),
     ]
 
     operations = [

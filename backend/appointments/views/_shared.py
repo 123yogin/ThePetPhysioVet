@@ -42,6 +42,25 @@ def problem(status_code, title, detail=None):
     return Response(body, status=status_code)
 
 
+def _maybe_user(request):
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    from rest_framework.exceptions import AuthenticationFailed
+    try:
+        result = JWTAuthentication().authenticate(request)
+    except AuthenticationFailed:
+        return None
+    return result[0] if result else None
+
+
+def maybe_owner(request):
+    """The OWNER user if the request carries a valid owner token, else None.
+    Never raises. Used by the public booking intakes so a booking made while
+    signed in is linked to that account -- the only way a website booking may
+    reach /owner/bookings without the clinic linking it (live QA D1)."""
+    user = _maybe_user(request)
+    return user if getattr(user, "role", None) == "OWNER" else None
+
+
 logger = logging.getLogger(__name__)
 
 # One cap for every upload route (diagnoses, query attachments, pet photos).

@@ -150,8 +150,18 @@ export const OwnerHomeScreen: React.FC = () => {
   // the owner press Book a second time. The param is cleared once handled so a
   // refresh or Back does not re-open it.
   const [searchParams, setSearchParams] = useSearchParams();
+  // Live QA D6: with no pets, ?book=1 used to land on an empty "My Pets" with no
+  // word about why the booking did not open. Say so, and offer the next step.
+  const [needsPetFirst, setNeedsPetFirst] = useState(false);
   useEffect(() => {
-    if (searchParams.get('book') !== '1' || !pets || pets.length === 0) return;
+    if (searchParams.get('book') !== '1' || !pets) return;
+    if (pets.length === 0) {
+      setNeedsPetFirst(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('book');
+      setSearchParams(next, { replace: true });
+      return;
+    }
     setSelectedPetId((prev) => prev ?? pets[0].id);
     setShowApptModal(true);
     const next = new URLSearchParams(searchParams);
@@ -360,6 +370,15 @@ export const OwnerHomeScreen: React.FC = () => {
           )}
         </div>
       </div>
+
+      {needsPetFirst && pets && pets.length === 0 && !showAddPet && (
+        <div className="alert alert-info" role="status" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <span><strong>Add your pet first.</strong> Appointments are booked for a pet, so add yours and then book.</span>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowAddPet(true)}>
+            <Icon name="plus" /> Add your pet
+          </button>
+        </div>
+      )}
 
       {/* Add Pet Form / Card */}
       {showAddPet && (

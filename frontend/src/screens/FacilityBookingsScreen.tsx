@@ -9,6 +9,16 @@ import {
 import { useFlash } from '../lib/flash';
 import { Icon } from '../components/Icon';
 import { friendlyDate } from '../lib/labels';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+
+/** What the slot count means for this status (live QA B5): a cancelled
+ *  booking holds nothing, so it must not read "1 slot held". */
+function slotCountLabel(n: number, status: string): string {
+  const slots = `${n} slot${n > 1 ? 's' : ''}`;
+  if (status === 'CANCELLED') return `${slots} · released`;
+  if (status === 'COMPLETED') return `${slots} · used`;
+  return `${slots} held`;
+}
 
 /**
  * Day-care slot bookings the website has taken.
@@ -56,11 +66,13 @@ export const FacilityBookingsScreen: React.FC = () => {
         vars.status === 'CONFIRMED' ? 'Booking confirmed.' : 'Booking cancelled — beds freed.',
         'success',
       );
+      if (vars.status === 'CANCELLED') setCancelTarget(null);
     },
     onError: () => addFlash('Could not update the booking. Please try again.', 'error'),
   });
 
   const groups: FacilityBookingGroup[] = data?.results ?? [];
+  const [cancelTarget, setCancelTarget] = useState<FacilityBookingGroup | null>(null);
 
   return (
     <div>
@@ -163,7 +175,7 @@ export const FacilityBookingsScreen: React.FC = () => {
                   at a glance how many of the (max three) slots were taken. */}
               <div>
                 <div className="page-sub" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: '6px' }}>
-                  {g.slots.length} slot{g.slots.length > 1 ? 's' : ''} held
+                  {slotCountLabel(g.slots.length, g.status)}
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   {g.slots.map((s) => (
@@ -218,7 +230,7 @@ export const FacilityBookingsScreen: React.FC = () => {
                     type="button"
                     className="btn btn-ghost btn-sm"
                     disabled={busy}
-                    onClick={() => mutation.mutate({ reference: g.reference, status: 'CANCELLED' })}
+                    onClick={() => setCancelTarget(g)}
                     style={{ marginTop: '10px' }}
                   >
                     Cancel
@@ -229,6 +241,23 @@ export const FacilityBookingsScreen: React.FC = () => {
           );
         })}
       </div>
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title="Cancel this facility booking?"
+        body={cancelTarget && (
+          <>
+            {cancelTarget.pet_name} ({cancelTarget.owner_name}) on {friendlyDate(cancelTarget.date)}. The slot is
+            released for others immediately.
+          </>
+        )}
+        confirmLabel="Cancel booking"
+        cancelLabel="Keep booking"
+        danger
+        busy={mutation.isPending}
+        onConfirm={() => cancelTarget && mutation.mutate({ reference: cancelTarget.reference, status: 'CANCELLED' })}
+        onClose={() => setCancelTarget(null)}
+      />
     </div>
   );
 };

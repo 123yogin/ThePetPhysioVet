@@ -5,6 +5,7 @@ import { useFlash } from '../lib/flash';
 import { markAppReady } from '../lib/appReady';
 import { PasswordField } from '../components/PasswordField';
 import { BrandMark } from '../components/BrandMark';
+import { isPlausiblePhone, PHONE_HINT } from '../lib/errors';
 
 export const LoginScreen: React.FC = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -56,6 +57,11 @@ export const LoginScreen: React.FC = () => {
     }
     if (!phone.trim()) {
       setRegisterError('Please enter a phone number so the clinic can reach you.');
+      return;
+    }
+    // Checked here too, so a typo is caught before the round trip (live QA D3).
+    if (!isPlausiblePhone(phone)) {
+      setRegisterError(PHONE_HINT);
       return;
     }
     if (!regPassword) {
@@ -113,7 +119,8 @@ export const LoginScreen: React.FC = () => {
         </div>
 
         {!isRegisterMode ? (
-          <form onSubmit={handleLogin}>
+          // An error describes the last attempt; editing any field clears it (D3).
+          <form onSubmit={handleLogin} onChange={() => loginError && setLoginError(null)}>
             {loginError && (
               <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
                 <span>{loginError}</span>
@@ -172,7 +179,7 @@ export const LoginScreen: React.FC = () => {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleRegisterOwner}>
+          <form onSubmit={handleRegisterOwner} onChange={() => registerError && setRegisterError(null)}>
             {registerError && (
               <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
                 <span>{registerError}</span>
@@ -226,7 +233,9 @@ export const LoginScreen: React.FC = () => {
                 className="input-glass"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 98765 12345"
+                placeholder="98765 43210"
+                inputMode="tel"
+                autoComplete="tel"
                 required
               />
             </div>

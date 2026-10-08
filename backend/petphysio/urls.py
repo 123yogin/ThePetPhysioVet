@@ -1,11 +1,26 @@
 from django.contrib import admin
 from django.urls import path, re_path, include
 from django.conf import settings
+from django.http import JsonResponse
+
+
+def _api_not_found(request, rest=""):
+    """Any /api/* path no route matched. Without this Django answered with its
+    HTML 404 page, so an API client got markup where it expects problem+json
+    (live QA D8). Same wording as every other 404 in this API."""
+    return JsonResponse(
+        {"type": "about:blank", "title": "Not found", "status": 404,
+         "detail": "That record does not exist, or you do not have access to it."},
+        status=404, content_type="application/problem+json",
+    )
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include("appointments.urls")),
     path("api/", include("appointments.urls")),
+    # Last of the api/ patterns, so it only sees paths nothing above matched.
+    re_path(r"^api/(?P<rest>.*)$", _api_not_found),
 ]
 
 
