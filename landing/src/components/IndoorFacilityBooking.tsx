@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarCheck, Check, Loader2, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CalendarCheck, Check, Clock, Loader2, ShieldCheck } from 'lucide-react';
 import { isValidAadhaar } from '../lib/aadhaar';
 
 /**
@@ -24,6 +24,19 @@ interface Selection {
   check_out: string; price: number; available: number;
 }
 
+/** A bed held for this visitor for the chosen dates; `expiresAt` is epoch ms. */
+interface Hold { reference: string; expiresAt: number; date: string; duration: string }
+
+/** Digits only, folding a leading +91 / 91 / 0, so spacing and country code can't hide a duplicate. */
+function phoneKey(raw: string): string {
+  let d = raw.replace(/\D/g, '');
+  if (d.length > 10 && d.startsWith('91')) d = d.slice(2);
+  if (d.length > 10 && d.startsWith('0')) d = d.slice(1);
+  else if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+  return d;
+}
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
 interface Props {
   onClose: () => void;
 }
@@ -44,12 +57,17 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
 
   const [form, setForm] = React.useState({
     petName: '', ownerName: '', ownerPhone: '', ownerEmail: '', aadhaar: '',
+    emergencyName: '', emergencyPhone: '',
   });
   const [walkTimes, setWalkTimes] = React.useState<string[]>([]);
   const [terms, setTerms] = React.useState(false);
   const [website, setWebsite] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [hold, setHold] = React.useState<Hold | null>(null);
+  const [holding, setHolding] = React.useState(false);
+  const [holdNote, setHoldNote] = React.useState('');
+  const [secondsLeft, setSecondsLeft] = React.useState(0);
   const [booked, setBooked] = React.useState<{ reference: string; detail: string } | null>(null);
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -75,21 +93,73 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
     return () => { cancelled = true; };
   }, [duration, date]);
 
+  // A hold only applies to the exact dates it was placed for. Changing the date or
+  // duration simply stops matching; the old hold lapses server-side on its own.
+  const activeHold = hold && hold.date === date && hold.duration === duration ? hold : null;
+
+  // The countdown (same approach as FacilitySlotBooking).
+  React.useEffect(() => {
+    if (!activeHold) return;
+    const tick = () => setSecondsLeft(Math.max(0, Math.round((activeHold.expiresAt - Date.now()) / 1000)));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [activeHold]);
+
+  const expired = !!activeHold && secondsLeft <= 0;
+  const holdLive = !!activeHold && !expired;
+  const mmss = `${pad2(Math.floor(secondsLeft / 60))}:${pad2(secondsLeft % 60)}`;
+
+  const placeHold = async () => {
+    if (!duration || !date || holding) return;
+    setHolding(true);
+    setHoldNote('');
+    setError('');
+    try {
+      const res = await fetch(`${CLINIC_API}/facility/boarding/holds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ check_in: date, duration }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        setHold(null);
+        setHoldNote('Just taken — pick another date.');
+        return;
+      }
+      if (!res.ok || !data.reference || !data.expires_at) {
+        setHoldNote(data.detail || 'We could not hold a bed. Please try again.');
+        return;
+      }
+      setHold({ reference: data.reference, expiresAt: Date.parse(data.expires_at), date, duration });
+    } catch {
+      setHoldNote('Something went wrong. Please try again.');
+    } finally {
+      setHolding(false);
+    }
+  };
+
   const toggleWalk = (key: string) =>
     setWalkTimes((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   const aadhaarOk = isValidAadhaar(form.aadhaar);
   const full = !!selection && selection.available <= 0;
+  const samePhone =
+    !!form.emergencyPhone.trim() && phoneKey(form.emergencyPhone) === phoneKey(form.ownerPhone);
   const canSubmit =
-    !!duration && !!date && !full &&
+    !!duration && !!date && !full && holdLive &&
     form.petName.trim() && form.ownerName.trim() && form.ownerPhone.trim() &&
+    form.emergencyPhone.trim() && !samePhone &&
     aadhaarOk && terms && !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) {
       setError(
-        !aadhaarOk ? 'Please enter a valid 12-digit Aadhaar number.'
+        !holdLive ? 'Please hold a bed first.'
+          : samePhone ? 'Emergency contact must be a different number.'
+          : !form.emergencyPhone.trim() ? 'Please add an emergency contact number.'
+          : !aadhaarOk ? 'Please enter a valid 12-digit Aadhaar number.'
           : !terms ? 'Please accept the terms and conditions.'
             : 'Please fill in the required fields.',
       );
@@ -98,13 +168,15 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(`${CLINIC_API}/facility/boarding`, {
+      const res = await fetch(`${CLINIC_API}/facility/boarding/holds/${activeHold!.reference}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           petName: form.petName, ownerName: form.ownerName, ownerPhone: form.ownerPhone,
           ownerEmail: form.ownerEmail || undefined,
           checkIn: date, duration,
+          emergencyContactName: form.emergencyName.trim() || undefined,
+          emergencyContactPhone: form.emergencyPhone,
           walkTimes,
           aadhaar: form.aadhaar.replace(/\s/g, ''),
           termsAccepted: terms,
@@ -112,6 +184,11 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
         }),
       });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 410) {
+        setHold(null);
+        setHoldNote('Your hold expired — hold again.');
+        return;
+      }
       if (!res.ok) {
         setError(data.detail || 'We could not book that stay. Please try again.');
         return;
@@ -204,6 +281,33 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
             : 'Pick a duration to see availability.'}
       </p>
 
+      {/* Bed hold */}
+      <div className="mb-6" aria-live="polite">
+        {holdLive ? (
+          <div className="flex items-center justify-between px-4 py-3 border border-(--c-accent)/30 bg-(--c-surface)">
+            <span className="flex items-center gap-2 text-sm text-(--c-ink)">
+              <Clock className="w-4 h-4 text-(--c-accent)" /> Bed held for you
+            </span>
+            <span className="font-mono text-lg font-semibold text-(--c-accent) tabular-nums">{mmss}</span>
+          </div>
+        ) : (
+          <>
+            {(expired || holdNote) && (
+              <p className="flex items-center gap-2 text-sm text-[#b23b3b] mb-3" role="alert">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {expired ? 'Your hold expired — hold again.' : holdNote}
+              </p>
+            )}
+            {selection && !full && (
+              <button type="button" onClick={placeHold} disabled={holding || checking} className={primaryBtn}>
+                {holding && <Loader2 className="w-4 h-4 animate-spin" />}
+                Hold this bed
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Walks */}
       <span className={labelCls}>Walks</span>
       <div className="flex flex-wrap gap-2 mb-6">
@@ -245,6 +349,25 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
           <div>
             <label className={labelCls} htmlFor="brd-email">Email</label>
             <input id="brd-email" className={field} value={form.ownerEmail} onChange={(e) => set('ownerEmail', e.target.value)} placeholder="Optional" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label className={labelCls} htmlFor="brd-em-name">Emergency contact name</label>
+            <input id="brd-em-name" className={field} value={form.emergencyName} onChange={(e) => set('emergencyName', e.target.value)} placeholder="Optional" />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="brd-em-phone">Emergency contact phone *</label>
+            <input
+              id="brd-em-phone" type="tel" className={field} value={form.emergencyPhone}
+              onChange={(e) => set('emergencyPhone', e.target.value)}
+              placeholder="A different number from yours"
+              aria-invalid={samePhone || undefined}
+              aria-describedby={samePhone ? 'brd-em-err' : undefined}
+            />
+            {samePhone && (
+              <p id="brd-em-err" className="text-xs text-[#b23b3b] mt-1">Emergency contact must be a different number.</p>
+            )}
           </div>
         </div>
         <div>
