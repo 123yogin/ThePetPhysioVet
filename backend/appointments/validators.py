@@ -62,6 +62,8 @@ def phone_key(value):
     if not _VALID.match(cleaned):
         return ""
     digits = cleaned.lstrip("+")
+    if len(digits) == 14 and digits.startswith("0091"):
+        return digits[4:]
     if len(digits) == 12 and digits.startswith("91"):
         return digits[2:]
     if len(digits) == 11 and digits.startswith("0"):

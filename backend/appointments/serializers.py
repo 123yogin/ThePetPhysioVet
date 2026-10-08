@@ -515,6 +515,9 @@ class RehabSessionSerializer(serializers.ModelSerializer):
         return obj.status
 
     def get_done_by_name(self, obj):
+        # Owners must not learn which staff member did a session (E2E D1).
+        if self.context.get("hide_staff"):
+            return None
         user = obj.done_by
         if user is None:
             return ""
@@ -1120,6 +1123,8 @@ class BoardingSerializer(serializers.ModelSerializer):
     pet_id = serializers.UUIDField(read_only=True)
     pet_link_status = serializers.SerializerMethodField()
     previous_reports = serializers.SerializerMethodField()
+    # Staff see only the last four digits; the full number never leaves the server.
+    aadhaar = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardingBooking
@@ -1135,6 +1140,9 @@ class BoardingSerializer(serializers.ModelSerializer):
 
     def get_duration_label(self, obj):
         return duration_label(obj.duration)
+
+    def get_aadhaar(self, obj):
+        return f"XXXX XXXX {obj.aadhaar[-4:]}" if len(obj.aadhaar) >= 4 else ""
 
     def get_pet_link_status(self, obj):
         if obj.pet_id:

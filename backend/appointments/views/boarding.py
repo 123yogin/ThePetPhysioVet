@@ -31,10 +31,14 @@ PRIVACY: whether a phone belongs to an existing client is never revealed to the
 public. Matching happens after the response is decided and only ever lands in
 `owner`/`pet`, which only the doctor serializer exposes.
 """
+import hashlib
 import uuid as _uuid
 from datetime import date as date_cls, timedelta
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -62,6 +66,28 @@ from .enquiries import _guess_species
 BOARDING_WINDOW_SECONDS = 60 * 60
 BOARDING_IP_LIMIT = 15
 BOARDING_PHONE_LIMIT = 6
+# One visitor may not park more than this many unexpired holds at once.
+BOARDING_MAX_LIVE_HOLDS_PER_IP = 2
+_RATE_MESSAGE = "Too many booking attempts. Please try again later."
+
+
+def _rate_peek(key, limit):
+    """True once `limit` events are already on record for `key` (does not count)."""
+    return (cache.get(key) or 0) >= limit
+
+
+def _rate_bump(key, window_seconds):
+    """Record one event for `key` in a fixed window."""
+    try:
+        cache.incr(key)
+    except ValueError:
+        cache.set(key, 1, timeout=window_seconds)
+
+
+def _ip_hash(ip):
+    """Salted, truncated hash of the requester IP -- enough to count one
+    visitor's live holds, not enough to recover the address."""
+    return hashlib.sha256(f"{settings.SECRET_KEY}|boarding-hold|{ip}".encode()).hexdigest()[:32]
 
 
 # Arbitrary fixed keys for pg_advisory_xact_lock (one per critical section).
@@ -86,16 +112,14 @@ def _owner_ids_for_phone(raw_phone):
     """Ids of OWNER accounts whose account phone or any pet's owner_phone is the
     same number (compared via `phone_key`, so spacing/+91 do not matter)."""
     key = phone_key(raw_phone)
+    # Both queries run whether or not `key` is empty/matches, so the work done
+    # (and the response time) does not reveal whether the phone is a client's.
+    accounts = list(UserProfile.objects.filter(role="OWNER").exclude(phone="").values_list("id", "phone"))
+    pets = list(Pet.objects.filter(owner__isnull=False).exclude(owner_phone="").values_list("owner_id", "owner_phone"))
     if not key:
         return set()
-    ids = {
-        uid for uid, ph in UserProfile.objects.filter(role="OWNER").exclude(phone="")
-        .values_list("id", "phone") if phone_key(ph) == key
-    }
-    ids |= {
-        oid for oid, ph in Pet.objects.filter(owner__isnull=False).exclude(owner_phone="")
-        .values_list("owner_id", "owner_phone") if phone_key(ph) == key
-    }
+    ids = {uid for uid, ph in accounts if phone_key(ph) == key}
+    ids |= {oid for oid, ph in pets if phone_key(ph) == key}
     return ids
 
 
@@ -106,13 +130,15 @@ def _match_client(owner_phone, pet_name):
     whose name matches (case-insensitive, trimmed) -> pet. Any ambiguity leaves
     that link empty; staff resolve it with convert."""
     ids = _owner_ids_for_phone(owner_phone)
-    if len(ids) != 1:
-        return None, None
-    owner = UserProfile.objects.filter(pk=next(iter(ids))).first()
-    if owner is None:
+    # The owner and pet queries always run (pk=None -> IS NULL, results thrown
+    # away) so the query count is the same for a match and a miss.
+    owner_pk = next(iter(ids)) if len(ids) == 1 else None
+    owner = UserProfile.objects.filter(pk=owner_pk).first()
+    candidates = list(Pet.objects.filter(owner_id=owner_pk)[:200])
+    if owner is None or owner_pk is None:
         return None, None
     wanted = (pet_name or "").strip().casefold()
-    pets = [p for p in Pet.objects.filter(owner=owner) if p.name.strip().casefold() == wanted]
+    pets = [p for p in candidates if p.name.strip().casefold() == wanted]
     return owner, (pets[0] if len(pets) == 1 else None)
 
 
@@ -280,22 +306,39 @@ def boarding_hold_view(request):
     FACILITY_HOLD_SECONDS while the visitor fills in the intake. Dates only; no
     personal data is taken or returned. IP-rate-limited (no phone yet)."""
     ip = _client_ip(request)
-    if _rate_limited(f"boarding-hold:ip:{ip}", BOARDING_IP_LIMIT, BOARDING_WINDOW_SECONDS):
-        return problem(429, "Too many requests", "Too many booking attempts. Please try again later.")
+    rate_key = f"boarding-hold:ip:{ip}"
+    # Only holds that actually succeed (201) burn the hourly allowance, so typos
+    # and "fully booked" retries cannot lock a visitor out.
+    if _rate_peek(rate_key, BOARDING_IP_LIMIT):
+        return problem(429, "Too many requests", _RATE_MESSAGE)
+    serializer = BoardingHoldSerializer(data=request.data)
+    valid = serializer.is_valid()
     if str(request.data.get("website", "")).strip():
-        # Honeypot: a plausible hold that occupies nothing.
+        # Honeypot: a plausible hold (same shape) that occupies nothing.
+        check_in = serializer.validated_data["check_in"] if valid else timezone.localdate()
+        duration = serializer.validated_data["duration"] if valid else "24h"
         return Response(
-            {"reference": "BRD-RECEIVED", "expires_at": None, "check_out": None, "price": 0},
+            {
+                "reference": "BRD-RECEIVED",
+                "expires_at": (timezone.now() + timedelta(seconds=FACILITY_HOLD_SECONDS)).isoformat(),
+                "check_out": (check_in + timedelta(days=max(0, duration_days(duration) - 1))).isoformat(),
+                "price": duration_price(duration),
+            },
             status=http_status.HTTP_201_CREATED,
         )
-    serializer = BoardingHoldSerializer(data=request.data)
-    if not serializer.is_valid():
+    if not valid:
         return problem(400, "Invalid input", _first_error_detail(serializer.errors))
     check_in, duration = serializer.validated_data["check_in"], serializer.validated_data["duration"]
     check_out = check_in + timedelta(days=max(0, duration_days(duration) - 1))
+    requester = _ip_hash(ip)
 
     with transaction.atomic():
         _lock_boarding_capacity()
+        live = BoardingBooking.objects.filter(
+            status="HELD", requester_hash=requester, expires_at__gt=timezone.now(),
+        ).count()
+        if live >= BOARDING_MAX_LIVE_HOLDS_PER_IP:
+            return problem(429, "Too many requests", _RATE_MESSAGE)
         if _max_concurrent(check_in, check_out) >= BOARDING_BEDS:
             return _full_response()
         booking = BoardingBooking(
@@ -303,8 +346,10 @@ def boarding_hold_view(request):
             reference=f"BRD-{_uuid.uuid4().hex[:8].upper()}",
             check_in=check_in, duration=duration, status="HELD", source="owner",
             expires_at=timezone.now() + timedelta(seconds=FACILITY_HOLD_SECONDS),
+            requester_hash=requester,
         )
         booking.save()
+    _rate_bump(rate_key, BOARDING_WINDOW_SECONDS)
     return Response(
         {
             "reference": booking.reference,
@@ -341,18 +386,24 @@ def boarding_hold_confirm_view(request, reference):
 
     owner, pet = _match_client(data["owner_phone"], data["pet_name"])
     with transaction.atomic():
+        _lock_boarding_capacity()
         booking = BoardingBooking.objects.select_for_update().filter(
             reference=reference, status="HELD",
         ).first()
         if booking is None:
             return problem(404, "Not found", "That hold does not exist or has already been confirmed.")
-        if booking.expires_at is None or booking.expires_at <= timezone.now():
+        if (
+            booking.expires_at is None or booking.expires_at <= timezone.now()
+            # A hold taken for a day that has since passed is useless too.
+            or booking.check_in < timezone.localdate()
+        ):
             return problem(410, "Hold expired", "Hold expired")
         for field, value in data.items():
             setattr(booking, field, value)
         booking.owner, booking.pet = owner, pet
         booking.status = "PENDING"
         booking.expires_at = None
+        booking.requester_hash = ""
         booking.save()
     return _created_response(booking)
 
@@ -362,6 +413,9 @@ def _boarding_list(request, user):
     # HELD rows are transient in-progress holds with no details, not stays.
     if request.query_params.get("include_held") != "1":
         qs = qs.exclude(status="HELD")
+    else:
+        # Even when asked for, a LAPSED hold is not a hold any more.
+        qs = qs.exclude(Q(status="HELD") & ~Q(expires_at__gt=timezone.now()))
     status_filter = request.query_params.get("status")
     if status_filter:
         qs = qs.filter(status=status_filter)
@@ -474,16 +528,21 @@ def boarding_ending_soon_view(request):
     return Response({"results": results, "count": len(results)})
 
 
+class _AmbiguousOwner(Exception):
+    """Several owner accounts share the stay's phone and email cannot pick one."""
+
+
 def _find_owner_for_convert(owner_phone, owner_email):
     """Existing OWNER for a stay: by phone (several -> the one whose email
-    matches, else the oldest account), falling back to email."""
+    matches, else AMBIGUOUS), falling back to email."""
     ids = _owner_ids_for_phone(owner_phone)
     if ids:
         candidates = UserProfile.objects.filter(pk__in=ids, role="OWNER").order_by("date_joined", "id")
-        if len(ids) > 1 and owner_email:
-            by_email = candidates.filter(email__iexact=owner_email).first()
+        if len(ids) > 1:
+            by_email = candidates.filter(email__iexact=owner_email).first() if owner_email else None
             if by_email:
                 return by_email
+            raise _AmbiguousOwner()
         found = candidates.first()
         if found:
             return found
@@ -510,7 +569,13 @@ def boarding_convert_view(request, reference):
         if booking.pet_id is None:
             email = (booking.owner_email or "").strip().lower()
             phone = normalise_phone(booking.owner_phone) or booking.owner_phone
-            owner = booking.owner or _find_owner_for_convert(booking.owner_phone, email)
+            try:
+                owner = booking.owner or _find_owner_for_convert(booking.owner_phone, email)
+            except _AmbiguousOwner:
+                return problem(
+                    409, "Ambiguous client",
+                    "Several clients share this phone — open the right client and link manually.",
+                )
             if owner is None:
                 parts = booking.owner_name.strip().split(None, 1)
                 owner = UserProfile(

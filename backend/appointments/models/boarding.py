@@ -154,6 +154,9 @@ class BoardingBooking(models.Model):
     checked_in_at = models.DateTimeField(null=True, blank=True)
     # Set only while status == HELD; cleared on confirm.
     expires_at = models.DateTimeField(null=True, blank=True)
+    # Salted hash of the requester's IP, kept on a HELD row only so one visitor
+    # cannot park every bed at once. Never serialised.
+    requester_hash = models.CharField(max_length=32, blank=True, default="", db_index=True)
 
     class Meta:
         ordering = ("-created_at",)

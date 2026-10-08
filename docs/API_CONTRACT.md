@@ -336,7 +336,7 @@ weekdays 0=Mon..6=Sun, exactly 0/0/2/1/1 of them) and read-only `sessions` =
 `[{id, therapy, planned_date, status DUE|DONE|SKIPPED, display_status (adds MISSED, DONE_LATE),
 done_on, done_by_name, note, skip_reason}]`. On **create** only: no `end_date` and no `duration`
 -> `end_date = start_date + 6`; a parseable `duration` ("4WK", "10 days") -> derived end date.
-Max span 366 days. The owner `GET /owner/pets/:id` payload carries both, read-only.
+Max span 366 days. The owner `GET /owner/pets/:id` payload carries both, read-only, with `done_by_name` always `null` (owners never see staff identity).
 
 ### Rehab checklist
 | GET | `/rehab/therapies` | | `{groups:[{group, therapies[]}], frequencies:[{code,label,weekdays_required}]}` — any authenticated user |
@@ -366,12 +366,12 @@ racing for the last bed get one 201 and one 409.
 
 | Auth | Method | Path | Body | Response |
 |---|---|---|---|---|
-| public | POST | `/facility/boarding/holds` | `{check_in, duration}` | 201 `{reference, expires_at, check_out, price}`; 409 full; 400 bad date/duration; 429 IP limit. Holds `FACILITY_HOLD_SECONDS` (600 s). |
-| public | POST | `/facility/boarding/holds/:ref/confirm` | intake body below (`checkIn`/`duration` ignored — fixed by the hold) | 201 same shape as direct create (`{reference, check_in, check_out, duration, price, status:"PENDING", detail}`); **410** `Hold expired`; **404** unknown or not `HELD`; 400 invalid |
+| public | POST | `/facility/boarding/holds` | `{check_in, duration}` | 201 `{reference, expires_at, check_out, price}`; 409 full; 400 bad date/duration; **429** (same message) when the IP has had 15 *successful* holds in the hour (409/400 attempts do not count) or already has 2 unexpired holds. Honeypot returns the same shape (computed `expires_at`/`check_out`/`price`), nothing stored. Holds `FACILITY_HOLD_SECONDS` (600 s). |
+| public | POST | `/facility/boarding/holds/:ref/confirm` | intake body below (`checkIn`/`duration` ignored — fixed by the hold) | 201 same shape as direct create (`{reference, check_in, check_out, duration, price, status:"PENDING", detail}`); **410** `Hold expired` (also when the held check-in date is already past); **404** unknown or not `HELD`; 400 invalid |
 | public / doctor | POST | `/facility/boarding` | intake body below | 201 as above (doctor token: status `CONFIRMED`, `source:"doctor"`); 409 full |
-| doctor | GET | `/facility/boarding?status=&include_held=1` | | `{results: Booking[], pending_count}`; `HELD` rows hidden unless `include_held=1` |
+| doctor | GET | `/facility/boarding?status=&include_held=1` | | `{results: Booking[], pending_count}`; `HELD` rows hidden unless `include_held=1`, which returns only *unexpired* holds |
 | doctor | POST | `/facility/boarding/:ref/status` | `{action}` | unchanged; a `HELD` row is 404 |
-| doctor | POST | `/facility/boarding/:ref/convert` | | 200 `Booking` with `owner_id`, `pet_id` set. 404 unknown/HELD; owner role 403 |
+| doctor | POST | `/facility/boarding/:ref/convert` | | 200 `Booking` with `owner_id`, `pet_id` set. **409** problem `Several clients share this phone — open the right client and link manually.` when more than one OWNER account has the phone and the email does not pick one (nothing created). 404 unknown/HELD; owner role 403 |
 
 Intake body (camelCase): `petName, ownerName, ownerPhone, ownerEmail?, checkIn, duration, foodBy?, utensilsBy?,
 medicinesBy?, blanketBy?, foodPreference?, walkTimes?, aadhaar?, termsAccepted, website?(honeypot)` plus
@@ -384,12 +384,12 @@ Doctor `Booking` JSON adds: `emergency_contact_name`, `emergency_contact_phone`,
 `pet_id` (uuid|null), `pet_link_status` (`"linked"` pet set | `"owner_only"` owner set, pet null | `"unlinked"`),
 `previous_reports` (null when no pet linked; else the linked pet's `DiagnosticReport` JSON — same serializer as
 the pet page, newest first: `id, report_type, report_type_display, uploaded_at, file_url, ...` — and `[]` when
-the pet belongs to another doctor's practice), `expires_at` (HELD only), status may be `HELD`.
+the pet belongs to another doctor's practice), `expires_at` (HELD only), status may be `HELD`. `aadhaar` is **masked** on every staff response (`"XXXX XXXX 1234"`, last four only; `""` when none) — the full number never leaves the server.
 
 Matching (server-side, on create / confirm): the normalised `ownerPhone` equals exactly one OWNER's account
 phone or a pet's `owner_phone` (compared ignoring spacing and `+91`) -> `owner`; that owner has exactly one pet
 named `petName` (case-insensitive, trimmed) -> `pet`. Any ambiguity leaves the link empty. **Privacy:** the
-public create/confirm responses are byte-for-byte the same shape/text for known and unknown phones; owner/pet/report
+public create/confirm responses are the same shape and template text for known and unknown phones; owner/pet/report
 data appear only on doctor routes.
 
 Convert: find-or-create owner (existing matched owner, else phone, else email; new owners get an unusable

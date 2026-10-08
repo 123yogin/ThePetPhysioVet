@@ -4,7 +4,7 @@ patient, previous reports, and bed holds.
 Time is frozen at 2026-10-08 10:00 IST so hold expiry and "today" are exact.
 Capacity and hold length are read from the model constants.
 """
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest import mock
 from zoneinfo import ZoneInfo
 
@@ -329,16 +329,55 @@ class HoldTests(BoardingBase):
             self.create()
             self.assertEqual(lock.call_count, 2)
 
-    def test_hold_honeypot_writes_nothing(self):
-        res = self.hold(website="http://spam")
+    def test_hold_is_ip_rate_limited_counting_only_successful_holds(self):
+        from appointments.views.boarding import BOARDING_IP_LIMIT
+        for _ in range(BOARDING_IP_LIMIT):
+            self.assertEqual(self.hold().status_code, 201)
+            self.advance(FACILITY_HOLD_SECONDS + 1)  # expire it so the 2-at-once cap is not hit
+        self.assertEqual(self.hold().status_code, 429)
+
+    def test_invalid_and_full_attempts_do_not_burn_the_hold_limit(self):
+        from appointments.views.boarding import BOARDING_IP_LIMIT
+        for _ in range(BOARDING_IP_LIMIT + 3):
+            self.assertEqual(self.hold(duration="9y").status_code, 400)
+        self.assertEqual(self.hold().status_code, 201)
+        self.fill(BOARDING_BEDS - 1)  # one bed left, taken by the hold above -> now full
+        for _ in range(BOARDING_IP_LIMIT + 3):
+            self.assertEqual(self.hold().status_code, 409)
+        self.assertNotEqual(self.hold(check_in="2026-12-01").status_code, 429)
+
+    def test_at_most_two_unexpired_holds_per_ip(self):
+        self.assertEqual(self.hold().status_code, 201)
+        self.assertEqual(self.hold().status_code, 201)
+        res = self.hold()
+        self.assertEqual(res.status_code, 429)
+        self.assertIn("Too many booking attempts", str(res.data))
+        self.advance(FACILITY_HOLD_SECONDS + 1)
+        self.assertEqual(self.hold().status_code, 201)
+
+    def test_requester_hash_is_stored_but_never_exposed(self):
+        ref = self.hold().data["reference"]
+        b = BoardingBooking.objects.get(reference=ref)
+        self.assertEqual(len(b.requester_hash), 32)
+        self.assertNotIn("127.0.0.1", b.requester_hash)
+        self.assertNotIn("requester_hash", self.doctor_row(ref))
+
+    def test_hold_honeypot_returns_a_plausible_shape(self):
+        res = self.hold(website="http://spam", duration="48h")
         self.assertEqual(res.status_code, 201)
+        self.assertEqual(set(res.data), {"reference", "expires_at", "check_out", "price"})
+        self.assertEqual(res.data["expires_at"], (NOW + timedelta(seconds=FACILITY_HOLD_SECONDS)).isoformat())
+        self.assertEqual(res.data["check_out"], "2026-10-13")
+        self.assertEqual(res.data["price"], 2000)
         self.assertEqual(BoardingBooking.objects.count(), 0)
 
-    def test_hold_is_ip_rate_limited(self):
-        from appointments.views.boarding import BOARDING_IP_LIMIT
-        codes = [self.hold(check_in=f"2026-{11 + i // 28:02d}-{1 + i % 28:02d}").status_code
-                 for i in range(BOARDING_IP_LIMIT + 1)]
-        self.assertEqual(codes[-1], 429)
+    def test_include_held_returns_only_unexpired_holds(self):
+        live = self.hold().data["reference"]
+        self.advance(FACILITY_HOLD_SECONDS + 1)
+        fresh = self.hold(check_in="2026-10-20").data["reference"]
+        refs = [r["reference"] for r in self.doctor_list("?include_held=1").data["results"]]
+        self.assertIn(fresh, refs)
+        self.assertNotIn(live, refs)
 
     def test_doctor_list_hides_held_unless_asked(self):
         ref = self.hold().data["reference"]
@@ -411,6 +450,125 @@ class ConfirmTests(BoardingBase):
 
     def test_confirm_is_phone_rate_limited(self):
         from appointments.views.boarding import BOARDING_PHONE_LIMIT
-        refs = [self.hold(check_in=f"2026-11-{1 + i:02d}").data["reference"] for i in range(BOARDING_PHONE_LIMIT + 1)]
+        refs = []
+        for i in range(BOARDING_PHONE_LIMIT + 1):  # seed rows directly: the per-IP live-hold cap would stop real holds
+            ref = f"BRD-SEED{i:04d}"
+            BoardingBooking.objects.create(
+                reference=ref, check_in=date(2026, 11, 1 + i), duration="24h", status="HELD",
+                expires_at=NOW + timedelta(seconds=FACILITY_HOLD_SECONDS),
+            )
+            refs.append(ref)
         codes = [self.confirm(r).status_code for r in refs]
         self.assertEqual(codes[-1], 429)
+
+
+class FinalReviewTests(BoardingBase):
+    def test_confirm_runs_under_the_capacity_lock(self):
+        ref = self.hold().data["reference"]
+        with mock.patch("appointments.views.boarding._lock_boarding_capacity") as lock:
+            self.assertEqual(self.confirm(ref).status_code, 201)
+            self.assertEqual(lock.call_count, 1)
+
+    def test_confirm_for_a_check_in_date_already_past_is_410(self):
+        ref = self.hold().data["reference"]
+        BoardingBooking.objects.filter(reference=ref).update(check_in="2026-10-07")
+        res = self.confirm(ref)
+        self.assertEqual(res.status_code, 410)
+        self.assertIn("Hold expired", str(res.data))
+        self.assertEqual(BoardingBooking.objects.get(reference=ref).status, "HELD")
+
+    def test_previous_reports_empty_for_another_doctors_pet(self):
+        other = UserProfile.objects.create_user(
+            username="drother", password="D0ctorPass!23", role="DOCTOR", phone="9990000002",
+            email="other@example.com",
+        )
+        self.pet_a.doctor = other
+        self.pet_a.save()
+        DiagnosticReport.objects.create(
+            pet=self.pet_a, report_type="XRAY",
+            file=SimpleUploadedFile("scan.png", b"\x89PNG\r\n\x1a\n", content_type="image/png"),
+            original_filename="scan.png",
+        )
+        row = self.doctor_row(self.create(ownerPhone="9991110001", petName="Rex").data["reference"])
+        self.assertEqual(row["pet_link_status"], "linked")
+        self.assertEqual(row["previous_reports"], [])
+
+    def test_previous_reports_visible_when_pet_has_no_doctor(self):
+        self.pet_a.doctor = None
+        self.pet_a.save()
+        DiagnosticReport.objects.create(
+            pet=self.pet_a, report_type="XRAY",
+            file=SimpleUploadedFile("scan.png", b"\x89PNG\r\n\x1a\n", content_type="image/png"),
+            original_filename="scan.png",
+        )
+        row = self.doctor_row(self.create(ownerPhone="9991110001", petName="Rex").data["reference"])
+        self.assertEqual(len(row["previous_reports"]), 1)
+
+    def test_convert_with_several_owners_on_one_phone_is_409_and_creates_nothing(self):
+        self.owner_b.phone = "9991110001"
+        self.owner_b.save()
+        ref = self.create(ownerPhone="9991110001", petName="Newpet").data["reference"]
+        pets_before = Pet.objects.count()
+        self.auth(self.doctor)
+        res = self.client.post(f"{BOARD}/{ref}/convert")
+        self.assertEqual(res.status_code, 409, res.content)
+        self.assertIn("Several clients share this phone", str(res.data))
+        self.assertEqual(Pet.objects.count(), pets_before)
+
+    def test_convert_with_shared_phone_is_resolved_by_matching_email(self):
+        self.owner_b.phone = "9991110001"
+        self.owner_b.save()
+        ref = self.create(ownerPhone="9991110001", petName="Newpet", ownerEmail="b@example.com").data["reference"]
+        self.auth(self.doctor)
+        res = self.client.post(f"{BOARD}/{ref}/convert")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(str(res.data["owner_id"]), str(self.owner_b.id))
+
+    def test_match_client_query_count_does_not_depend_on_whether_the_phone_matches(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from appointments.views.boarding import _match_client
+        with CaptureQueriesContext(connection) as hit:
+            _match_client("9991110001", "Rex")
+        with CaptureQueriesContext(connection) as miss:
+            _match_client("9123456780", "Rex")
+        self.assertEqual(len(hit), len(miss))
+
+    def test_owner_pet_detail_hides_who_ticked_a_session(self):
+        from appointments.models import RehabSession
+        sess = RehabSession.objects.filter(plan=self.plan_a).first()
+        if sess is None:
+            sess = RehabSession.objects.create(
+                plan=self.plan_a, therapy="Hydrotherapy", planned_date=NOW.date(),
+            )
+        sess.status, sess.done_on, sess.done_by = "DONE", NOW.date(), self.doctor
+        sess.save()
+        self.auth(self.owner_a)
+        res = self.client.get(f"{API}/owner/pets/{self.pet_a.id}")
+        self.assertEqual(res.status_code, 200, res.content)
+        sessions = [s for p in res.data["treatment_plans"] for s in p["sessions"]]
+        self.assertTrue(sessions)
+        for s in sessions:
+            self.assertIsNone(s["done_by_name"])
+        self.assertTrue(any(s["status"] == "DONE" for s in sessions))
+        self.auth(self.doctor)
+        res = self.client.get(f"{API}/pets/{self.pet_a.id}/treatment-plans")
+        done = [s for p in res.data for s in p["sessions"] if s["status"] == "DONE"]
+        self.assertEqual(done[0]["done_by_name"], "Dana Who")
+
+    def test_staff_list_and_detail_mask_aadhaar_to_last_four(self):
+        ref = self.create(aadhaar="234123412346").data["reference"]
+        row = self.doctor_row(ref)
+        self.assertEqual(row["aadhaar"], "XXXX XXXX 2346")
+        self.assertNotIn("234123412346", str(self.doctor_list().content))
+        self.auth(self.doctor)
+        conv = self.client.post(f"{BOARD}/{ref}/convert")
+        self.assertEqual(conv.data["aadhaar"], "XXXX XXXX 2346")
+        self.assertEqual(self.doctor_row(self.create().data["reference"])["aadhaar"], "")
+
+
+class PhoneKeyTests(ApiTestCase):
+    def test_double_zero_91_prefix_folds_to_ten_digits(self):
+        from appointments.validators import phone_key
+        for v in ("00919876543210", "0091 98765 43210", "+91 98765-43210", "09876543210", "9876543210"):
+            self.assertEqual(phone_key(v), "9876543210", v)

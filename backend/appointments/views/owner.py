@@ -95,6 +95,7 @@ def owner_pet_detail_view(request, pk):
     ).data
     data["treatment_plans"] = TreatmentPlanSerializer(
         pet.treatment_plans.prefetch_related("sessions__done_by"), many=True,
+        context={"request": request, "hide_staff": True},
     ).data
     return Response(data)
 
