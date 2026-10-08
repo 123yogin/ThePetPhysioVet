@@ -16,7 +16,7 @@ re-exported here, so no call site had to change.
 from .accounts import UserProfile, PasswordResetToken  # noqa: F401
 from .pets import Pet  # noqa: F401
 from .scheduling import Appointment  # noqa: F401
-from .clinical import DiagnosticReport, TreatmentPlan, ProgressNote  # noqa: F401
+from .clinical import DiagnosticReport, TreatmentPlan, RehabSession, ProgressNote  # noqa: F401
 from .billing import Invoice, LineItem, Payment, Package  # noqa: F401
 from .notifications import Notification, NotificationPref  # noqa: F401
 from .messaging import QueryThread, QueryMessage, QueryAttachment  # noqa: F401

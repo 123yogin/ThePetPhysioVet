@@ -1135,3 +1135,55 @@ tr:hover td {
   /* The "N visits" badge does not fit beside the date at this width. */
   .cal-badge { display: none; }
 }
+
+/* ------------------------------------------------------------------------
+   Rehab checklist (plan builder, plan grid, Today's rehab)
+   ------------------------------------------------------------------------ */
+.rehab-group { border: 1px solid var(--glass-border); border-radius: 12px; margin: 0 0 12px; padding: 8px 14px 12px; min-width: 0; }
+.rehab-group legend { font-weight: 700; padding: 0 6px; color: var(--brown-700); }
+.rehab-therapy-row { padding: 4px 0; }
+.rehab-check { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.rehab-check input { width: 22px; height: 22px; flex: none; }
+.rehab-freq { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 0 0 6px 32px; }
+.rehab-freq select { width: auto; min-width: 180px; }
+.rehab-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rehab-chip { min-width: 44px; min-height: 44px; border-radius: 999px; border: 1px solid var(--brown-300); background: #fff; color: var(--brown-900); font: inherit; font-weight: 600; cursor: pointer; }
+.rehab-chip.on { background: var(--brown-900); color: #fff; border-color: var(--brown-900); }
+.rehab-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.rehab-chip-hint { font-size: 13px; color: var(--brown-500); }
+.rehab-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rehab-inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rehab-inline-form .input-glass { width: auto; min-width: 160px; }
+.rehab-banner { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; }
+.rehab-progress { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-bottom: 12px; }
+.rehab-progress-bar { flex: 1 1 160px; height: 10px; border-radius: 999px; background: var(--brown-100); overflow: hidden; }
+.rehab-progress-bar span { display: block; height: 100%; background: #2e7d32; }
+.rehab-progress-text { font-weight: 600; font-size: 14px; }
+.rehab-scroll { overflow-x: auto; max-width: 100%; border-radius: 12px; }
+.rehab-grid { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.rehab-grid th, .rehab-grid td { padding: 2px; text-align: center; min-width: 48px; border-bottom: 1px solid var(--brown-100); }
+.rehab-grid thead th { font-weight: 600; color: var(--brown-700); padding: 6px 2px; }
+.rehab-grid .rehab-dm { display: block; font-weight: 400; font-size: 11px; color: var(--brown-500); white-space: nowrap; }
+.rehab-grid th.rehab-therapy { position: sticky; left: 0; z-index: 1; background: var(--cream); text-align: left; min-width: 130px; max-width: 160px; padding: 6px 10px 6px 4px; font-weight: 600; }
+.rehab-grid .rehab-today { background: rgba(141, 110, 99, 0.12); }
+.rehab-cell { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 10px; border: 1px solid transparent; background: transparent; font: inherit; font-size: 18px; font-weight: 700; padding: 0; }
+button.rehab-cell { cursor: pointer; }
+.rehab-cell.done, .rehab-key.done { color: #2e7d32; }
+.rehab-cell.late, .rehab-key.late { color: #2e7d32; text-decoration: underline wavy; text-underline-offset: 4px; }
+.rehab-cell.missed, .rehab-key.missed { color: #c62828; }
+.rehab-cell.skipped, .rehab-key.skipped { color: var(--brown-500); }
+.rehab-cell.due, .rehab-key.due { color: var(--brown-700); }
+.rehab-cell.selected, button.rehab-cell:hover { border-color: var(--brown-500); background: #fff; }
+.rehab-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rehab-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; color: var(--brown-700); }
+.rehab-key { font-weight: 700; }
+.rehab-panel { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--brown-300); border-radius: 12px; background: rgba(255, 255, 255, 0.85); display: grid; gap: 10px; }
+.rehab-panel-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.rehab-panel-head .btn { margin-left: auto; }
+.rehab-pet-group { margin-bottom: 16px; }
+.rehab-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rehab-list-item { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid var(--brown-100); border-radius: 12px; background: rgba(255, 255, 255, 0.6); }
+.rehab-status { font-size: 13px; font-weight: 600; }
+.rehab-status.done, .rehab-status.done_late { color: #2e7d32; }
+.rehab-status.missed { color: #c62828; }
+.rehab-status.skipped { color: var(--brown-500); }

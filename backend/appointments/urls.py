@@ -12,6 +12,8 @@ from .views import (
     pet_diagnoses_view, diagnostic_report_detail_view,
     # Treatment plans
     pet_treatment_plans_view, treatment_plan_detail_view, treatment_plan_progress_notes_view,
+    treatment_plan_extend_view, rehab_therapies_view, rehab_today_view,
+    rehab_session_done_view, rehab_session_skip_view, rehab_session_undo_view,
     # Appointments
     appointments_view, appointment_detail_view, appointment_reschedule_view,
     appointment_complete_view, appointment_reschedule_approve_view,
@@ -70,6 +72,15 @@ urlpatterns = [
         treatment_plan_progress_notes_view,
         name="treatment-plan-progress-notes",
     ),
+
+    path("treatment-plans/<uuid:pk>/extend", treatment_plan_extend_view, name="treatment-plan-extend"),
+
+    # --- Rehab checklist ---
+    path("rehab/therapies", rehab_therapies_view, name="rehab-therapies"),
+    path("rehab/today", rehab_today_view, name="rehab-today"),
+    path("rehab/sessions/<uuid:pk>/done", rehab_session_done_view, name="rehab-session-done"),
+    path("rehab/sessions/<uuid:pk>/skip", rehab_session_skip_view, name="rehab-session-skip"),
+    path("rehab/sessions/<uuid:pk>/undo", rehab_session_undo_view, name="rehab-session-undo"),
 
     # --- Appointments ---
     path("appointments", appointments_view, name="appointments"),

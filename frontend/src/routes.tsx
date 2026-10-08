@@ -18,6 +18,7 @@ import { DashboardScreen } from './screens/DashboardScreen';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { PetDetailScreen } from './screens/PetDetailScreen';
 import { PetFormScreen } from './screens/PetFormScreen';
+import { TodayRehabScreen } from './screens/TodayRehabScreen';
 import { AppointmentsScreen } from './screens/AppointmentsScreen';
 import { CreateScreen } from './screens/CreateScreen';
 import { RescheduleScreen } from './screens/RescheduleScreen';
@@ -70,6 +71,7 @@ export const AppRoutes: React.FC = () => {
               <Route path="/patients" element={<PatientsScreen />} />
               <Route path="/patients/new" element={<PetFormScreen />} />
               <Route path="/patients/:id" element={<PetDetailScreen />} />
+              <Route path="/rehab/today" element={<TodayRehabScreen />} />
               <Route path="/appointments" element={<AppointmentsScreen />} />
               <Route path="/appointments/new" element={<CreateScreen />} />
               <Route path="/appointments/:id/reschedule" element={<RescheduleScreen />} />

@@ -93,7 +93,9 @@ def owner_pet_detail_view(request, pk):
     data["diagnoses"] = DiagnosticReportSerializer(
         pet.diagnostic_reports.all(), many=True, context={"request": request},
     ).data
-    data["treatment_plans"] = TreatmentPlanSerializer(pet.treatment_plans.all(), many=True).data
+    data["treatment_plans"] = TreatmentPlanSerializer(
+        pet.treatment_plans.prefetch_related("sessions__done_by"), many=True,
+    ).data
     return Response(data)
 
 

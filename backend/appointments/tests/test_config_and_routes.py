@@ -243,6 +243,7 @@ class ModelPackageIntegrityTests(ApiTestCase):
         "Pet",                                         # pets
         "Appointment",                                 # scheduling
         "DiagnosticReport", "TreatmentPlan", "ProgressNote",   # clinical
+        "RehabSession",                                # clinical (2026-10-08)
         "Invoice", "LineItem", "Payment", "Package",   # billing
         "Notification", "NotificationPref",            # notifications
         "QueryThread", "QueryMessage", "QueryAttachment",      # messaging
