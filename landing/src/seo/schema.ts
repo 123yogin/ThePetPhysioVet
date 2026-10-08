@@ -11,15 +11,27 @@
  *  • FAQPage is still emitted for machine comprehension even though Google removed
  *    FAQ *rich results* in May 2026 — it costs nothing and no longer promises a SERP
  *    accordion. Do not treat it as a visibility feature.
- *  • AggregateRating / Review are deliberately NOT emitted: there are no real
- *    reviews in the data. Never mark up ratings you don't have.
+ *  • AggregateRating / Review are deliberately NOT emitted, even though the
+ *    homepage shows genuine Google reviews (SUCCESS_STORIES). Google treats
+ *    ratings a LocalBusiness publishes about itself as "self-serving" — they
+ *    never earn review stars and can be flagged as spammy structured data.
+ *    The stars in search come from the Google Business Profile itself.
  */
 
 import { SITE, absoluteUrl } from './siteConfig';
 import { matchRoute, conditionPath, servicePath, specialistPath, type RouteEntity } from './routes';
 import { getPageMeta } from './metadata';
-import { CONDITIONS, FAQS, SERVICES, SPECIALISTS, HERO_IMAGE, servicesForCondition, CONTENT_REVIEWED_DATE } from '../data/clinicData';
+import {
+  CONDITIONS,
+  FAQS,
+  SERVICES,
+  SPECIALISTS,
+  HERO_IMAGE,
+  servicesForCondition,
+  CONTENT_REVIEWED_DATE,
+} from '../data/clinicData';
 import { conditionFaqs } from '../data/conditionFaqs';
+import { TREATMENT_CONTENT, plainText } from '../data/treatmentContent';
 import type { ConditionItem, ServiceItem, Specialist } from '../types';
 
 /** Loosely-typed JSON-LD node. */
@@ -35,6 +47,7 @@ const ID = {
   service: (id: string) => `${absoluteUrl(servicePath(id))}#service`,
   condition: (id: string) => `${absoluteUrl(conditionPath(id))}#condition`,
   person: (id: string) => `${absoluteUrl(specialistPath(id))}#person`,
+  area: (name: string) => `${SITE.origin}/#area-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
   faq: (path: string) => `${absoluteUrl(path)}#faq`,
 };
 
@@ -114,7 +127,7 @@ export function businessNode(): Node {
       addressCountry: SITE.address.addressCountry,
     },
     geo: { '@type': 'GeoCoordinates', latitude: SITE.geo.latitude, longitude: SITE.geo.longitude },
-    areaServed: SITE.areaServed.map((name) => ({ '@type': 'AdministrativeArea', name })),
+    areaServed: SITE.areaServed.map((name) => ({ '@type': 'AdministrativeArea', '@id': ID.area(name), name })),
     openingHoursSpecification: openingHoursSpecification(),
     // Points search engines at the clinic's own Google listing, which is the
     // authoritative source for the pin and the hours this file cannot assert.
@@ -244,8 +257,11 @@ export function serviceNode(service: ServiceItem): Node {
     serviceType: service.title,
     category: 'Veterinary rehabilitation',
     provider: { '@id': ID.business() },
-    areaServed: SITE.areaServed.map((name) => ({ '@type': 'AdministrativeArea', name })),
-    audience: { '@type': 'Audience', audienceType: service.suitableFor.join(', ') },
+    // Reference the AdministrativeArea nodes defined once on the business node
+    // (always in the same graph) instead of repeating them for every Service.
+    areaServed: SITE.areaServed.map((name) => ({ '@id': ID.area(name) })),
+    // audienceType names a group of people, not conditions or animals.
+    audience: { '@type': 'Audience', audienceType: 'Pet owners' },
     hoursAvailable: openingHoursSpecification(),
     additionalProperty: [
       { '@type': 'PropertyValue', name: 'Typical session length', value: service.duration },
@@ -334,6 +350,22 @@ export function conditionFaqNode(condition: ConditionItem, path: string): Node {
   };
 }
 
+/** FAQPage for a treatment page, from the same data that renders the visible Q&A. */
+export function serviceFaqNode(service: ServiceItem, path: string): Node | null {
+  const faqs = TREATMENT_CONTENT[service.id]?.faqs ?? [];
+  if (!faqs.length) return null;
+  return {
+    '@type': 'FAQPage',
+    '@id': ID.faq(path),
+    isPartOf: { '@id': ID.webpage(path) },
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: { '@type': 'Answer', text: plainText(faq.a) },
+    })),
+  };
+}
+
 /**
  * Assemble the full @graph for a pathname. One script tag per page.
  */
@@ -363,6 +395,8 @@ export function buildGraph(pathname: string): Node {
 
   if (isService(entity)) {
     graph.push(serviceNode(entity));
+    const faq = serviceFaqNode(entity, path);
+    if (faq) graph.push(faq);
   }
 
   if (isSpecialist(entity)) {

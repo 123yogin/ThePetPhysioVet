@@ -38,16 +38,13 @@
     <link rel="apple-touch-icon" href="/logo.png?v=3" />
 
     <!--
-      Fonts: preconnect saves a round trip on the render-blocking stylesheet, and
-      display=swap keeps text painting immediately instead of blocking LCP on the
-      font file. Both stylesheets are Google Fonts, the one external host allowed here.
+      Fonts are self-hosted (see @font-face in src/index.css). The two upright
+      faces carry the headline and body text on every page, so they are
+      preloaded; crossorigin is required for font preloads even same-origin.
+      The italic face loads on demand.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,50..100;1,9..144,300..700,50..100&family=Figtree:wght@300..700&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="preload" href="/src/assets/fonts/fraunces-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/src/assets/fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <!-- The Material Symbols icon font was linked here but no component uses it:
          it was a render-blocking request (~460 ms in a trace) for nothing. -->
 

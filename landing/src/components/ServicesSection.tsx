@@ -45,7 +45,7 @@ export const ServicesSection: React.FC = () => {
           </div>
           <div className="md:col-span-5 md:text-right">
             <p className="font-(family-name:--f-body) text-base sm:text-lg text-(--c-body) font-light leading-relaxed">
-              Cutting-edge, non-invasive therapeutic modalities performed by certified veterinary specialists.
+              Non-invasive therapies performed by a certified veterinary physiotherapist.
             </p>
           </div>
         </div>

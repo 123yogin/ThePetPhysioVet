@@ -26,11 +26,11 @@ export const SpecialistPage: React.FC<{ specialist: Specialist }> = ({ specialis
     <PageShell>
       <article className="max-w-[1280px] mx-auto px-4 sm:px-8 pb-16">
         <header className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start border-b border-(--c-line)/30 pb-12 mb-12">
-          {specialist.imageUrl && (
+          {(specialist.portraitUrl || specialist.imageUrl) && (
             <div className="lg:col-span-4">
               <img
-                src={specialist.imageUrl}
-                alt={specialist.altText}
+                src={specialist.portraitUrl ?? specialist.imageUrl}
+                alt={specialist.portraitAlt ?? specialist.altText}
                 width={600}
                 height={750}
                 loading="eager"
@@ -48,7 +48,7 @@ export const SpecialistPage: React.FC<{ specialist: Specialist }> = ({ specialis
               </span>
             )}
             <h1 style={{ ['--d' as string]: '280ms' }} className="hero-rise font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light leading-tight tracking-tight mb-2">
-              {specialist.name}
+              {specialist.seoH1 ?? specialist.name}
             </h1>
             {specialist.role && (
               <p className="font-(family-name:--f-body) text-base text-(--c-accent) uppercase tracking-widest font-semibold mb-6">

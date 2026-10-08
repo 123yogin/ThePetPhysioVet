@@ -9,6 +9,12 @@ export interface ConditionItem {
   expectedRecoveryTime: string;
   imageUrl: string;
   altText: string;
+  /** Hand-written page <h1>. Falls back to the entity title. */
+  seoH1?: string;
+  /** Hand-written <title> (<= 60 chars as displayed). Preferred over the template. */
+  seoTitle?: string;
+  /** Hand-written meta description (140-160 chars). Preferred over the template. */
+  seoDescription?: string;
 }
 
 export interface ServiceItem {
@@ -20,6 +26,12 @@ export interface ServiceItem {
   benefits: string[];
   suitableFor: string[];
   duration: string;
+  /** Hand-written page <h1>. Falls back to the entity title. */
+  seoH1?: string;
+  /** Hand-written <title> (<= 60 chars as displayed). Preferred over the template. */
+  seoTitle?: string;
+  /** Hand-written meta description (140-160 chars). Preferred over the template. */
+  seoDescription?: string;
 }
 
 export interface JourneyStep {
@@ -32,15 +44,27 @@ export interface JourneyStep {
 
 export interface SuccessStory {
   id: string;
-  petName: string;
-  breed: string;
-  condition: string;
+  /** Verbatim quote — trimmed of a leading "& " / "..." at most, never paraphrased. */
   quote: string;
+  /** Who said it. An initial ("R.") when that's all the source gives, or
+   *  "Google review" when no name at all is available. Never a fabricated
+   *  full name. */
   ownerName: string;
-  storyDetails: string;
-  duration: string;
-  imageUrl: string;
-  altText: string;
+  /** Out of 5 (bestRating). Genuine reviews only — never invented. */
+  rating: number;
+  /** Where the review came from, e.g. "Google". Feeds the Review schema node. */
+  source: string;
+  // Everything below is optional and filled ONLY when the reviewer actually
+  // stated it. Most real reviews (e.g. Google Business Profile excerpts) name
+  // neither a pet nor a condition nor an outcome duration — leave the field
+  // out rather than fabricating a plausible-looking value.
+  petName?: string;
+  breed?: string;
+  condition?: string;
+  storyDetails?: string;
+  duration?: string;
+  imageUrl?: string;
+  altText?: string;
 }
 
 export interface Specialist {
@@ -53,11 +77,19 @@ export interface Specialist {
    *  profile page carries every qualification. Falls back to `credentials`
    *  when unset. */
   credentialsShort?: string;
+  /** Optional <title> / <h1> overrides for the profile page. */
+  seoTitle?: string;
+  seoH1?: string;
   bio: string;
   specialties: string[];
   experienceYears: number;
   imageUrl: string;
   altText: string;
+  /** Formal standalone portrait for the dedicated profile page. The homepage
+   *  "about" card keeps the warmer `imageUrl` (clinician with a patient);
+   *  falls back to `imageUrl` when unset. */
+  portraitUrl?: string;
+  portraitAlt?: string;
 }
 
 export interface GalleryItem {

@@ -24,10 +24,14 @@ const warn = (msg) => warnings.push(msg);
 
 const TITLE_MIN = 25;
 const TITLE_MAX = 60;
-const DESC_MIN = 120;
+const DESC_MIN = 140;
 const DESC_MAX = 160;
 /** Content bytes inside #root below which a page is effectively empty. */
 const MIN_ROOT_CONTENT = 1000;
+/** Treatment pages are the service landing pages; below this they are thin. */
+const MIN_TREATMENT_WORDS = 700;
+/** Pages that must exist and be in the sitemap. */
+const REQUIRED_URLS = ['/treatments/hydrotherapy', '/treatments/acupuncture'];
 
 if (!existsSync(DIST)) {
   console.error('dist/ not found — run `npm run build` first.');
@@ -71,6 +75,13 @@ for (const file of pages) {
   const html = readFileSync(file, 'utf8');
   const is404 = rel === '/404.html';
 
+  // ── Third-party hosts: images and fonts are self-hosted ──
+  // Hotlinked art can vanish or be swapped by its host, and every external
+  // origin is an extra connection and a privacy-policy entry.
+  for (const host of ['googleusercontent.com', 'fonts.googleapis.com', 'fonts.gstatic.com']) {
+    if (html.includes(host)) fail(`${rel}: references third-party host ${host} — self-host it under /photos or /fonts.`);
+  }
+
   // ── Rendered content: the check that catches an empty SPA shell ──
   // Vite hoists the module script into <head>, so #root runs to </body>. A volume
   // heuristic is enough here: the failure being guarded against is "empty shell",
@@ -85,8 +96,24 @@ for (const file of pages) {
   const title = first(/<title>([\s\S]*?)<\/title>/i, html);
   if (!title) fail(`${rel}: missing <title>`);
   else {
-    if (title.length > TITLE_MAX) fail(`${rel}: title ${title.length} chars (>${TITLE_MAX}) — will be truncated.`);
+    // Length is what the SERP shows, so count "&amp;" as one character.
+    const shown = title.replace(/&amp;/g, '&').length;
+    if (shown > TITLE_MAX) fail(`${rel}: title ${shown} chars (>${TITLE_MAX}) — will be truncated.`);
     if (title.length < TITLE_MIN) warn(`${rel}: title only ${title.length} chars — under-using the space.`);
+    // Same word-stem twice ("Rehab ... Rehabilitation") reads as keyword stuffing.
+    // The brand suffix is stripped first: "Physiotherapy ... The Pet Physio Vet" is
+    // the brand, not a repeat.
+    const stems = new Map();
+    for (const word of title.replace(/&amp;/g, '&').replace(/\|\s*The Pet Physio Vet\s*$/i, '').toLowerCase().match(/[a-z]{5,}/g) ?? []) {
+      const stem = word.slice(0, 5);
+      if (stems.has(stem) && stems.get(stem) !== word) fail(`${rel}: title repeats the word stem "${stem}" ("${stems.get(stem)}" / "${word}")`);
+      else if (stems.has(stem)) fail(`${rel}: title repeats "${word}"`);
+      stems.set(stem, word);
+    }
+    // Condition and treatment pages are local-intent pages.
+    if (/^\/(conditions|treatments)\//.test(rel) && !/ahmedabad/i.test(title)) {
+      fail(`${rel}: title lacks "Ahmedabad" — condition/treatment pages must carry the locality.`);
+    }
     if (titles.has(title)) fail(`${rel}: duplicate title, also on ${titles.get(title)}`);
     else titles.set(title, rel);
   }
@@ -123,6 +150,12 @@ for (const file of pages) {
     fail('/404.html should be noindex');
   }
 
+  // ── Treatment pages: depth. A warning, not a failure -- thin pages still index. ──
+  if (/^\/treatments\//.test(rel)) {
+    const words = text.split(' ').filter(Boolean).length;
+    if (words < MIN_TREATMENT_WORDS) warn(`${rel}: ${words} words in #root (target >= ${MIN_TREATMENT_WORDS}).`);
+  }
+
   // ── Headings ──
   const h1s = (html.match(/<h1[\s>]/gi) || []).length;
   if (h1s === 0) fail(`${rel}: no <h1>`);
@@ -154,6 +187,26 @@ for (const file of pages) {
   }
   const noAlt = imgs.filter((tag) => !/\balt=/.test(tag));
   if (noAlt.length) fail(`${rel}: ${noAlt.length} <img> without an alt attribute`);
+}
+
+// ── Home page must say what / where / who in plain words ──
+const homeFile = join(DIST, 'index.html');
+if (existsSync(homeFile)) {
+  const homeHtml = readFileSync(homeFile, 'utf8');
+  const h1 = (first(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i, homeHtml) ?? '')
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!/physiotherapy/i.test(h1) || !/ahmedabad/i.test(h1)) {
+    fail(`/: <h1> must name the service and the city (Physiotherapy + Ahmedabad); got "${h1}"`);
+  }
+  const homeTitle = first(/<title[^>]*>([^<]*)<\/title>/i, homeHtml) ?? '';
+  if (!homeTitle.includes('The Pet Physio Vet')) {
+    fail(`/: <title> must contain the brand "The Pet Physio Vet"; got "${homeTitle}"`);
+  }
+}
+
+// ── Required dedicated service pages must be in the sitemap ──
+for (const path of REQUIRED_URLS) {
+  if (!sitemapUrls.some((u) => new URL(u).pathname === path)) fail(`sitemap.xml does not list ${path}`);
 }
 
 // ── Sitemap must match what was actually built ──

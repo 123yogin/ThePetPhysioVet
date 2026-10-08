@@ -1,6 +1,6 @@
 import React from 'react';
-import { Instagram, MapPin, Phone, Mail, ArrowUpRight } from 'lucide-react';
-import { SITE, formattedAddress } from '../seo/siteConfig';
+import { Instagram, MapPin, Phone, Mail, MessageCircle, ArrowUpRight } from 'lucide-react';
+import { SITE, formattedAddress, whatsappHref } from '../seo/siteConfig';
 import { useStagger, useReveal, SplitWords, Roll } from '../motion';
 import { Pulse } from '../motion/extras';
 import { useRouter } from '../seo/router';
@@ -154,6 +154,18 @@ export const Footer: React.FC = () => {
                 {SITE.contact.phoneDisplay}
               </a>
             </div>
+            <div className="flex gap-3">
+              <MessageCircle className="w-4 h-4 text-(--c-accent) shrink-0 mt-0.5" aria-hidden="true" />
+              <a
+                href={whatsappHref()}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Chat on WhatsApp"
+                className="text-(--c-ink) hover:text-(--c-accent) transition-colors"
+              >
+                WhatsApp
+              </a>
+            </div>
             {SITE.contact.email && (
               <div className="flex gap-3">
                 <Mail className="w-4 h-4 text-(--c-accent) shrink-0 mt-0.5" aria-hidden="true" />
@@ -245,6 +257,8 @@ export const Footer: React.FC = () => {
           {[
             { href: '/#services', label: 'Treatment Modalities' },
             { href: '/#conditions', label: 'Conditions We Treat' },
+            { href: '/treatments/hydrotherapy', label: 'Dog Hydrotherapy' },
+            { href: '/treatments/acupuncture', label: 'Acupuncture' },
             { href: '/#about', label: 'Our Specialists' },
             { href: '/privacy', label: 'Privacy Policy' },
             { href: '/terms', label: 'Terms of Service' },

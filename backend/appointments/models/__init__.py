@@ -24,7 +24,7 @@ from .enquiries import Enquiry  # noqa: F401
 from .facility import (  # noqa: F401
     FacilityBooking, FACILITY_BEDS, FACILITY_MAX_SLOTS_PER_BOOKING,
     FACILITY_HOLD_SECONDS,
-    FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label,
+    FACILITY_SLOTS, FACILITY_SLOT_INDEXES, slot_label, slot_has_started,
 )
 from .boarding import (  # noqa: F401
     BoardingBooking, BOARDING_BEDS, BOARDING_DURATIONS, BOARDING_DURATION_KEYS,

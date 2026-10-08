@@ -8,13 +8,16 @@
 /** Base path for the clinic API. Overridable at build time; same-origin by default. */
 export const CLINIC_API = (import.meta as any).env?.VITE_CLINIC_API_URL ?? '/api/v1';
 
-/** Local calendar date `offsetDays` from today, as `YYYY-MM-DD` (local, not UTC). */
+/** The clinic is in India: "today" is always the Asia/Kolkata calendar date, whatever the visitor's zone. */
+const CLINIC_TZ = 'Asia/Kolkata';
+
+/** Clinic (IST) calendar date `offsetDays` from today, as `YYYY-MM-DD`. */
 export function isoDate(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
+  // en-CA formats as YYYY-MM-DD.
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: CLINIC_TZ }).format(new Date());
+  const [y, m, d] = today.split('-').map(Number);
+  // Pure UTC calendar arithmetic, so the visitor's zone/DST cannot shift the day.
+  return new Date(Date.UTC(y, m - 1, d + offsetDays)).toISOString().slice(0, 10);
 }
 
 /**

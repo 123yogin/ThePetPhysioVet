@@ -11,6 +11,11 @@
     "api/index.py": { "maxDuration": 30, "memory": 1024 }
   },
 
+  "redirects": [
+    { "source": "/treatments/specialised", "destination": "/treatments/hydrotherapy", "statusCode": 301 },
+    { "source": "/treatments/specialised/", "destination": "/treatments/hydrotherapy", "statusCode": 301 }
+  ],
+
   "rewrites": [
     { "source": "/api/(.*)",   "destination": "/api/index" },
     { "source": "/admin/:path*", "destination": "/api/index" },

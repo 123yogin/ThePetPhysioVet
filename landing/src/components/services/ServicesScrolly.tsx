@@ -22,9 +22,13 @@ const PHOTO: Record<string, { src: string; alt: string }> = {
     src: '/photos/therapy-platform.webp',
     alt: 'A Labrador supported upright in a harness, front paws resting on a raised platform, during a supported exercise at the clinic',
   },
-  specialised: {
+  hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported by a harness',
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',

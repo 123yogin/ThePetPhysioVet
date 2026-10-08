@@ -22,9 +22,13 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
     src: '/photos/clinic-german-shepherd.webp',
     alt: 'A German Shepherd on the padded therapy mats at the Shilaj clinic during a session',
   },
-  specialised: {
-    src: '/photos/home-visit-indie.webp',
-    alt: 'An Indian pariah dog resting with Dr. Dhanvi Patel',
+  hydrotherapy: {
+    src: '/photos/pool-swim-blue.webp',
+    alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported by a harness',
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',

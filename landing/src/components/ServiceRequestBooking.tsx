@@ -14,6 +14,7 @@ import { CalendarCheck, Check, Loader2 } from 'lucide-react';
  */
 
 import { isoDate, postEnquiry } from '../lib/clinicApi';
+import { BOOKABLE_SERVICES } from '../data/bookableServices';
 
 interface Package { label: string; price: number }
 
@@ -56,6 +57,21 @@ export const ServiceRequestBooking: React.FC<Props> = ({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
   const [booked, setBooked] = React.useState<{ reference: string; detail: string } | null>(null);
+
+  // Swimming's packages are volume-pricing tiers of one service (5/8
+  // sessions discounted off the single-session rate); Grooming's priceList
+  // is unrelated services at their own prices, so it must never get a "Save
+  // X%" badge. `pricingMode` is read from the canonical service record
+  // (bookableServices.ts) rather than hardcoded here, so the gate is
+  // data-driven and keyed off whichever service this form was opened for.
+  const isPerSessionTiers =
+    BOOKABLE_SERVICES.find((s) => s.code === serviceCode)?.pricingMode === 'per-session';
+  const baselinePrice =
+    isPerSessionTiers && packages?.length ? Math.max(...packages.map((p) => p.price)) : null;
+  const discountPctFor = (price: number): number | null => {
+    if (baselinePrice === null || price >= baselinePrice) return null;
+    return Math.round(((baselinePrice - price) / baselinePrice) * 100);
+  };
 
   const missingPackage = !!packages?.length && !pkg;
   const missingTime = !!askTimeOfDay && !timeOfDay;
@@ -146,6 +162,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
           <div className="grid grid-cols-1 gap-2">
             {packages.map((p) => {
               const on = pkg?.label === p.label;
+              const discountPct = discountPctFor(p.price);
               return (
                 <button
                   key={p.label}
@@ -158,7 +175,20 @@ export const ServiceRequestBooking: React.FC<Props> = ({
                       : 'border-(--c-line) text-(--c-ink) hover:border-(--c-accent)'
                   }`}
                 >
-                  <span className="text-sm">{p.label}</span>
+                  <span className="flex flex-col gap-1">
+                    <span className="text-sm">{p.label}</span>
+                    {discountPct !== null && (
+                      <span
+                        className={`inline-flex w-fit items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          on
+                            ? 'border-white text-white'
+                            : 'border-(--c-accent) text-(--c-accent)'
+                        }`}
+                      >
+                        Save {discountPct}%
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={`text-sm font-medium whitespace-nowrap ${
                       on ? 'text-white' : 'text-(--c-accent)'

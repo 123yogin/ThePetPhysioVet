@@ -259,9 +259,11 @@ export const CountUp: React.FC<{ value: string; className?: string; duration?: n
     const target = parseFloat(num.replace(/,/g, ''));
     const decimals = (num.split('.')[1] || '').length;
     const fmt = (n: number) => `${pre}${n.toFixed(decimals)}${post}`;
-    el.textContent = fmt(0);
     let raf = 0;
+    // Only drop to zero when the count actually starts, so the final value is
+    // what is read until then (and by assistive tech / no-scroll viewers).
     const stop = observe(el, () => {
+      el.textContent = fmt(0);
       const t0 = performance.now();
       const step = (t: number) => {
         const p = Math.min(1, (t - t0) / duration);

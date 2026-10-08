@@ -29,9 +29,13 @@ const PHOTOS: Record<string, { src: string; alt: string }> = {
     src: '/photos/therapy-platform.webp',
     alt: 'A Labrador supported upright in a sling harness on a raised therapy platform at the clinic',
   },
-  specialised: {
+  hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, held at the poolside by a flotation harness',
+  },
+  acupuncture: {
+    src: '/photos/dhanvi-patel.webp',
+    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
   },
   'home-care': {
     src: '/photos/senior-beagle.webp',
