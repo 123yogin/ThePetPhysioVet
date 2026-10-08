@@ -15,6 +15,7 @@ on the upload allow-list goes out as application/octet-stream.
 
 import mimetypes
 import os
+import re
 
 from django.core.exceptions import SuspiciousFileOperation
 from django.core.files.storage import default_storage
@@ -34,6 +35,18 @@ FILE_DOWNLOAD_WINDOW_SECONDS = 60 * 60
 FILE_DOWNLOAD_IP_LIMIT = 5000
 
 
+def _safe_download_name(original):
+    """The uploader's filename made safe for a Content-Disposition header:
+    basename only, control characters and path/quote separators stripped.
+    Django emits `filename*=utf-8''...` (RFC 5987) for non-ASCII names."""
+    if not original:
+        return ""
+    base = re.split(r"[\\/]", str(original))[-1]
+    base = "".join(ch for ch in base if ch.isprintable() and ch not in '"<>:|?*;')
+    base = base.strip(" .")
+    return base[:150]
+
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -44,7 +57,7 @@ def file_download_view(request, token):
     parsed = parse_file_token(token)
     if parsed is None:
         raise NotFound()
-    name, row_id = parsed
+    name, row_id, original = parsed
     try:
         if hasattr(default_storage, "open_bound"):
             # Database storage: the token must name this exact row, so it dies
@@ -61,8 +74,9 @@ def file_download_view(request, token):
     if content_type not in ALLOWED_UPLOAD_TYPES and content_type not in PET_PHOTO_TYPES:
         content_type = "application/octet-stream"
 
+    download_name = _safe_download_name(original) or os.path.basename(name)
     response = FileResponse(
-        fh, as_attachment=True, filename=os.path.basename(name),
+        fh, as_attachment=True, filename=download_name,
         content_type=content_type,
     )
     response["X-Content-Type-Options"] = "nosniff"

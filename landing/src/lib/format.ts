@@ -24,3 +24,14 @@ export function shortDate(iso: string): string {
     weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
   });
 }
+
+/**
+ * "Last night: Sat, 21 Nov · Goes home: Sun, 22 Nov" -- spells out both ends of
+ * a stay, since the API's `check_out` is the last bed-night, not the pickup day.
+ * A stay shorter than a night has no overnight, so it reads "Same-day stay".
+ */
+export function stayDatesLabel(checkIn: string, checkOut: string, duration: string): string {
+  const home = boardingHomeDate(checkIn, checkOut, duration);
+  if (home === checkIn) return `Same-day stay · Goes home: ${shortDate(home)}`;
+  return `Last night: ${shortDate(checkOut)} · Goes home: ${shortDate(home)}`;
+}

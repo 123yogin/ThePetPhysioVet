@@ -543,6 +543,15 @@ def boarding_status_view(request, reference):
     if booking is None:
         return problem(404, "Not found", "No boarding booking with that reference.")
 
+    # Date guards (live QA): a stay that starts on 20 Nov cannot be checked in
+    # or completed today. Dates are compared in the clinic's local day.
+    if action in ("check_in", "complete") and booking.check_in > timezone.localdate():
+        verb = "checked in" if action == "check_in" else "completed"
+        return problem(
+            400, "Stay has not started",
+            f"This stay starts on {booking.check_in.strftime('%a %d %b')}, so it cannot be {verb} before then.",
+        )
+
     # The clinic records what the owner brought here (owner vs clinic per item)
     # and any food note — this intake lives in the app only, not on the public
     # form. Any subset may be sent alongside the status change.

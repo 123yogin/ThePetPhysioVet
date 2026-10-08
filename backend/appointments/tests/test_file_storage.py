@@ -184,6 +184,29 @@ class DiagnosisUploadAndDownloadTests(ApiTestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res["Content-Type"], "application/octet-stream")
 
+    def test_download_uses_original_filename(self):
+        r = self._post(upload("My Scan (final).png"))
+        res = self.anon().get(r.data["file_url"])
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("My Scan (final).png", res["Content-Disposition"])
+        self.assertNotIn("diagnostic_reports", res["Content-Disposition"])
+
+    def test_download_filename_is_sanitised_and_rfc5987(self):
+        name = DiagnosticReport.objects.get(
+            pk=self._post(upload("a.png")).data["id"]).file.name
+        token = file_token(name, filename='../../etc/pa"ss\u00e9.png')
+        res = self.anon().get(f"{API}/files/{token}")
+        disp = res["Content-Disposition"]
+        self.assertNotIn("..", disp)
+        self.assertNotIn("/", disp.split("filename", 1)[1])
+        self.assertIn("filename*=utf-8''", disp)
+
+    def test_token_without_filename_falls_back_to_stored_name(self):
+        name = DiagnosticReport.objects.get(
+            pk=self._post(upload("a.png")).data["id"]).file.name
+        res = self.anon().get(f"{API}/files/{file_token(name)}")
+        self.assertIn(name.rsplit("/", 1)[-1], res["Content-Disposition"])
+
     def test_oversized_upload_is_400_problem(self):
         r = self._post(upload("big.png", content_type="image/png", pad_to=MAX_BYTES + 1))
         self.assertEqual(r.status_code, 400)

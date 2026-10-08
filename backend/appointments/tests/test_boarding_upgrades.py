@@ -572,3 +572,35 @@ class PhoneKeyTests(ApiTestCase):
         from appointments.validators import phone_key
         for v in ("00919876543210", "0091 98765 43210", "+91 98765-43210", "09876543210", "9876543210"):
             self.assertEqual(phone_key(v), "9876543210", v)
+
+
+class StatusDateGuardTests(BoardingBase):
+    """Live QA: a stay starting later cannot be checked in or completed early."""
+
+    def act(self, ref, action):
+        self.auth(self.doctor)
+        return self.client.post(f"{BOARD}/{ref}/status", {"action": action}, format="json")
+
+    def test_check_in_before_start_date_is_400(self):
+        ref = self.create().data["reference"]  # starts 12 Oct, "today" is 8 Oct
+        res = self.act(ref, "check_in")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("cannot be checked in", res.json()["detail"])
+        self.assertNotEqual(BoardingBooking.objects.get(reference=ref).status, "CHECKED_IN")
+
+    def test_complete_before_start_date_is_400(self):
+        ref = self.create().data["reference"]
+        res = self.act(ref, "complete")
+        self.assertEqual(res.status_code, 400)
+        self.assertNotEqual(BoardingBooking.objects.get(reference=ref).status, "COMPLETED")
+
+    def test_cancel_and_confirm_are_not_date_guarded(self):
+        ref = self.create().data["reference"]
+        self.assertEqual(self.act(ref, "confirm").status_code, 200)
+        self.assertEqual(self.act(ref, "cancel").status_code, 200)
+
+    def test_check_in_and_complete_allowed_on_start_day(self):
+        ref = self.create().data["reference"]
+        BoardingBooking.objects.filter(reference=ref).update(check_in="2026-10-08")
+        self.assertEqual(self.act(ref, "check_in").status_code, 200)
+        self.assertEqual(self.act(ref, "complete").status_code, 200)
