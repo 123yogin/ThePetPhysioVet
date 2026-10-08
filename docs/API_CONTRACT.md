@@ -319,7 +319,7 @@ Moves `status: "Pending"` → `"Confirmed"`.
 | POST | `/pets/:id/diagnoses` | multipart `{file, report_type, notes?}` | `Diagnosis` — same scoping as `GET` |
 | DELETE | `/diagnoses/:id` | | 204 — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up: previously any doctor could delete another practice's diagnostic report by ID) |
 
-Validate upload: max 10 MB, allow `image/*` + `application/pdf` + `application/dicom`.
+Validate upload: max 4 MB (amended 2026-10-08, was 10 MB), allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
 
 ### Uploaded files — amended 2026-10-08 (uploads stored in Postgres)
@@ -328,9 +328,17 @@ Reject anything else with 400. Store `original_filename`, `size`, `mime` from th
 **Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
 /owner/pets/:id/diagnoses`, `POST /pets/:id/queries`, `POST /owner/pets/:id/queries`,
 and the `photo` part of `POST /pets`, `PATCH /pets/:id`, `POST /owner/pets` reject any
-file over 10 MB (10 485 760 bytes) with `400` problem+json,
-`detail: "File is too large (max 10 MB)."`, before anything is created. Content-type
-allow-list + magic-byte sniffing (§3 Auth amendment 5) are unchanged.
+file over 4 MB (4 194 304 bytes) with `400` problem+json,
+`detail: "File is too large (max 4 MB)."`, before anything is created. 4 MB, not 10:
+production is Vercel serverless, which rejects any request body over ~4.5 MB at its edge
+(a bare 413 that never reaches Django), so the cap sits below that with room for multipart
+overhead. Content-type allow-list + magic-byte sniffing (§3 Auth amendment 5) are unchanged.
+
+**Pet photos are images only.** The `photo` part must be JPEG, PNG, WebP or HEIC/HEIF
+(`image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`), checked against
+its leading bytes; anything else is `400` problem+json,
+`detail: "Pet photo must be a JPEG, PNG, WebP or HEIC image."`, and no pet is created or
+changed.
 
 **Storage failures are a 503, never an HTML 500.** If the upload backend cannot write
 (read-only filesystem, database error), the route answers `503` problem+json,

@@ -26,7 +26,8 @@ from ..serializers import (
 )
 
 from ._shared import (
-    problem, reject_oversized_upload, save_pet_photo, upload_storage_guard,
+    problem, reject_invalid_pet_photo, reject_oversized_upload, save_pet_photo,
+    upload_storage_guard,
 )
 
 @api_view(["GET", "POST"])
@@ -36,9 +37,9 @@ def owner_pets_view(request):
         pets = Pet.objects.filter(owner=request.user).select_related("doctor").order_by("-created_at")
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
-    too_large = reject_oversized_upload(request)
-    if too_large:
-        return too_large
+    rejected = reject_oversized_upload(request) or reject_invalid_pet_photo(request)
+    if rejected:
+        return rejected
     data = request.data.copy()
     if hasattr(data, "setdefault"):
         data.setdefault("owner_name", request.user.get_full_name() or request.user.username)

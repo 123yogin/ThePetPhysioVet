@@ -402,9 +402,10 @@ selected when `VERCEL` is set or `FILE_STORAGE=db` (local dev keeps `FileSystemS
 the test suite runs against `DatabaseStorage` via `tests/base.py`). Files are served only
 through `GET /api/v1/files/<token>` — a 15-minute `TimestampSigner` token (salt
 `file-access`) rendered by serializers to callers already authorised for the parent
-record. **Uploads count against Neon's 1 GB free storage**: 10 MB cap per file on every
-upload route, and `appointments/signals.py` deletes the bytes when the owning record is
-deleted. Vercel's ~4.5 MB request-body limit is lower than that cap.
+record. **Uploads count against Neon's 1 GB free storage**: 4 MB cap per file on every
+upload route (below Vercel's 4.5 MB request-body limit, which 413s at the edge before
+Django runs), pet photos restricted to JPEG/PNG/WebP/HEIC, and `appointments/signals.py`
+deletes the bytes when the owning record is deleted.
 
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`

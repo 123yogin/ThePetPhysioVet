@@ -13,11 +13,14 @@ defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any 
 > `FILE_STORAGE=db` anywhere else) the bytes are stored in the `StoredFile` table
 > (migration `0021`) and served by the signed `GET /api/v1/files/<token>` route. **They
 > count against Neon's storage quota (1 GB on the free plan)**: uploads are capped at
-> 10 MB each and deleting a report/attachment/photo deletes its bytes, but watch
+> 4 MB each and deleting a report/attachment/photo deletes its bytes, but watch
 > `SELECT pg_size_pretty(sum(size)) FROM appointments_storedfile;` and plan an object
-> store before the clinic approaches the limit. A `pg_dump` now includes uploads. Note
-> Vercel also caps a function's request body at ~4.5 MB, so files between 4.5 and 10 MB
-> are rejected at Vercel's edge with a 413 before reaching Django. The Coolify/Docker
+> store before the clinic approaches the limit. A `pg_dump` now includes uploads. **Why
+> 4 MB:** Vercel caps a serverless function's request body at 4.5 MB and rejects anything
+> larger at its edge with a plain 413 that never reaches Django, so a larger cap would
+> only produce unexplained failures. 4 MB of file plus multipart overhead stays under the
+> limit, and the API's own 400 "File is too large (max 4 MB)." is what users see. Raising
+> it means moving uploads off the function (e.g. direct-to-object-store). The Coolify/Docker
 > topology below still uses the filesystem (`media_data` volume) unless you set
 > `FILE_STORAGE=db`.
 

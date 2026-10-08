@@ -20,10 +20,11 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from appointments.models import DiagnosticReport, Pet, QueryAttachment, StoredFile
 from appointments.storage import DatabaseStorage, FILE_TOKEN_SALT, file_token
 
-from .base import API, MAGIC, ApiTestCase, upload
+from .base import API, MAGIC, PE_EXECUTABLE, ApiTestCase, upload
 
-TEN_MB = 10 * 1024 * 1024
-TOO_LARGE = "File is too large (max 10 MB)."
+MAX_BYTES = 4 * 1024 * 1024  # Vercel caps request bodies at ~4.5 MB
+TOO_LARGE = "File is too large (max 4 MB)."
+PHOTO_TYPE = "Pet photo must be a JPEG, PNG, WebP or HEIC image."
 STORAGE_DOWN = "Upload storage unavailable, please try again."
 
 
@@ -179,7 +180,7 @@ class DiagnosisUploadAndDownloadTests(ApiTestCase):
         self.assertEqual(res["Content-Type"], "application/octet-stream")
 
     def test_oversized_upload_is_400_problem(self):
-        r = self._post(upload("big.png", content_type="image/png", pad_to=TEN_MB + 1))
+        r = self._post(upload("big.png", content_type="image/png", pad_to=MAX_BYTES + 1))
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["detail"], TOO_LARGE)
         self.assertEqual(StoredFile.objects.count(), 0)
@@ -208,7 +209,7 @@ class OwnerUploadTests(ApiTestCase):
     def test_owner_oversized_is_400_problem(self):
         self.auth(self.owner_a)
         r = self.client.post(f"{API}/owner/pets/{self.pet_a.id}/diagnoses",
-                             {"file": upload("x.png", pad_to=TEN_MB + 1), "report_type": "OTHER"},
+                             {"file": upload("x.png", pad_to=MAX_BYTES + 1), "report_type": "OTHER"},
                              format="multipart")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["detail"], TOO_LARGE)
@@ -240,7 +241,7 @@ class QueryAttachmentStorageTests(ApiTestCase):
     def test_oversized_attachment_is_400_problem(self):
         self.auth(self.doctor)
         r = self.client.post(f"{API}/pets/{self.pet_a.id}/queries",
-                             {"message": "hi", "attachments": [upload("a.png", pad_to=TEN_MB + 1)]},
+                             {"message": "hi", "attachments": [upload("a.png", pad_to=MAX_BYTES + 1)]},
                              format="multipart")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["detail"], TOO_LARGE)
@@ -278,7 +279,7 @@ class PetPhotoStorageTests(ApiTestCase):
         self.assertTrue(StoredFile.objects.filter(name=self.pet_a.photo.name).exists())
 
     def test_oversized_photo_rejected_on_every_route(self):
-        big = lambda: upload("big.png", pad_to=TEN_MB + 1)  # noqa: E731
+        big = lambda: upload("big.png", pad_to=MAX_BYTES + 1)  # noqa: E731
         self.auth(self.doctor)
         cases = [
             ("patch", f"{API}/pets/{self.pet_a.id}", {"photo": big()}),
@@ -295,6 +296,51 @@ class PetPhotoStorageTests(ApiTestCase):
         self.assertEqual(r.status_code, 400, r.content)
         self.assertEqual(r.json()["detail"], TOO_LARGE)
         self.assertEqual(StoredFile.objects.count(), 0)
+        self.assertFalse(Pet.objects.filter(name="Bo").exists())
+
+    def test_allowed_photo_types_accepted(self):
+        self.auth(self.doctor)
+        heic = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 12
+        cases = [
+            upload("a.png", content_type="image/png"),
+            upload("a.jpg", content_type="image/jpeg"),
+            upload("a.webp", content_type="image/webp"),
+            upload("a.heic", content=heic, content_type="image/heic"),
+        ]
+        for f in cases:
+            with self.subTest(ctype=f.content_type):
+                r = self.client.patch(f"{API}/pets/{self.pet_a.id}", {"photo": f}, format="multipart")
+                self.assertEqual(r.status_code, 200, r.content)
+
+    def test_non_image_photo_rejected(self):
+        self.auth(self.doctor)
+        cases = [
+            upload("x.pdf", content_type="application/pdf"),
+            upload("x.gif", content_type="image/gif"),
+            upload("x.html", content=b"<script>alert(1)</script>", content_type="text/html"),
+            # An executable wearing an image/png label: sniffed, not trusted.
+            upload("x.png", content=PE_EXECUTABLE, content_type="image/png"),
+        ]
+        for f in cases:
+            with self.subTest(ctype=f.content_type, name=f.name):
+                r = self.client.patch(f"{API}/pets/{self.pet_a.id}", {"photo": f}, format="multipart")
+                self.assertEqual(r.status_code, 400, r.content)
+                self.assertEqual(r.json()["detail"], PHOTO_TYPE)
+        self.assertEqual(StoredFile.objects.count(), 0)
+
+    def test_bad_photo_type_creates_no_pet_on_either_create_route(self):
+        bad = lambda: upload("x.pdf", content_type="application/pdf")  # noqa: E731
+        self.auth(self.doctor)
+        r = self.client.post(f"{API}/pets", {"name": "Bo", "species": "Dog", "owner_name": "O",
+                                             "owner_phone": "9000000009", "photo": bad()},
+                             format="multipart")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(r.json()["detail"], PHOTO_TYPE)
+        self.auth(self.owner_a)
+        r = self.client.post(f"{API}/owner/pets", {"name": "Bo", "species": "Dog", "photo": bad()},
+                             format="multipart")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(r.json()["detail"], PHOTO_TYPE)
         self.assertFalse(Pet.objects.filter(name="Bo").exists())
 
     def test_photo_storage_failure_is_503(self):

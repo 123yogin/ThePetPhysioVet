@@ -22,7 +22,9 @@ from ..serializers import (
     PetSerializer,
 )
 
-from ._shared import _doctor_scoped, reject_oversized_upload, save_pet_photo
+from ._shared import (
+    _doctor_scoped, reject_invalid_pet_photo, reject_oversized_upload, save_pet_photo,
+)
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
@@ -42,9 +44,9 @@ def pets_view(request):
             )
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
-    too_large = reject_oversized_upload(request)
-    if too_large:
-        return too_large
+    rejected = reject_oversized_upload(request) or reject_invalid_pet_photo(request)
+    if rejected:
+        return rejected
     serializer = PetSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     with transaction.atomic():
@@ -89,9 +91,9 @@ def pet_detail_view(request, pk):
     if request.method == "GET":
         return Response(PetSerializer(pet, context={"request": request}).data)
 
-    too_large = reject_oversized_upload(request)
-    if too_large:
-        return too_large
+    rejected = reject_oversized_upload(request) or reject_invalid_pet_photo(request)
+    if rejected:
+        return rejected
     serializer = PetSerializer(pet, data=request.data, partial=True, context={"request": request})
     serializer.is_valid(raise_exception=True)
     with transaction.atomic():

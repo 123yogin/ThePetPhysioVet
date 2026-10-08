@@ -1,13 +1,14 @@
 /**
  * Client-side guard rails for file uploads.
  *
- * The server caps every upload at 10 MB (docs/API_CONTRACT.md "Uploaded
- * files") and answers 400 "File is too large (max 10 MB).". Checking here as
- * well saves a clinician on a slow connection from sending 50 MB only to be
- * told no. The server stays the authority; this is a UX guard.
+ * The server caps every upload at 4 MB (docs/API_CONTRACT.md "Uploaded
+ * files") and answers 400 "File is too large (max 4 MB).". The cap is below
+ * Vercel's 4.5 MB request-body limit, which otherwise fails at the edge with a
+ * bare 413. Checking here as well saves a clinician on a slow connection from
+ * sending a large file only to be told no. The server stays the authority.
  */
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-export const UPLOAD_TOO_LARGE = 'File is too large (max 10 MB).';
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const UPLOAD_TOO_LARGE = 'File is too large (max 4 MB).';
 
 /** An error message if `file` cannot be uploaded, else null. */
 export function uploadSizeError(file: File | null | undefined): string | null {

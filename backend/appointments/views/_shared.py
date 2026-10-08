@@ -43,10 +43,11 @@ def problem(status_code, title, detail=None):
 logger = logging.getLogger(__name__)
 
 # One cap for every upload route (diagnoses, query attachments, pet photos).
-# Uploads are stored in Postgres (appointments/storage.py), so this is also
-# what keeps a single file from eating Neon's storage quota.
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-UPLOAD_TOO_LARGE = "File is too large (max 10 MB)."
+# 4 MB because Vercel rejects request bodies over ~4.5 MB before Django runs
+# (see serializers.MAX_UPLOAD_SIZE). Uploads are stored in Postgres
+# (appointments/storage.py), so this also bounds Neon storage per file.
+MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+UPLOAD_TOO_LARGE = "File is too large (max 4 MB)."
 UPLOAD_STORAGE_UNAVAILABLE = "Upload storage unavailable, please try again."
 
 
@@ -60,6 +61,22 @@ def reject_oversized_upload(request):
         for f in files:
             if (getattr(f, "size", 0) or 0) > MAX_UPLOAD_BYTES:
                 return problem(400, UPLOAD_TOO_LARGE)
+    return None
+
+
+def reject_invalid_pet_photo(request):
+    """A 400 problem if the request's `photo` is not a JPEG/PNG/WebP/HEIC
+    image, else None. Checked before the pet is created or changed."""
+    photo = request.FILES.get("photo")
+    if not photo:
+        return None
+    # Imported here: serializers.py imports from this module.
+    from rest_framework import serializers as drf_serializers
+    from ..serializers import validate_pet_photo, PET_PHOTO_MESSAGE
+    try:
+        validate_pet_photo(photo)
+    except drf_serializers.ValidationError:
+        return problem(400, PET_PHOTO_MESSAGE)
     return None
 
 

@@ -21,7 +21,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny
 
-from ..serializers import ALLOWED_UPLOAD_TYPES
+from ..serializers import ALLOWED_UPLOAD_TYPES, PET_PHOTO_TYPES
 from ..storage import name_from_token, FILE_TOKEN_MAX_AGE
 
 
@@ -38,7 +38,7 @@ def file_download_view(request, token):
         raise NotFound()
 
     content_type = getattr(fh, "content_type", None) or mimetypes.guess_type(name)[0]
-    if content_type not in ALLOWED_UPLOAD_TYPES:
+    if content_type not in ALLOWED_UPLOAD_TYPES and content_type not in PET_PHOTO_TYPES:
         content_type = "application/octet-stream"
 
     response = FileResponse(

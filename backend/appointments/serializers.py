@@ -27,7 +27,11 @@ from .models import (
 # `image/svg+xml` through. SVG is executable XML (can carry <script>) and is
 # served back from the media origin, so it is a stored-XSS vector — replaced
 # with an explicit allow-list of raster image types.
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+# 4 MB (amended 2026-10-08, was 10 MB): production is Vercel serverless, which
+# rejects a request body over ~4.5 MB at its edge before Django runs. 4 MB of
+# file plus multipart overhead stays under that, so the API's own 400 is what
+# the user sees rather than a gateway 413.
+MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 ALLOWED_UPLOAD_TYPES = (
     "image/png", "image/jpeg", "image/gif", "image/webp",
     "application/pdf", "application/dicom",
@@ -82,7 +86,7 @@ def _sniff_head(file_obj):
 
 def _validate_upload(file_obj):
     if file_obj.size > MAX_UPLOAD_SIZE:
-        raise serializers.ValidationError("File is too large (max 10 MB).")
+        raise serializers.ValidationError("File is too large (max 4 MB).")
     content_type = getattr(file_obj, "content_type", "") or ""
     if content_type not in ALLOWED_UPLOAD_TYPES:
         raise serializers.ValidationError(
@@ -251,6 +255,32 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages)
         return value
+
+
+# Pet photos are rendered as <img>, so only raster photo formats a phone
+# camera produces. Sniffed like every other upload: the multipart
+# Content-Type is client-controlled. HEIC/HEIF is an ISO-BMFF container,
+# recognised by its `ftyp` box and a HEIF-family brand.
+PET_PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
+PET_PHOTO_MESSAGE = "Pet photo must be a JPEG, PNG, WebP or HEIC image."
+_HEIF_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1")
+
+
+def validate_pet_photo(file_obj):
+    """Raise ValidationError(PET_PHOTO_MESSAGE) unless `file_obj` is a real
+    JPEG/PNG/WebP/HEIC image. Size is checked separately (same cap as every
+    other upload)."""
+    content_type = (getattr(file_obj, "content_type", "") or "").lower()
+    if content_type not in PET_PHOTO_TYPES:
+        raise serializers.ValidationError(PET_PHOTO_MESSAGE)
+    head = _sniff_head(file_obj)
+    if content_type in ("image/heic", "image/heif"):
+        ok = head[4:8] == b"ftyp" and head[8:12] in _HEIF_BRANDS
+    else:
+        ok = _matches_signature(head, content_type)
+    if not ok:
+        raise serializers.ValidationError(PET_PHOTO_MESSAGE)
+    return file_obj
 
 
 class PetSerializer(serializers.ModelSerializer):

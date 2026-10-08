@@ -6,7 +6,7 @@ store. `appointments.storage.DatabaseStorage` reads and writes this table; the
 FileFields on DiagnosticReport, QueryAttachment and Pet hold the `name` key.
 
 Every byte here counts against Neon's storage quota (1 GB on the free plan),
-so the upload routes cap files at 10 MB and deleting a record deletes its row
+so the upload routes cap files at 4 MB and deleting a record deletes its row
 (see appointments/signals.py).
 """
 import uuid
