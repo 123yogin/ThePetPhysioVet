@@ -107,6 +107,13 @@ class FacilityDoctorTests(ApiTestCase):
             "date": _tomorrow(), "slots": slots,
         }, format="json")
 
+    def test_the_list_reports_the_real_capacity_and_hours(self):
+        self.auth(self.doctor)
+        data = self.client.get(BOOK).data
+        self.assertEqual(data["capacity"], FACILITY_BEDS)
+        self.assertEqual(data["opens"], "09:30")
+        self.assertEqual(data["closes"], "13:30")
+
     def test_the_list_is_doctor_only(self):
         self.assertEqual(self.anon().get(BOOK).status_code, 401)
         self.auth(self.owner_a)
