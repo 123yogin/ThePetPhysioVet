@@ -1,7 +1,9 @@
 """Signed download of an uploaded file: `GET /files/<token>`.
 
-Uploads live in Postgres on Vercel (appointments/storage.py), so there is no
-static media origin to link to. Serializers render a 15-minute signed token
+Uploads live in a private Vercel Blob store (appointments/storage_blob.py) or,
+for older rows / FILE_STORAGE=db, in Postgres (appointments/storage.py), so
+there is no public media origin to link to: this view reads the bytes
+server-side (Blob with the bearer token) and streams them back. Serializers render a 15-minute signed token
 for records the caller is already allowed to see; presenting the token is the
 capability, which lets a plain `<a href>` or `<img src>` -- with no bearer
 header -- open the file. The token binds the storage name and, for database
@@ -79,6 +81,9 @@ def file_download_view(request, token):
         fh, as_attachment=True, filename=download_name,
         content_type=content_type,
     )
+    if "Content-Length" not in response and isinstance(getattr(fh, "size", None), int):
+        # A streamed Blob body has no tell(); its size comes from the index.
+        response["Content-Length"] = str(fh.size)
     response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = f"private, max-age={FILE_TOKEN_MAX_AGE}"
     return response
