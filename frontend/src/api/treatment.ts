@@ -12,10 +12,6 @@ export async function createTreatmentPlan(petId: string, data: any): Promise<Tre
   });
 }
 
-export async function fetchTreatmentPlanDetail(id: string): Promise<TreatmentPlan> {
-  return http<TreatmentPlan>(`/treatment-plans/${id}`);
-}
-
 export interface ProgressNoteInput {
   session_no?: number;
   notes: string;

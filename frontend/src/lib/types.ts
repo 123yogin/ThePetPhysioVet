@@ -147,16 +147,6 @@ export interface Invoice {
   balance_due: number;
 }
 
-export interface NotificationItem {
-  id: string;
-  type: string;
-  type_display?: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
-  link?: string;
-}
-
 export interface QueryAttachment {
   id: string;
   url: string;

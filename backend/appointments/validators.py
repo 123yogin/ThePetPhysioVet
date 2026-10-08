@@ -19,7 +19,6 @@ this data reaches a phone dialler.
 """
 import re
 
-from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 # Separators people actually type: spaces, hyphens, dots, brackets, non-breaking
@@ -47,19 +46,6 @@ def normalise_phone(value):
     if not _VALID.match(cleaned):
         raise serializers.ValidationError(MESSAGE)
     return cleaned
-
-
-def validate_phone_model(value):
-    """The same rule for model-level `validators=[...]`.
-
-    Model validators run under `full_clean()`, which the admin calls, so a
-    number typed into Django admin is held to the rule the API enforces.
-    """
-    if not value:
-        return
-    cleaned = _SEPARATORS.sub("", str(value)).strip()
-    if not _VALID.match(cleaned):
-        raise DjangoValidationError(MESSAGE)
 
 
 # ---------------------------------------------------------------- Aadhaar ----
