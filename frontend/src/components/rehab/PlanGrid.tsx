@@ -101,8 +101,18 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
 
   const showBanner = !readOnly && plan.status === 'ACTIVE' && !!plan.end_date && today >= plan.end_date;
 
+  // An in-progress plan can be closed early; Extend stays at/after the end date.
+  const showEarlyComplete = !readOnly && plan.status === 'ACTIVE' && !showBanner;
+
   return (
     <div className="rehab-grid-wrap">
+      {showEarlyComplete && (
+        <div className="rehab-actions" style={{ marginBottom: 8 }}>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={complete.isPending} onClick={() => complete.mutate()}>
+            {complete.isPending ? 'Saving…' : 'Mark complete'}
+          </button>
+        </div>
+      )}
       {showBanner && (
         <div className="alert alert-info rehab-banner" role="status">
           <span>This plan {today === plan.end_date ? 'ends today' : 'has ended'}. What next?</span>

@@ -35,6 +35,7 @@ from .views import (
     facility_availability_view, facility_bookings_view, facility_booking_status_view,
     facility_hold_view, facility_confirm_view,
     boarding_availability_view, boarding_view, boarding_status_view, boarding_ending_soon_view,
+    boarding_hold_view, boarding_hold_confirm_view, boarding_convert_view,
 )
 
 # NOTE: no trailing slashes on any path — the SPA (frontend/src/lib/http.ts)
@@ -152,6 +153,9 @@ urlpatterns = [
     path("facility/holds/<str:reference>/confirm", facility_confirm_view, name="facility-confirm"),
     path("facility/boarding/availability", boarding_availability_view, name="boarding-availability"),
     path("facility/boarding/ending-soon", boarding_ending_soon_view, name="boarding-ending-soon"),
+    path("facility/boarding/holds", boarding_hold_view, name="boarding-hold"),
+    path("facility/boarding/holds/<str:reference>/confirm", boarding_hold_confirm_view, name="boarding-hold-confirm"),
     path("facility/boarding", boarding_view, name="boarding"),
+    path("facility/boarding/<str:reference>/convert", boarding_convert_view, name="boarding-convert"),
     path("facility/boarding/<str:reference>/status", boarding_status_view, name="boarding-status"),
 ]

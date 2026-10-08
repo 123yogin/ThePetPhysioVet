@@ -95,6 +95,7 @@ def owner_pet_detail_view(request, pk):
     ).data
     data["treatment_plans"] = TreatmentPlanSerializer(
         pet.treatment_plans.prefetch_related("sessions__done_by"), many=True,
+        context={"request": request, "hide_staff": True},
     ).data
     return Response(data)
 
@@ -328,7 +329,7 @@ def owner_bookings_view(request):
             "status": b.status,
             "walk_times": b.walk_times or [],
         }
-        for b in BoardingBooking.objects.order_by("-created_at")
+        for b in BoardingBooking.objects.exclude(status="HELD").order_by("-created_at")
         if _norm_phone(b.owner_phone) == mine
     ]
 

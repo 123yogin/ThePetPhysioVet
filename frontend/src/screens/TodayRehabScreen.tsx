@@ -44,6 +44,7 @@ const Section: React.FC<{ title: string; hint: string; empty: string; items: Reh
               <li key={s.id} className="rehab-list-item">
                 <div>
                   <strong>{s.therapy}</strong>
+                  <span style={{ color: 'var(--brown-500)', fontSize: '0.85rem' }}> · Plan from {friendlyDate(s.plan.start_date)}</span>
                   {showPlanned && <span style={{ color: 'var(--brown-500)' }}> · planned {longDate(s.planned_date)}</span>}
                   <div className={`rehab-status ${s.display_status.toLowerCase()}`}>
                     {s.display_status === 'DONE' && '✓ Done'}
