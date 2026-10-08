@@ -1,4 +1,10 @@
-"""Uploaded file bytes, stored in Postgres, and the storage names they get.
+"""Uploaded-file index (and, for older rows, bytes) plus the storage names.
+
+Since 2026-10-08 new uploads go to a private Vercel Blob store
+(`appointments.storage_blob.BlobStorage`): the row stays as the metadata index
+-- name, size, type, uploader, blob URL -- and `content` is NULL. Rows written
+by DatabaseStorage keep their bytes in `content` and are still served from it.
+
 
 Production runs on Vercel serverless, where the filesystem is read-only, and
 the owner chose to keep uploads in the Neon database rather than add an object
@@ -49,7 +55,9 @@ class StoredFile(models.Model):
     # enforced here, not by a prior exists() check, so two concurrent uploads
     # cannot overwrite each other.
     name = models.CharField(max_length=255, unique=True)
-    content = models.BinaryField()
+    # The bytes, for rows written by DatabaseStorage. NULL for rows whose bytes
+    # live in Vercel Blob (storage_blob.BlobStorage); readers branch on that.
+    content = models.BinaryField(null=True, blank=True)
     size = models.PositiveIntegerField(default=0)
     content_type = models.CharField(max_length=100, blank=True, default="")
     # Who uploaded it, for the per-owner byte quota. Nullable: files written
@@ -59,6 +67,12 @@ class StoredFile(models.Model):
         "appointments.UserProfile", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="stored_files",
     )
+    # Where a Blob-backed row's bytes are: the private-store URL returned by
+    # the Blob PUT (https://<store>.private.blob.vercel-storage.com/<name>).
+    # Empty for database-backed rows. Never handed to clients -- downloads go
+    # through the signed /files/<token> route. db_default keeps inserts from
+    # code that predates the column valid during a deploy.
+    blob_url = models.CharField(max_length=1024, blank=True, default="", db_default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -7,6 +7,10 @@ with an HTML 500. The owner chose to keep uploads in the Neon database rather
 than add an object store, so `DatabaseStorage` writes the bytes to the
 `StoredFile` table. settings.py selects it when FILE_STORAGE=db or when
 running on Vercel; local dev keeps FileSystemStorage unless told otherwise.
+Since the same day production writes new uploads to a private Vercel Blob
+store instead (storage_blob.py `BlobStorage`, a subclass that keeps this
+table as the index); DatabaseStorage remains the FILE_STORAGE=db fallback and
+its rows are still readable.
 
 Downloads go through `GET /api/v1/files/<token>` (views/files.py). The token is
 a 15-minute TimestampSigner signature (salt "file-access") over
@@ -203,6 +207,10 @@ class DatabaseStorage(Storage):
         if row is None:
             raise FileNotFoundError(lookup.get("name"))
         content, content_type = row
+        if content is None:
+            # A Blob-backed row (storage_blob.BlobStorage) read after falling
+            # back to FILE_STORAGE=db: the bytes are not here.
+            raise FileNotFoundError(lookup.get("name"))
         f = ContentFile(bytes(content), name=lookup["name"])
         f.content_type = content_type or _guess_type(lookup["name"])
         return f

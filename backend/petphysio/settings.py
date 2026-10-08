@@ -212,33 +212,63 @@ if SERVE_SPA and SPA_DIST_DIR.is_dir():
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+def _blob_token(environ):
+    return (environ.get("BLOB_READ_WRITE_TOKEN") or "").strip()
+
+
 def _default_storage_backend(environ):
     """Where uploads go.
 
     Vercel's serverless filesystem is read-only, so writing to MEDIA_ROOT there
-    crashed every upload with an HTML 500. Uploads are stored in Postgres
-    (appointments/storage.py `DatabaseStorage`) when FILE_STORAGE=db or when
-    running on Vercel (it sets VERCEL=1 in every function). Local dev keeps the
-    filesystem by default. An unrecognised value fails fast rather than
-    silently falling back to a backend that cannot write in production.
+    crashed every upload with an HTML 500. In order:
+
+    - FILE_STORAGE=blob (honoured anywhere), or FILE_STORAGE unset with
+      BLOB_READ_WRITE_TOKEN set AND VERCEL_ENV=production: the private Vercel
+      Blob store (appointments/storage_blob.py `BlobStorage`). Explicit `blob`
+      without a usable token fails fast.
+    - FILE_STORAGE=db, or FILE_STORAGE unset on Vercel (VERCEL=1) otherwise --
+      Preview and Development deployments get the token too, but must not
+      write to (or delete from) the production store: Postgres
+      (appointments/storage.py `DatabaseStorage`).
+    - Otherwise (local dev, FILE_STORAGE=filesystem): MEDIA_ROOT, even when a
+      `.env` pulled from Vercel carries the token.
+    An unrecognised value fails fast rather than silently falling back to a
+    backend that cannot write in production.
     """
     choice = (environ.get("FILE_STORAGE") or "").strip().lower()
-    if choice not in ("", "db", "filesystem"):
+    if choice not in ("", "blob", "db", "filesystem"):
         raise ImproperlyConfigured(
-            f"FILE_STORAGE must be 'db' or 'filesystem', got {choice!r}."
+            f"FILE_STORAGE must be 'blob', 'db' or 'filesystem', got {choice!r}."
         )
-    if choice == "db" or environ.get("VERCEL"):
+    token = _blob_token(environ)
+    production = environ.get("VERCEL_ENV", "").strip().lower() == "production"
+    if choice == "blob" or (choice == "" and token and production):
+        # Same shape the @vercel/blob SDK parses: vercel_blob_rw_<storeId>_<secret>.
+        # The message never echoes the value -- it is a credential.
+        parts = token.split("_")
+        if not token.startswith("vercel_blob_rw_") or len(parts) < 5 or not parts[3]:
+            raise ImproperlyConfigured(
+                "FILE_STORAGE=blob needs BLOB_READ_WRITE_TOKEN set to a Vercel Blob "
+                "read-write token (vercel_blob_rw_<store>_<secret>)."
+            )
+        return "appointments.storage_blob.BlobStorage"
+    if choice == "db" or (choice == "" and environ.get("VERCEL")):
         return "appointments.storage.DatabaseStorage"
     return "django.core.files.storage.FileSystemStorage"
+
+
+# Read by appointments/storage_blob.py. A credential: never log it.
+BLOB_READ_WRITE_TOKEN = _blob_token(os.environ)
 
 
 def _file_storage_max_bytes(environ):
     """Global ceiling on stored upload bytes (sum of StoredFile.size).
 
-    Uploads share the Neon database with every clinical record; past this
-    point upload routes answer 503 "File storage is nearly full" instead of
-    letting the database hit its plan limit. Default 700 MB of the 1 GB free
-    tier leaves room for the records themselves.
+    Past this point upload routes answer 503 "File storage is nearly full"
+    instead of letting the store hit its plan limit. The sum covers every
+    backend (StoredFile indexes Blob uploads too). Default 700 MB sits under
+    both Neon's 1 GB free tier (DatabaseStorage, where records share it) and
+    Vercel Blob's 1 GB/month Hobby storage (BlobStorage).
     """
     raw = (environ.get("FILE_STORAGE_MAX_MB") or "700").strip()
     try:
