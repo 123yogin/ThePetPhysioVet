@@ -70,6 +70,7 @@ from .scheduling import (  # noqa: F401
     appointment_reschedule_view,
     appointment_complete_view,
     appointment_confirm_view,
+    appointment_cancel_view,
     appointment_reschedule_approve_view,
     appointment_reschedule_reject_view,
     appointment_share_view,
@@ -79,6 +80,7 @@ from .billing import (  # noqa: F401
     invoices_view,
     invoice_detail_view,
     invoice_payments_view,
+    invoice_void_view,
     revenue_view,
 )
 from .notifications import (  # noqa: F401
@@ -161,6 +163,7 @@ __all__ = [
     "appointment_reschedule_view",
     "appointment_complete_view",
     "appointment_confirm_view",
+    "appointment_cancel_view",
     "appointment_reschedule_approve_view",
     "appointment_reschedule_reject_view",
     "appointment_share_view",
@@ -168,6 +171,7 @@ __all__ = [
     "invoices_view",
     "invoice_detail_view",
     "invoice_payments_view",
+    "invoice_void_view",
     "revenue_view",
     "notifications_view",
     "notifications_mark_all_read_view",

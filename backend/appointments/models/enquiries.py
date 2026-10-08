@@ -65,6 +65,18 @@ class Enquiry(models.Model):
         related_name="actioned_enquiries",
     )
     actioned_at = models.DateTimeField(null=True, blank=True)
+    # The owner account this enquiry belongs to: set when it was sent while
+    # signed in as that owner, or by the clinic's convert. Never inferred from
+    # the phone -- see FacilityBooking.owner (live QA D1).
+    owner = models.ForeignKey(
+        "appointments.UserProfile", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="enquiries",
+    )
+
+    @property
+    def reference(self):
+        """ENQ-XXXXXXXX, derived from the id exactly as the create view shows it."""
+        return f"ENQ-{str(self.id)[:8].upper()}"
 
     class Meta:
         ordering = ["-created_at"]

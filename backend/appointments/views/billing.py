@@ -141,6 +141,9 @@ def invoice_payments_view(request, pk):
         if existing:
             return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
 
+    if invoice.is_void:
+        return problem(400, "This invoice has been voided and cannot take a payment.")
+
     amount_paid = request.data.get("amount_paid")
     if amount_paid is None:
         return problem(400, "amount_paid is required.")
@@ -178,6 +181,36 @@ def invoice_payments_view(request, pk):
     return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsDoctor])
+def invoice_void_view(request, pk):
+    """Live QA B7 (2026-10-08): a mistaken invoice could not be withdrawn.
+
+    POST /invoices/:id/void {reason?} -- doctor-only, scoped like every invoice
+    route (404 for another practice's). Only an invoice with nothing paid can be
+    voided; one with a payment needs a refund, which this app does not record.
+    A voided invoice keeps its number and lines (the sequence stays gap-free),
+    owes nothing, takes no payments and is excluded from /revenue. Repeating
+    the call is a no-op that returns the voided invoice.
+    """
+    with transaction.atomic():
+        invoice = get_object_or_404(
+            _doctor_scoped(Invoice, request, lookup="pet__doctor").select_for_update(of=("self",)), pk=pk,
+        )
+        if invoice.is_void:
+            return Response(InvoiceSerializer(invoice).data)
+        if invoice.amount_paid > 0:
+            return problem(
+                400,
+                "Only an unpaid invoice can be voided.",
+                "This invoice already has a payment recorded against it.",
+            )
+        invoice.voided_at = timezone.now()
+        invoice.void_reason = str(request.data.get("reason") or "").strip()[:255]
+        invoice.save(update_fields=["voided_at", "void_reason"])
+    return Response(InvoiceSerializer(invoice).data)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsDoctor])
 def revenue_view(request):
@@ -195,8 +228,9 @@ def revenue_view(request):
 
     # L1 fix: scoped to the requesting doctor via `_doctor_scoped` (see
     # invoices_view for the same NULL-doctor "claimable pool" posture).
+    # A voided invoice was never owed, so it is not revenue (live QA B7).
     invoices = _doctor_scoped(Invoice, request, lookup="pet__doctor").filter(
-        created_at__date__gte=start, created_at__date__lte=end,
+        created_at__date__gte=start, created_at__date__lte=end, voided_at__isnull=True,
     )
     total_revenue = sum((inv.total for inv in invoices), Decimal("0.00"))
 

@@ -269,6 +269,7 @@ endpoint; verified as a no-op against the (single-doctor) seed data.
 | POST | `/appointments/:id/reschedule` | `{date, time}` | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/complete` | | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/confirm` | | `Appointment` — **new, 2026-08-21 (G1)**, doctor-scoped |
+| POST | `/appointments/:id/cancel` | `{reason?}` | `Appointment` (`status: "Cancelled"`, `cancel_reason`) — **new, 2026-10-08 (live QA B1)**, doctor-scoped (404 for another practice's). 400 if already `Completed`/`Cancelled`. A past date is allowed (no-shows). Frees the slot. |
 | POST | `/appointments/:id/reschedule-approve` | | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/reschedule-reject` | | `Appointment` — doctor-scoped |
 | GET | `/appointments/:id/share` | | `{whatsapp_url, sms_url, pet_name, owner_name, owner_phone}` — doctor-scoped |
@@ -396,11 +397,26 @@ Convert: find-or-create owner (existing matched owner, else phone, else email; n
 password) and pet (by name under that owner), link both. Idempotent and serialised: a second call, or a stay already
 auto-linked to a pet, creates nothing. The owner-portal `GET /owner/bookings` excludes `HELD` rows.
 
+**Owner visibility (amended 2026-10-08, live QA D1 — privacy).** The automatic phone match above is a
+**staff hint only**: signup does not verify a phone, so it never makes a stay visible to the matched account.
+`Booking` JSON adds `owner_verified` (bool). It is `true` only when the link was made explicitly — by the
+clinic's `convert` (which also verifies an already auto-matched owner), or because the stay was created/confirmed
+with a valid OWNER bearer token (that account is linked, verified). `GET /owner/bookings` returns only:
+facility bookings and enquiries whose new nullable `owner` FK is the caller (set on a signed-in create, and for
+enquiries on doctor convert; migration 0021 backfills converted enquiries from their appointment's pet owner),
+and boarding stays with `owner = caller AND owner_verified`. Phone-only matching is gone from the owner view.
+Public responses are unchanged for signed-in and anonymous callers.
+
+**Lazy matching (2026-10-08, live QA B3).** `GET /facility/boarding` (doctor) re-runs the same match for active
+(`PENDING`/`CONFIRMED`/`CHECKED_IN`) stays with no owner and persists the result (unverified), so a client who
+signed up after booking is recognised. Ambiguous phones stay unlinked. Public routes are unaffected.
+
 ### Billing
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
 | POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |
 | GET | `/invoices/:id` | | `Invoice` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up: previously reachable by any doctor by ID) |
-| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID) |
+| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID). 400 on a voided invoice. |
+| POST | `/invoices/:id/void` | `{reason?}` | `Invoice` with `payment_status: "VOID"`, `balance_due: 0`, `voided_at`, `void_reason` — **new, 2026-10-08 (live QA B7)**, doctor-scoped. Only an invoice with nothing paid (400 otherwise). Idempotent (repeat returns the voided invoice). The invoice keeps its number and lines; it is excluded from `/revenue` and owes nothing. |
 
 **Doctor-scoping and orphan invoices (amended 2026-08-21 — L1, extended to detail
 routes the same day).** `Invoice` has no direct `doctor` FK; doctor-scoping on
@@ -502,6 +518,10 @@ before it becomes a real patient/clinical record. `Enquiry` is a new model:
 `preferred_date` (nullable), `preferred_specialist` (blank-default), `status`
 (`NEW`/`CONVERTED`/`DISMISSED`), `created_at`, `converted_appointment` (nullable FK,
 set on conversion), `actioned_by`/`actioned_at` (audit trail for convert/dismiss).
+**Amended 2026-10-08 (live QA):** nullable `owner` FK (set when submitted with a valid OWNER bearer token, and
+by `convert` — never from the phone; it is what `GET /owner/bookings` reads), and the doctor JSON adds
+`reference` (`ENQ-XXXXXXXX`, derived from the id exactly as the create response shows it). Unknown `/api/*`
+paths now return a JSON `404` problem (`application/problem+json`) instead of Django's HTML page.
 UUID primary key, one plain `CreateModel` migration (`0002_enquiry`) — this project's
 migration chain was flattened to a single `0001_initial` on 2026-09-02 (see the
 breaking-change note at the top of this document) specifically so nothing here repeats
@@ -559,7 +579,8 @@ owner from `pet_name`/`species_breed` (case-insensitive name match against the
 owner's existing pets — never duplicates one), assigned to the converting doctor.
 `species` is a best-effort guess off `species_breed` (`"cat"`/`"dog"` substring match,
 default `"Dog"`); `species_breed` itself is stored verbatim in `breed`. Creates the
-`Appointment` as `Pending`, owned by the converting doctor, using the supplied
+`Appointment` as **`Confirmed`** (amended 2026-10-08, live QA B2 — was `Pending`; the doctor chose the
+date/time and pressed "Confirm & Book", so a second confirm step was redundant), owned by the converting doctor, using the supplied
 `date`/`time`/`visit_type` — `visit_type` is validated against
 `Appointment.VISIT_TYPES` (never a fourth hardcoded vocabulary; see the B1/B2 history
 above). Marks the enquiry `CONVERTED` and links `converted_appointment`. Wrapped in a

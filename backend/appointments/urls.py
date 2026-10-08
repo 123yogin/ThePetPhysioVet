@@ -18,9 +18,9 @@ from .views import (
     appointments_view, appointment_detail_view, appointment_reschedule_view,
     appointment_complete_view, appointment_reschedule_approve_view,
     appointment_reschedule_reject_view, appointment_share_view,
-    appointment_confirm_view, appointment_options_view,
+    appointment_confirm_view, appointment_cancel_view, appointment_options_view,
     # Billing
-    invoices_view, invoice_detail_view, invoice_payments_view, revenue_view,
+    invoices_view, invoice_detail_view, invoice_payments_view, invoice_void_view, revenue_view,
     # Notifications
     notifications_view, notifications_mark_all_read_view, notification_prefs_view,
     # Queries
@@ -100,12 +100,14 @@ urlpatterns = [
     ),
     path("appointments/<uuid:pk>/share", appointment_share_view, name="appointment-share"),
     path("appointments/<uuid:pk>/confirm", appointment_confirm_view, name="appointment-confirm"),
+    path("appointments/<uuid:pk>/cancel", appointment_cancel_view, name="appointment-cancel"),
     path("appointment-options", appointment_options_view, name="appointment-options"),
 
     # --- Billing ---
     path("invoices", invoices_view, name="invoices"),
     path("invoices/<uuid:pk>", invoice_detail_view, name="invoice-detail"),
     path("invoices/<uuid:pk>/payments", invoice_payments_view, name="invoice-payments"),
+    path("invoices/<uuid:pk>/void", invoice_void_view, name="invoice-void"),
     path("revenue", revenue_view, name="revenue"),
 
     # --- Notifications ---

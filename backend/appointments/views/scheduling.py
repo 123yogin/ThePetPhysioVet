@@ -134,6 +134,34 @@ def appointment_confirm_view(request, pk):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
+def appointment_cancel_view(request, pk):
+    """Live QA B1 (2026-10-08): the doctor had no way to cancel a visit -- the
+    list offered Confirm/Complete/Reschedule only, and the reschedule page's
+    "Cancel" button just navigated back. Body: optional `reason`.
+
+    Scoped via `_doctor_scoped` (404 for another practice's visit). A visit that
+    is already Completed or Cancelled cannot be cancelled. Unlike the owner's
+    cancel, a past date is allowed: marking a no-show is exactly when the
+    clinic needs this. Cancelling frees the slot (the unique constraint
+    excludes Cancelled rows).
+    """
+    appt = get_object_or_404(_doctor_scoped(Appointment, request), pk=pk)
+    if appt.status in ("Completed", "Cancelled"):
+        return problem(
+            400,
+            f"An appointment that is already {appt.status} cannot be cancelled.",
+        )
+    reason = str(request.data.get("reason") or "").strip()[:500]
+    appt.status = "Cancelled"
+    appt.cancel_reason = reason
+    appt.requested_date = None
+    appt.requested_time = None
+    appt.save(update_fields=["status", "cancel_reason", "requested_date", "requested_time"])
+    return Response(AppointmentSerializer(appt).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsDoctor])
 def appointment_reschedule_approve_view(request, pk):
     # Follow-up L1 fix (2026-08-21) — see `_doctor_scoped`.
     appt = get_object_or_404(_doctor_scoped(Appointment, request), pk=pk)

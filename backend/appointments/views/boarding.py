@@ -59,7 +59,7 @@ from ..notify import notify_doctor
 from ..validators import normalise_phone, phone_key
 from ._shared import (
     _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem,
-    maybe_doctor as _maybe_doctor, require_doctor as _require_doctor,
+    maybe_doctor as _maybe_doctor, maybe_owner as _maybe_owner, require_doctor as _require_doctor,
 )
 from .enquiries import _guess_species
 
@@ -140,6 +140,68 @@ def _match_client(owner_phone, pet_name):
     wanted = (pet_name or "").strip().casefold()
     pets = [p for p in candidates if p.name.strip().casefold() == wanted]
     return owner, (pets[0] if len(pets) == 1 else None)
+
+
+def _link_for(request, owner_phone, pet_name):
+    """(owner, pet, verified) for a new stay.
+
+    Booked while signed in as an owner -> that account, VERIFIED (the only proof
+    of identity this app has), plus their pet if exactly one has that name.
+    Otherwise the automatic phone match, which is a staff hint only and never
+    makes the stay visible to the matched account (live QA D1)."""
+    account = _maybe_owner(request)
+    if account is not None:
+        wanted = (pet_name or "").strip().casefold()
+        pets = [p for p in Pet.objects.filter(owner=account) if p.name.strip().casefold() == wanted]
+        return account, (pets[0] if len(pets) == 1 else None), True
+    owner, pet = _match_client(owner_phone, pet_name)
+    return owner, pet, False
+
+
+def _rupees(amount):
+    """₹1,200 / ₹1,00,000 -- Indian digit grouping, as the clinic writes it."""
+    digits = str(int(amount))
+    if len(digits) > 3:
+        head, tail = digits[:-3], digits[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        digits = ",".join(groups + [tail])
+    return f"₹{digits}"
+
+
+def _lazy_match(rows):
+    """Live QA B3: matching used to run only when a stay was created, so a client
+    who signed up AFTER booking stayed "New client" for ever. On the doctor list,
+    try the same staff-only match again for active stays that have no owner, and
+    persist what it finds. The public API is untouched (it never exposes the
+    link), and the link stays unverified -- it does not reach the owner portal."""
+    pending = [b for b in rows if b.owner_id is None and b.status in BoardingBooking.ACTIVE_STATUSES]
+    if not pending:
+        return
+    index = {}
+    for uid, ph in UserProfile.objects.filter(role="OWNER").exclude(phone="").values_list("id", "phone"):
+        index.setdefault(phone_key(ph), set()).add(uid)
+    for oid, ph in Pet.objects.filter(owner__isnull=False).exclude(owner_phone="").values_list("owner_id", "owner_phone"):
+        index.setdefault(phone_key(ph), set()).add(oid)
+    index.pop("", None)
+    for b in pending:
+        ids = index.get(phone_key(b.owner_phone)) or set()
+        if len(ids) != 1:
+            continue
+        owner_id = next(iter(ids))
+        wanted = (b.pet_name or "").strip().casefold()
+        pets = [p for p in Pet.objects.filter(owner_id=owner_id) if p.name.strip().casefold() == wanted]
+        pet = pets[0] if len(pets) == 1 else None
+        # Conditional update: never overwrite a link a concurrent convert made.
+        updated = BoardingBooking.objects.filter(pk=b.pk, owner__isnull=True).update(
+            owner_id=owner_id, pet=pet,
+        )
+        if updated:
+            b.owner_id, b.pet = owner_id, pet
 
 
 def _max_concurrent(check_in, check_out, exclude_ref=None):
@@ -234,7 +296,7 @@ def _boarding_create(request):
 
     check_in = data["check_in"]
     check_out = check_in + timedelta(days=max(0, duration_days(data["duration"]) - 1))
-    owner, pet = _match_client(data["owner_phone"], data["pet_name"])
+    owner, pet, verified = _link_for(request, data["owner_phone"], data["pet_name"])
 
     with transaction.atomic():
         _lock_boarding_capacity()
@@ -245,7 +307,7 @@ def _boarding_create(request):
             reference=reference,
             source="doctor" if doctor else "owner",
             status="CONFIRMED" if doctor else "PENDING",
-            owner=owner, pet=pet,
+            owner=owner, pet=pet, owner_verified=verified,
             **data,
         )
         booking.save()  # derives check_out + price
@@ -274,9 +336,10 @@ def _created_response(booking):
             ("Phone", booking.owner_phone),
             ("Emergency contact", f"{booking.emergency_contact_name} {booking.emergency_contact_phone}".strip()),
             ("Check-in", booking.check_in.isoformat()),
-            ("Check-out", booking.check_out.isoformat()),
+            # check_out is the last bed-night; people read the day they leave.
+            ("Check-out", booking.departure_date().isoformat()),
             ("Duration", duration_label(booking.duration)),
-            ("Price", f"₹{booking.price}"),
+            ("Price", _rupees(booking.price)),
             ("Reference", booking.reference),
             ("Status", booking.status),
         ],
@@ -290,8 +353,8 @@ def _created_response(booking):
             "price": booking.price,
             "status": booking.status,
             "detail": (
-                f"Thanks, {booking.owner_name}! {booking.pet_name}'s stay is booked "
-                f"(reference {booking.reference}, ₹{booking.price}). The clinic will confirm by phone."
+                f"Thanks, {booking.owner_name}! {booking.pet_name}'s stay has been requested "
+                f"(reference {booking.reference}, {_rupees(booking.price)}). The clinic will confirm by phone."
             ),
         },
         status=http_status.HTTP_201_CREATED,
@@ -384,7 +447,7 @@ def boarding_hold_confirm_view(request, reference):
     if _rate_limited(f"boarding:phone:{data['owner_phone']}", BOARDING_PHONE_LIMIT, BOARDING_WINDOW_SECONDS):
         return problem(429, "Too many requests", "Too many booking attempts. Please try again later.")
 
-    owner, pet = _match_client(data["owner_phone"], data["pet_name"])
+    owner, pet, verified = _link_for(request, data["owner_phone"], data["pet_name"])
     with transaction.atomic():
         _lock_boarding_capacity()
         booking = BoardingBooking.objects.select_for_update().filter(
@@ -401,6 +464,7 @@ def boarding_hold_confirm_view(request, reference):
         for field, value in data.items():
             setattr(booking, field, value)
         booking.owner, booking.pet = owner, pet
+        booking.owner_verified = verified
         booking.status = "PENDING"
         booking.expires_at = None
         booking.requester_hash = ""
@@ -419,8 +483,10 @@ def _boarding_list(request, user):
     status_filter = request.query_params.get("status")
     if status_filter:
         qs = qs.filter(status=status_filter)
+    rows = list(qs)
+    _lazy_match(rows)
     results = BoardingSerializer(
-        qs, many=True, context={"request": request, "doctor": user},
+        rows, many=True, context={"request": request, "doctor": user},
     ).data
     pending_count = BoardingBooking.objects.filter(status="PENDING").count()
     return Response({"results": results, "pending_count": pending_count})
@@ -600,6 +666,12 @@ def boarding_convert_view(request, reference):
                 )
             booking.owner, booking.pet = owner, pet
             booking.save(update_fields=["owner", "pet"])
+        # The clinic has now vouched for this link (live QA D1), so the stay may
+        # appear in that owner's portal -- including a stay that was already
+        # auto-matched, where convert is how staff confirm the match.
+        if booking.owner_id and not booking.owner_verified:
+            booking.owner_verified = True
+            booking.save(update_fields=["owner_verified"])
     return Response(BoardingSerializer(
         booking, context={"request": request, "doctor": request.user},
     ).data)

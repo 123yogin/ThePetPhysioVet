@@ -20,7 +20,10 @@ from ..serializers import (
     EnquiryCreateSerializer, EnquirySerializer,
 )
 
-from ._shared import _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem, require_doctor
+from ._shared import (
+    _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, maybe_owner, problem,
+    require_doctor,
+)
 from ..notify import notify_doctor
 
 # Same rationale/shape as the password-reset rate limits above: two
@@ -85,8 +88,10 @@ def _enquiry_create(request):
     if _rate_limited(f"enquiry:email:{email}", ENQUIRY_EMAIL_LIMIT, ENQUIRY_WINDOW_SECONDS):
         return problem(429, "Too many requests", "Too many enquiries submitted. Please try again later.")
 
-    enquiry = serializer.save()
-    reference = f"ENQ-{str(enquiry.id)[:8].upper()}"
+    # Linked to an account only when sent while signed in as that owner; the
+    # response is identical either way.
+    enquiry = serializer.save(owner=maybe_owner(request))
+    reference = enquiry.reference
     notify_doctor(
         kind="enquiry",
         subject=f"New enquiry — {enquiry.pet_name or 'a pet'} ({reference})",
@@ -171,7 +176,9 @@ def enquiries_view(request):
 def enquiry_convert_view(request, pk):
     """POST /api/v1/enquiries/:id/convert — doctor-only. Finds-or-creates
     the owner (by email) and the pet (by name, scoped to that owner), then
-    books a `Pending` appointment for the converting doctor. See the task
+    books a `Confirmed` appointment for the converting doctor -- the doctor
+    picked the date and time and pressed "Confirm & Book", so leaving it
+    Pending only made them confirm it a second time (live QA B2). See the task
     write-up / `Enquiry` docstring for the full rationale.
 
     Idempotent: converting an already-CONVERTED enquiry returns the
@@ -256,12 +263,15 @@ def enquiry_convert_view(request, pk):
             time=time,
             visit_type=visit_type,
             visit_type_display=visit_type_labels[visit_type],
-            status="Pending",
+            status="Confirmed",
             reason_notes=enquiry.reason,
         )
 
         enquiry.status = "CONVERTED"
         enquiry.converted_appointment = appt
+        # The clinic's own link -- what lets the owner see this request in
+        # /owner/bookings (phone matching no longer does; live QA D1).
+        enquiry.owner = owner
         enquiry.actioned_by = request.user
         enquiry.actioned_at = timezone.now()
         enquiry.save()
