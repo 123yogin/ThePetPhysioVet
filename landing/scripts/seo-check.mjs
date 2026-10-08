@@ -131,7 +131,11 @@ for (const file of pages) {
 
   // ── Canonical ──
   const canonical = first(/<link rel="canonical" href="([^"]*)"/i, html);
-  if (!canonical) fail(`${rel}: missing canonical`);
+  if (is404) {
+    // An error page claims no canonical URL and describes no entity (live QA D8).
+    if (canonical) fail('/404.html must not carry a canonical link');
+    if (/application\/ld\+json/i.test(html)) fail('/404.html must not carry JSON-LD');
+  } else if (!canonical) fail(`${rel}: missing canonical`);
   else {
     if (!/^https:\/\//.test(canonical)) fail(`${rel}: canonical is not an absolute https URL (${canonical})`);
     if (!is404 && canonicals.has(canonical)) fail(`${rel}: canonical ${canonical} is claimed by another page too`);
@@ -163,8 +167,9 @@ for (const file of pages) {
 
   // ── Structured data ──
   const ld = first(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/, html);
-  if (!ld) fail(`${rel}: no JSON-LD block`);
-  else {
+  if (!ld) {
+    if (!is404) fail(`${rel}: no JSON-LD block`);
+  } else {
     try {
       const parsed = JSON.parse(ld.replace(/\\u003c/g, '<'));
       if (!parsed['@context']) fail(`${rel}: JSON-LD missing @context`);
@@ -175,7 +180,8 @@ for (const file of pages) {
   }
 
   // ── Open Graph ──
-  for (const prop of ['og:title', 'og:description', 'og:url', 'og:image', 'og:type']) {
+  // The 404 template has no URL of its own, so no og:url either.
+  for (const prop of ['og:title', 'og:description', ...(is404 ? [] : ['og:url']), 'og:image', 'og:type']) {
     if (!html.includes(`property="${prop}"`)) fail(`${rel}: missing ${prop}`);
   }
 

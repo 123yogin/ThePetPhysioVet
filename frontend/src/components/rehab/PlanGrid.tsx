@@ -6,6 +6,7 @@ import { dateRange, dayMonth, longDate, weekdayShort } from '../../lib/rehabDate
 import { extendTreatmentPlan, updateTreatmentPlan } from '../../api/treatment';
 import { useFlash } from '../../lib/flash';
 import { SessionActions } from './SessionActions';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 interface Props {
   plan: TreatmentPlan;
@@ -84,10 +85,13 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
     },
     onError: (e: Error) => addFlash(e.message || 'Could not extend the plan', 'error'),
   });
+  // Live QA B4: "Mark complete" closed the plan on one tap. Ask first.
+  const [confirmComplete, setConfirmComplete] = useState(false);
   const complete = useMutation({
     mutationFn: () => updateTreatmentPlan(plan.id, { status: 'COMPLETED' }),
     onSuccess: () => {
       addFlash('Plan marked complete', 'success');
+      setConfirmComplete(false);
       refresh();
     },
     onError: (e: Error) => addFlash(e.message || 'Could not complete the plan', 'error'),
@@ -106,9 +110,23 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
 
   return (
     <div className="rehab-grid-wrap">
+      <ConfirmDialog
+        open={confirmComplete}
+        title="Mark this plan complete?"
+        body={
+          total > 0
+            ? `${done} of ${total} sessions are done. Remaining sessions stop being due and the checklist becomes read-only.`
+            : 'The plan will be closed and the checklist becomes read-only.'
+        }
+        confirmLabel="Mark complete"
+        cancelLabel="Keep it active"
+        busy={complete.isPending}
+        onConfirm={() => complete.mutate()}
+        onClose={() => setConfirmComplete(false)}
+      />
       {showEarlyComplete && (
         <div className="rehab-actions" style={{ marginBottom: 8 }}>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={complete.isPending} onClick={() => complete.mutate()}>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={complete.isPending} onClick={() => setConfirmComplete(true)}>
             {complete.isPending ? 'Saving…' : 'Mark complete'}
           </button>
         </div>
@@ -125,7 +143,7 @@ export const PlanGrid: React.FC<Props> = ({ plan, readOnly = false, onEdit }) =>
                 Edit
               </button>
             )}
-            <button type="button" className="btn btn-ghost btn-sm" disabled={complete.isPending} onClick={() => complete.mutate()}>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={complete.isPending} onClick={() => setConfirmComplete(true)}>
               {complete.isPending ? 'Saving…' : 'Mark complete'}
             </button>
           </div>

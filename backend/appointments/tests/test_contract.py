@@ -181,7 +181,7 @@ class AppointmentContractTests(ApiTestCase):
     REQUIRED = ["id", "pet_id", "pet_name", "owner_name", "owner_phone",
                 "date", "time", "visit_type", "status"]
     OPTIONAL = ["visit_type_display", "requested_date", "requested_time",
-                "reschedule_reason", "reason_notes", "share",
+                "reschedule_reason", "reason_notes", "cancel_reason", "share",
                 "species", "pet_type"]
 
     def test_appointment_list_shape(self):
@@ -422,7 +422,7 @@ class InvoiceContractTests(ApiTestCase):
     REQUIRED = ["id", "invoice_no", "pet_id", "pet_name", "subtotal", "tax",
                 "is_tax_invoice", "total", "payment_status", "payment_mode",
                 "created_at", "line_items", "payments", "amount_paid", "balance_due"]
-    OPTIONAL = ["package"]
+    OPTIONAL = ["package", "voided_at", "void_reason"]
 
     def test_invoice_shape_uses_contract_names_not_legacy_names(self):
         self.auth(self.doctor)

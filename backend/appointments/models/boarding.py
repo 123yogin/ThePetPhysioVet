@@ -68,6 +68,11 @@ def duration_label(key):
     return d["label"] if d else key
 
 
+def departure_for(check_in, key):
+    """See BoardingBooking.departure_date."""
+    return check_in + timedelta(days=duration_hours(key) // 24)
+
+
 # The three walk windows an owner may request, with their length in minutes.
 BOARDING_WALK_OPTIONS = (
     {"key": "morning", "label": "Morning", "minutes": 20},
@@ -106,6 +111,13 @@ class BoardingBooking(models.Model):
         "appointments.Pet", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="boarding_bookings",
     )
+    # Whether the stay may appear in `owner`'s portal. True only when it was
+    # booked while signed in as that owner, when convert CREATED the account
+    # itself, or after staff explicitly press "Confirm client". An automatic
+    # phone match, or convert finding an EXISTING account by phone/email, is a
+    # staff HINT: signup verifies neither, so it is never proof of identity
+    # (live QA D1, 2026-10-08).
+    owner_verified = models.BooleanField(default=False)
 
     check_in = models.DateField()
     duration = models.CharField(max_length=12)
@@ -179,6 +191,13 @@ class BoardingBooking(models.Model):
         self.check_out = self.check_in + timedelta(days=max(0, duration_days(self.duration) - 1))
         self.price = duration_price(self.duration)
         super().save(*args, **kwargs)
+
+    def departure_date(self):
+        """The day the pet goes home, for people to read. `check_out` is the
+        inclusive LAST BED-NIGHT (what capacity counts), so a 24h stay from the
+        8th has check_out == the 8th but leaves on the 9th; a sub-day stay leaves
+        the day it arrived. Display only -- never use this for capacity."""
+        return departure_for(self.check_in, self.duration)
 
     def ends_at(self):
         """When this stay actually finishes: check-in time + the duration's

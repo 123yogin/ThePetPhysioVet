@@ -37,6 +37,15 @@ export async function addPayment(
   });
 }
 
+/** Void an unpaid invoice (doctor only). It keeps its number, owes nothing,
+ *  takes no payments and drops out of revenue. */
+export async function voidInvoice(invoiceId: string, reason?: string): Promise<Invoice> {
+  return http<Invoice>(`/invoices/${invoiceId}/void`, {
+    method: 'POST',
+    data: reason ? { reason } : {},
+  });
+}
+
 export async function fetchRevenueStats(range = 'month'): Promise<any> {
   return http(`/revenue?range=${range}`);
 }

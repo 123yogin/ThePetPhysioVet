@@ -35,7 +35,7 @@ from ..serializers import (
     FacilityBookingCreateSerializer, FacilityBookingSerializer,
     FacilityHoldSerializer, FacilityConfirmSerializer,
 )
-from ._shared import _client_ip, _first_error_detail, _rate_limited, problem, require_doctor
+from ._shared import _client_ip, _first_error_detail, _rate_limited, maybe_owner, problem, require_doctor
 from ..notify import notify_doctor
 
 # Same two-window rationale as the enquiry intake: one window per IP, one per
@@ -243,6 +243,9 @@ def _facility_create(request):
         return problem(429, "Too many requests", "Too many booking attempts. Please try again later.")
 
     reference = f"FAC-{_uuid.uuid4().hex[:6].upper()}"
+    # Linked to an account only when booked while signed in as that owner
+    # (live QA D1); the response does not change either way.
+    account = maybe_owner(request)
 
     err = _reserve_slots(
         data["date"], slots,
@@ -250,7 +253,7 @@ def _facility_create(request):
             reference=reference, date=data["date"], slot=s, bed_index=bed,
             pet_name=data["pet_name"], owner_name=data["owner_name"],
             owner_phone=phone, owner_email=data.get("owner_email", ""),
-            note=data.get("note", ""), status="PENDING",
+            note=data.get("note", ""), status="PENDING", owner=account,
         ),
     )
     if err:
@@ -427,6 +430,7 @@ def facility_confirm_view(request, reference):
     data = serializer.validated_data
 
     now = timezone.now()
+    account = maybe_owner(request)
     with transaction.atomic():
         rows = list(
             FacilityBooking.objects.select_for_update().filter(
@@ -450,8 +454,9 @@ def facility_confirm_view(request, reference):
             r.note = data.get("note", "")
             r.status = "PENDING"
             r.expires_at = None
+            r.owner = account
         FacilityBooking.objects.bulk_update(
-            rows, ["pet_name", "owner_name", "owner_phone", "owner_email", "note", "status", "expires_at"],
+            rows, ["pet_name", "owner_name", "owner_phone", "owner_email", "note", "status", "expires_at", "owner"],
         )
 
     slots = sorted(r.slot for r in rows)

@@ -3,18 +3,25 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOwnerBookings } from '../api/owner';
 import { Icon } from '../components/Icon';
-import { friendlyDate, formatMoney } from '../lib/labels';
+import { friendlyDate, formatMoney, boardingDeparture } from '../lib/labels';
 
 /**
  * "My Bookings" — the owner's own view of everything they booked with the
  * clinic: Physiotherapy slots, Swimming/Grooming/Walking requests, and boarding
- * stays, matched to this account by phone. Read-only — it mirrors the clinic's
+ * stays linked to this account. Read-only — it mirrors the clinic's
  * inboxes so a booking stops being a black box until the clinic calls.
  *
  * This screen deliberately does NOT open the public marketing site's booking
  * flow — the app and the website are kept separate. An owner books through the
  * app's own "Book Appointment" on My Pets.
+ *
+ * Privacy (live QA D1): bookings are no longer matched by phone — signup does
+ * not verify a phone, so that showed one client's bookings to anyone who
+ * registered with their number. Only bookings the clinic has linked (or made
+ * while signed in) appear, and the note below says so.
  */
+
+const LINK_NOTE = 'Bookings made on the website appear here once the clinic links them to your account.';
 
 
 // The owner does not think in HELD / NEW / CONVERTED — say what each means for
@@ -106,15 +113,14 @@ export const OwnerBookingsScreen: React.FC = () => {
       ) : total === 0 ? (
         <div className="glass-card" style={{ padding: '28px', textAlign: 'center' }}>
           <p style={{ fontWeight: 700, color: 'var(--brown-900)', marginBottom: '6px' }}>No bookings yet</p>
-          <p className="page-sub" style={{ marginBottom: '16px' }}>
-            Once you book with the clinic, your appointments and stays will show up here.
-          </p>
+          <p className="page-sub" style={{ marginBottom: '16px' }}>{LINK_NOTE}</p>
           <Link to="/owner/home?book=1" className="btn btn-primary btn-sm">
             <Icon name="calendar" /> Book appointment
           </Link>
         </div>
       ) : (
         <>
+          <p className="page-sub" style={{ fontSize: '13px', marginTop: '-8px', marginBottom: '20px' }}>{LINK_NOTE}</p>
           <Section title="Physiotherapy" icon="activity" count={data!.facility.length}>
             {data!.facility.map((f) => (
               <Card key={f.reference}>
@@ -151,8 +157,12 @@ export const OwnerBookingsScreen: React.FC = () => {
                   <StatusBadge status={b.status} />
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--brown-800)' }}>
+                  {/* check_out is the last night; show the day the pet comes home (D4). */}
                   <Icon name="clock" size={12} /> {friendlyDate(b.check_in)}
-                  {b.check_out !== b.check_in ? ` → ${friendlyDate(b.check_out)}` : ''} · {b.duration_label}
+                  {(() => {
+                    const leaves = boardingDeparture(b.check_in, b.check_out, b.duration);
+                    return leaves !== b.check_in ? ` → home ${friendlyDate(leaves)}` : '';
+                  })()} · {b.duration_label}
                 </div>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>{formatMoney(b.price)}</div>
                 {b.walk_times.length > 0 && (

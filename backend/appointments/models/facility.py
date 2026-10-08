@@ -106,6 +106,14 @@ class FacilityBooking(models.Model):
     owner_phone = models.CharField(max_length=50, blank=True, default="")
     owner_email = models.EmailField(blank=True, default="")
     note = models.TextField(max_length=1000, blank=True, default="")
+    # The owner account this booking belongs to -- set ONLY when it was made
+    # while signed in as that owner. Never inferred from the phone: signup does
+    # not verify a phone, so a phone match would show one client's booking to
+    # anyone who registers with their number (live QA D1, 2026-10-08).
+    owner = models.ForeignKey(
+        "appointments.UserProfile", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="facility_bookings",
+    )
 
     # HELD is a temporary lock with an `expires_at` -- the "seats blocked for
     # 10:00" state -- created before details exist and occupying a bed so nobody

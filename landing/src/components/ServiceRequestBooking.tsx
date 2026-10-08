@@ -39,6 +39,7 @@ const WALK_TIMES = ['Morning', 'Evening', 'Late'];
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
 import { rupee } from '../lib/format';
+import { isPlausiblePhone, PHONE_HINT } from '../lib/errors';
 
 export const ServiceRequestBooking: React.FC<Props> = ({
   onClose,
@@ -77,18 +78,29 @@ export const ServiceRequestBooking: React.FC<Props> = ({
 
   const missingPackage = !!packages?.length && !pkg;
   const missingTime = !!askTimeOfDay && !timeOfDay;
-  const canSubmit =
-    form.petName.trim() &&
-    form.ownerName.trim() &&
-    form.email.trim() &&
-    form.phone.trim() &&
-    !missingPackage &&
-    !missingTime &&
-    !busy;
+  // Live QA D2: the button used to be disabled with no word about why (an empty
+  // "Your name" was enough). It now stays enabled and a press lists what is
+  // still needed, in form order.
+  const problems = [
+    missingPackage && 'Choose a package above.',
+    missingTime && 'Choose a preferred time above.',
+    !form.petName.trim() && 'Enter your pet\u2019s name.',
+    !form.ownerName.trim() && 'Enter your name.',
+    !form.phone.trim() ? 'Enter a phone number.' : !isPlausiblePhone(form.phone) && PHONE_HINT,
+    !form.email.trim() ? 'Enter your email.' : !/^\S+@\S+\.\S+$/.test(form.email.trim()) && 'Enter a valid email address.',
+  ].filter(Boolean) as string[];
+  const [attempted, setAttempted] = React.useState(false);
+  // An edit means the last server error no longer describes the form (D3).
+  const edit = (patch: Partial<typeof form>) => {
+    setForm((f) => ({ ...f, ...patch }));
+    setError('');
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (busy) return;
+    setAttempted(true);
+    if (problems.length) return;
     setBusy(true);
     setError('');
 
@@ -157,7 +169,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
   }
 
   return (
-    <form onSubmit={submit} className="pt-2">
+    <form onSubmit={submit} noValidate className="pt-2">
       {packages && packages.length > 0 && (
         <div className="mb-6">
           <span className={labelCls}>Package</span>
@@ -259,7 +271,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
             className={field}
             placeholder="e.g. Bruno"
             value={form.petName}
-            onChange={(e) => setForm({ ...form, petName: e.target.value })}
+            onChange={(e) => edit({ petName: e.target.value })}
           />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -272,7 +284,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
               className={field}
               placeholder="e.g. Priya"
               value={form.ownerName}
-              onChange={(e) => setForm({ ...form, ownerName: e.target.value })}
+              onChange={(e) => edit({ ownerName: e.target.value })}
             />
           </div>
           <div>
@@ -289,7 +301,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
               className={field}
               placeholder="e.g. 98765 43210"
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => edit({ phone: e.target.value })}
             />
           </div>
         </div>
@@ -303,7 +315,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
             className={field}
             placeholder="you@example.com"
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            onChange={(e) => edit({ email: e.target.value })}
           />
         </div>
         <div>
@@ -315,7 +327,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
             className={field}
             placeholder="Optional"
             value={form.note}
-            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            onChange={(e) => edit({ note: e.target.value })}
           />
         </div>
       </div>
@@ -332,15 +344,23 @@ export const ServiceRequestBooking: React.FC<Props> = ({
         className="absolute left-[-9999px] w-px h-px opacity-0"
       />
 
-      {error && <p className="text-sm text-[#b23b3b] mt-4">{error}</p>}
-      {missingPackage && (
-        <p className="text-xs text-(--c-accent) mt-4">Choose a package above to continue.</p>
-      )}
-      {missingTime && (
-        <p className="text-xs text-(--c-accent) mt-2">Choose a preferred time above to continue.</p>
+      {error && <p role="alert" className="text-sm text-[#b23b3b] mt-4">{error}</p>}
+      {attempted && problems.length > 0 ? (
+        <ul role="alert" className="text-sm text-[#b23b3b] mt-4 space-y-1">
+          {problems.map((p) => <li key={p}>{p}</li>)}
+        </ul>
+      ) : (
+        <>
+          {missingPackage && (
+            <p className="text-xs text-(--c-accent) mt-4">Choose a package above to continue.</p>
+          )}
+          {missingTime && (
+            <p className="text-xs text-(--c-accent) mt-2">Choose a preferred time above to continue.</p>
+          )}
+        </>
       )}
 
-      <button type="submit" disabled={!canSubmit} className={`${primaryBtn} mt-6`}>
+      <button type="submit" disabled={busy} aria-busy={busy} className={`${primaryBtn} mt-6`}>
         {busy && <Loader2 className="w-4 h-4 animate-spin" />}
         Send request
       </button>

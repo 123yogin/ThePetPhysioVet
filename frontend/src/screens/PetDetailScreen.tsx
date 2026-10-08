@@ -523,8 +523,16 @@ export const PetDetailScreen: React.FC = () => {
                   />
                 ) : (
                   <>
+                    {/* A finished or paused plan must not read "Today to … (in N
+                        days)" — that is the live-plan phrasing (live QA B6). */}
                     <p style={{ color: 'var(--brown-500)', margin: '0 0 12px' }}>
-                      {friendlyDate(plan.start_date)} to {plan.end_date ? friendlyDate(plan.end_date) : 'open-ended'}
+                      {plan.status === 'COMPLETED'
+                        ? plan.completed_at
+                          ? `Completed ${friendlyDate(plan.completed_at.substring(0, 10)).replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())}`
+                          : 'Completed'
+                        : plan.status === 'PAUSED'
+                          ? 'Paused'
+                          : `${friendlyDate(plan.start_date)} to ${plan.end_date ? friendlyDate(plan.end_date) : 'open-ended'}`}
                     </p>
                     <PlanGrid plan={plan} onEdit={() => setEditingPlanId(plan.id)} />
                     {plan.status === 'ACTIVE' && (

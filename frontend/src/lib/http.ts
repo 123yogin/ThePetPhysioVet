@@ -1,3 +1,4 @@
+import { friendlyErrorMessage } from './errors';
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './tokens';
 import { navigateTo } from './navigation';
 
@@ -209,7 +210,8 @@ export async function http<T = any>(
     }
     const errorData = await response.json().catch(() => ({}));
     const message = errorData.detail || errorData.message || response.statusText;
-    throw new Error(message || 'Network request failed');
+    // "phone: Enter a phone…" -> "Enter a phone…" (live QA D3).
+    throw new Error(friendlyErrorMessage(message || 'Network request failed'));
   }
 
   if (response.status === 204) {

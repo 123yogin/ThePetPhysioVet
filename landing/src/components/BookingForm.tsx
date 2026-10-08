@@ -8,6 +8,7 @@ import { SITE, formattedAddress, openingHoursSummary } from '../seo/siteConfig';
 // app's own domain, so /api/v1 is the same deployment. Overridable for
 // local development, where the API runs on :8000 and Vite on :3000.
 import { getJson, postEnquiry } from '../lib/clinicApi';
+import { isPlausiblePhone, PHONE_HINT } from '../lib/errors';
 
 interface BookingFormProps {
   initialSpecialist?: string;
@@ -105,6 +106,8 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   ) => {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: value }));
+    // The last error described the old values; editing clears it (live QA D3).
+    setSubmitError(null);
     // Let the parent redirect an inventory-booked service to its own flow
     // (the Indoor Facility slot/bed picker) instead of this request form.
     if (id === 'service') onServiceChange?.(value);
@@ -124,6 +127,10 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       setSubmitError(
         'Please fill in your name, your pet\u2019s name, your email address and a phone number.'
       );
+      return;
+    }
+    if (!isPlausiblePhone(formData.phone)) {
+      setSubmitError(PHONE_HINT);
       return;
     }
 
@@ -263,7 +270,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({
                   required
                   value={formData.phone}
                   onChange={handleChange}
-                  placeholder="e.g. (555) 019-2831"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="e.g. 98765 43210"
                   className="w-full border-b border-(--c-ink)/40 focus:border-(--c-ink) bg-transparent px-0 py-2.5 text-sm text-(--c-ink) focus:outline-none"
                 />
               </div>

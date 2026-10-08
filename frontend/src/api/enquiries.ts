@@ -28,6 +28,12 @@ export async function convertEnquiry(
   });
 }
 
+/** Staff have checked the linked account is this client: show the request in
+ *  that owner's app (an email match alone does not). */
+export async function confirmEnquiryClient(id: string): Promise<Enquiry> {
+  return http<Enquiry>(`/enquiries/${id}/confirm-client`, { method: 'POST' });
+}
+
 export async function dismissEnquiry(id: string): Promise<Enquiry> {
   return http<Enquiry>(`/enquiries/${id}/dismiss`, {
     method: 'POST',

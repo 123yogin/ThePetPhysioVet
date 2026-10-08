@@ -89,6 +89,10 @@ class Appointment(models.Model):
     requested_time = models.TimeField(null=True, blank=True)
     reschedule_reason = models.TextField(blank=True, default="")
     reason_notes = models.TextField(blank=True, default="")
+    # Why the clinic cancelled (optional, doctor-entered). Kept apart from
+    # `reason_notes` (why the visit was booked) and `reschedule_reason` (what the
+    # owner asked for) so cancelling never overwrites either record.
+    cancel_reason = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

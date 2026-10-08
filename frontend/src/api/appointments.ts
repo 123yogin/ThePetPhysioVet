@@ -86,3 +86,11 @@ export async function fetchAppointmentOptions(): Promise<{
 export async function confirmAppointment(id: string): Promise<Appointment> {
   return http<Appointment>(`/appointments/${id}/confirm`, { method: 'POST' });
 }
+
+/** Doctor cancels a visit (optional reason). Frees the slot. */
+export async function cancelAppointment(id: string, reason?: string): Promise<Appointment> {
+  return http<Appointment>(`/appointments/${id}/cancel`, {
+    method: 'POST',
+    data: reason ? { reason } : {},
+  });
+}
