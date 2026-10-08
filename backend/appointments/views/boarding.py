@@ -56,6 +56,7 @@ from ..serializers import (
     BoardingSerializer,
 )
 from ..notify import notify_doctor
+from ..sms import triggers as sms_triggers
 from ..validators import normalise_phone, phone_key
 from ._shared import (
     _client_ip, _first_error_detail, _rate_limited, _unique_owner_username, problem,
@@ -322,6 +323,8 @@ def _boarding_create(request):
             **data,
         )
         booking.save()  # derives check_out + price
+    if booking.status == "CONFIRMED":  # a doctor booked it directly
+        sms_triggers.boarding_confirmed(booking)
     return _created_response(booking)
 
 
@@ -574,6 +577,8 @@ def boarding_status_view(request, reference):
 
     booking.status = new_status
     booking.save(update_fields=updated)
+    if action == "confirm":
+        sms_triggers.boarding_confirmed(booking)
     return Response({"reference": reference, "status": new_status})
 
 

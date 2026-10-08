@@ -93,6 +93,15 @@ class Appointment(models.Model):
     # `reason_notes` (why the visit was booked) and `reschedule_reason` (what the
     # owner asked for) so cancelling never overwrites either record.
     cancel_reason = models.TextField(blank=True, default="")
+    # Set whenever a DOCTOR books, confirms or moves the visit (never by an
+    # owner). SMS reminders go only to visits with this set: an owner could
+    # otherwise book a pet carrying any phone number, confirm it themselves
+    # and have the clinic's SIM text that number (security review 2026-10-08).
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.ForeignKey(
+        "appointments.UserProfile", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -107,6 +116,12 @@ class Appointment(models.Model):
                 name="uniq_active_appointment_per_pet_slot",
             ),
         ]
+
+    def mark_doctor_confirmed(self, doctor):
+        """Record that a doctor acted on this visit (caller saves)."""
+        from django.utils import timezone
+        self.confirmed_at = timezone.now()
+        self.confirmed_by = doctor
 
     def __str__(self):
         return f"{self.pet_name} on {self.date} at {self.time} [{self.status}]"

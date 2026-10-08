@@ -203,6 +203,17 @@ def owner_appointment_accept_view(request, pk):
     appt = get_object_or_404(Appointment, pk=pk)
     IsObjectOwner().has_object_permission(request, None, appt)
 
+    # Accept means "I agree to the new time the DOCTOR set" -- the only case
+    # the owner UI offers it for. It used to confirm anything, so an owner could
+    # confirm their own Pending booking (or their own reschedule request) with
+    # no clinician involved; with SMS reminders that let anyone make the
+    # clinic's SIM text any number (security review 2026-10-08).
+    if appt.status != "Rescheduled":
+        return problem(
+            400, "Nothing to accept.",
+            "Only a new time proposed by the clinic can be accepted.",
+        )
+
     if appt.requested_date:
         appt.date = appt.requested_date
     if appt.requested_time:

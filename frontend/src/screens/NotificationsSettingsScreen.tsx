@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchNotificationPrefs, updateNotificationPrefs } from '../api/notifications';
+import { fetchSmsLog, sendTestSms, type SmsMode, type SmsStatus } from '../api/sms';
 import { useFlash } from '../lib/flash';
 
 export const NotificationsSettingsScreen: React.FC = () => {
@@ -114,6 +115,190 @@ export const NotificationsSettingsScreen: React.FC = () => {
           Save Notification Preference
         </button>
       </form>
+
+      <SmsActivity />
     </div>
+  );
+};
+
+const MODE_LABEL: Record<SmsMode, string> = {
+  android_gateway: 'Android gateway (live)',
+  console: 'Console (not sent, log only)',
+  disabled: 'Disabled (not sent)',
+};
+
+const KIND_LABEL: Record<string, string> = {
+  appointment_confirmed: 'Appointment confirmed',
+  appointment_moved: 'Appointment moved',
+  appointment_reminder: 'Appointment reminder',
+  boarding_confirmed: 'Boarding confirmed',
+  boarding_checkout: 'Check-out reminder',
+  test: 'Test',
+};
+
+const STATUS_BADGE: Record<SmsStatus, string> = {
+  QUEUED: 'badge-pending',
+  SENT: 'badge-confirmed',
+  DELIVERED: 'badge-success',
+  FAILED: 'badge-failed',
+  SKIPPED_OPTOUT: 'badge-neutral',
+  SKIPPED_LIMIT: 'badge-warning',
+  SKIPPED_COUNTRY: 'badge-neutral',
+  SKIPPED_DISABLED: 'badge-neutral',
+};
+
+const STATUS_LABEL: Record<SmsStatus, string> = {
+  QUEUED: 'Queued',
+  SENT: 'Sent',
+  DELIVERED: 'Delivered',
+  FAILED: 'Failed',
+  SKIPPED_OPTOUT: 'Opted out',
+  SKIPPED_LIMIT: 'Daily limit',
+  SKIPPED_COUNTRY: 'Country blocked',
+  SKIPPED_DISABLED: 'SMS off',
+};
+
+const PAGE_SIZE = 20;
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString('en-IN', {
+    day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+  });
+}
+
+const SmsActivity: React.FC = () => {
+  const [page, setPage] = useState(1);
+  const [testTo, setTestTo] = useState('');
+  const { addFlash } = useFlash();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['smsLog', page],
+    queryFn: () => fetchSmsLog(page, PAGE_SIZE),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: (to: string) => sendTestSms(to),
+    onSuccess: (msg) => {
+      if (msg.provider === 'console' && msg.status === 'SENT') {
+        addFlash(`Test SMS logged on the server for ${msg.to} (console mode: nothing was sent)`, 'success');
+      } else if (msg.status === 'SENT' || msg.status === 'DELIVERED') {
+        addFlash(`Test SMS handed to the gateway for ${msg.to}`, 'success');
+      } else {
+        addFlash(`Test SMS not sent: ${STATUS_LABEL[msg.status]}${msg.error ? ` (${msg.error})` : ''}`, 'error');
+      }
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: ['smsLog'] });
+    },
+    onError: (err: any) => addFlash(err.message || 'Could not send the test SMS', 'error'),
+  });
+
+  const handleTest = (e: React.FormEvent) => {
+    e.preventDefault();
+    const to = testTo.trim();
+    if (!to) {
+      addFlash('Enter a phone number for the test SMS', 'error');
+      return;
+    }
+    testMutation.mutate(to);
+  };
+
+  const pages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
+  const atLimit = !!data && data.sent_today >= data.daily_limit;
+
+  return (
+    <>
+      <div className="glass-card" style={{ marginTop: '24px' }}>
+        <h2 style={{ fontSize: '18px', margin: '0 0 12px' }}>SMS gateway</h2>
+        {data && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px', fontSize: '14px', marginBottom: '16px' }}>
+            <span>
+              Mode: <strong>{MODE_LABEL[data.mode] ?? data.mode}</strong>
+            </span>
+            <span>
+              Sent today: <strong>{data.sent_today} / {data.daily_limit}</strong>
+              {atLimit && <span className="badge badge-warning" style={{ marginLeft: '8px' }}>Limit reached</span>}
+            </span>
+          </div>
+        )}
+        <form onSubmit={handleTest} className="field" style={{ margin: 0 }}>
+          <label htmlFor="testSmsTo">Send test SMS</label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <input
+              id="testSmsTo"
+              type="tel"
+              className="input-glass"
+              style={{ flex: '1 1 200px', minWidth: 0 }}
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              placeholder="e.g. +91 98765 43210"
+            />
+            <button type="submit" className="btn btn-primary btn-sm" disabled={testMutation.isPending}>
+              {testMutation.isPending ? 'Sending...' : 'Send test SMS'}
+            </button>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--brown-500)', margin: '6px 0 0' }}>
+            Counts toward today&apos;s limit.
+          </p>
+        </form>
+      </div>
+
+      <div className="glass-card" style={{ marginTop: '24px' }}>
+        <h2 style={{ fontSize: '18px', margin: '0 0 12px' }}>Recent SMS</h2>
+        {isLoading && <p style={{ margin: 0 }}>Loading...</p>}
+        {isError && (
+          <div className="alert alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+            <span>{(error as Error)?.message || 'Could not load the SMS log.'}</span>
+            <button type="button" onClick={() => refetch()} className="btn btn-ghost btn-sm">Retry</button>
+          </div>
+        )}
+        {data && data.results.length === 0 && (
+          <p style={{ color: 'var(--brown-500)', margin: 0 }}>No SMS sent yet.</p>
+        )}
+        {data && data.results.length > 0 && (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Phone</th>
+                    <th>Kind</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.results.map((m) => (
+                    <tr key={m.id}>
+                      <td data-label="Time">{formatWhen(m.created_at)}</td>
+                      <td data-label="Phone" style={{ fontVariantNumeric: 'tabular-nums' }}>{m.to}</td>
+                      <td data-label="Kind">{KIND_LABEL[m.kind] ?? m.kind}</td>
+                      <td data-label="Status">
+                        <span className={`badge ${STATUS_BADGE[m.status] ?? 'badge-neutral'}`}>
+                          {STATUS_LABEL[m.status] ?? m.status}
+                        </span>
+                      </td>
+                      <td data-label="Error" style={{ fontSize: '13px', overflowWrap: 'anywhere' }}>{m.error || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                  Previous
+                </button>
+                <span style={{ fontSize: '13px' }}>Page {page} of {pages}</span>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
   );
 };

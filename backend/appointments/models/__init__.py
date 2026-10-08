@@ -32,6 +32,7 @@ from .boarding import (  # noqa: F401
     BOARDING_WALK_OPTIONS, BOARDING_WALK_KEYS,
     duration_days, duration_price, duration_label, duration_hours,
 )
+from .sms import SmsMessage  # noqa: F401
 
 __all__ = [
     "UserProfile",
@@ -54,4 +55,5 @@ __all__ = [
     "StoredFile",
     "FacilityBooking",
     "BoardingBooking",
+    "SmsMessage",
 ]
