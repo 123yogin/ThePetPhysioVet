@@ -5,6 +5,88 @@ import { TREATMENT_CONTENT } from '../data/treatmentContent';
 import { PageShell, DetailCta, FactList } from './PageShell';
 import { Link } from '../seo/router';
 import { conditionPath, servicePath } from '../seo/routes';
+import { useRouter } from '../seo/router';
+import { bookableByCode } from '../data/bookableServices';
+import { bookingHref } from '../components/BookingPanel';
+import { usePublicServiceCodes } from '../hooks/usePublicServiceCodes';
+import { rupee } from '../lib/format';
+
+/** Treatment pages that also sell a priced, bookable service: page id -> booking code. */
+const PRICED_BOOKING: Record<string, string> = { hydrotherapy: 'Hydrotherapy' };
+
+/**
+ * "Swimming sessions and prices" on the hydrotherapy page. The prices are the
+ * Swimming card's own list in bookableServices.ts -- the same numbers the
+ * homepage card and the booking panel show -- rendered statically so they are
+ * in the prerendered HTML. Book appears only when the live API offers the code.
+ */
+const SwimmingPrices: React.FC<{ code: string }> = ({ code }) => {
+  const { path, navigate } = useRouter();
+  const codes = usePublicServiceCodes();
+  const card = bookableByCode(code);
+  const grooming = bookableByCode('Grooming');
+  const combo = grooming?.priceList?.find((p) => /swim/i.test(p.label));
+  if (!card?.priceList?.length) return null;
+  const bookHref = codes.includes(code) ? bookingHref(path, { service: code }) : null;
+
+  return (
+    <section id="swimming-prices" aria-labelledby="swimming-prices-h" className="max-w-3xl mb-12 scroll-mt-32">
+      <h2 id="swimming-prices-h" className="font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-4">
+        Swimming sessions and prices
+      </h2>
+      <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed mb-4">
+        {card.summary} {card.includes.join(', ')}. Book a single session, or a pack of five or eight
+        sessions at a lower price per session. If your dog is recovering from surgery, injury or a
+        spinal or joint problem, start with an assessment so the vet can plan hydrotherapy as part of
+        their rehab.
+      </p>
+      <table className="w-full max-w-md font-(family-name:--f-body) text-sm border-t border-(--c-line)/40 mb-4">
+        <caption className="sr-only">Dog swimming session prices</caption>
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-widest text-(--c-accent)">
+            <th scope="col" className="py-2 font-semibold">Session</th>
+            <th scope="col" className="py-2 font-semibold text-right">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {card.priceList.map((p) => (
+            <tr key={p.label} className="border-t border-(--c-line)/30">
+              <th scope="row" className="py-2 font-light text-left text-(--c-body)">{p.label}</th>
+              <td className="py-2 text-right text-(--c-ink) font-medium whitespace-nowrap">{rupee(p.price)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {combo && (
+        <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed mb-4">
+          Swim, groom, shampoo and dry together for {rupee(combo.price)}: see{' '}
+          <Link to="/#book" className="text-(--c-accent) underline underline-offset-2 hover:text-(--c-ink)">
+            grooming and the other services
+          </Link>
+          .
+        </p>
+      )}
+      <p className="font-(family-name:--f-body) text-sm text-(--c-body) font-light leading-relaxed mb-4">
+        Paid at the clinic.
+      </p>
+      <div className="min-h-11">
+        {bookHref && (
+          <a
+            href={bookHref}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+              event.preventDefault();
+              navigate(bookHref);
+            }}
+            className="inline-flex items-center justify-center min-h-11 px-7 bg-(--c-ink) text-white text-xs uppercase tracking-widest font-medium hover:bg-(--c-accent) transition-colors"
+          >
+            Book a swimming session
+          </a>
+        )}
+      </div>
+    </section>
+  );
+};
 
 /** Render prose containing [[label|/path]] inline links as real, crawlable anchors. */
 export const RichText: React.FC<{ text: string }> = ({ text }) => {
@@ -69,6 +151,8 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
             ))}
           </section>
         ))}
+
+        {PRICED_BOOKING[service.id] && <SwimmingPrices code={PRICED_BOOKING[service.id]} />}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16 mb-16">
           <FactList title="What&rsquo;s included" items={service.benefits} />
