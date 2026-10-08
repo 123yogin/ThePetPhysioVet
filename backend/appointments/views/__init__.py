@@ -51,6 +51,7 @@ from .pets import (  # noqa: F401
     pets_view,
     pet_detail_view,
 )
+from .files import file_download_view  # noqa: F401
 from .clinical import (  # noqa: F401
     pet_diagnoses_view,
     diagnostic_report_detail_view,
@@ -204,4 +205,5 @@ __all__ = [
     "boarding_hold_view",
     "boarding_hold_confirm_view",
     "boarding_convert_view",
+    "file_download_view",
 ]

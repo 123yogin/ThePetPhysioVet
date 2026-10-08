@@ -74,10 +74,23 @@ class DiagnosticUploadTests(ApiTestCase):
         r = self._post(upload("../../../../etc/passwd.png", content_type="image/png"))
         self.assertEqual(r.status_code, 201, r.content)
         report = DiagnosticReport.objects.get(pk=r.data["id"])
-        stored = os.path.realpath(report.file.path)
-        root = os.path.realpath(str(settings.MEDIA_ROOT))
-        self.assertTrue(stored.startswith(root),
-                        f"upload escaped MEDIA_ROOT: {stored}")
+        # Database storage (the suite default): the stored key stays under
+        # its upload_to prefix with no traversal segments.
+        self.assertTrue(report.file.name.startswith("diagnostic_reports/"), report.file.name)
+        self.assertNotIn("..", report.file.name)
+
+        # Filesystem storage (local dev): the file stays inside MEDIA_ROOT.
+        with self.settings(STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }):
+            r = self._post(upload("../../../../etc/passwd.png", content_type="image/png"))
+            self.assertEqual(r.status_code, 201, r.content)
+            report = DiagnosticReport.objects.get(pk=r.data["id"])
+            stored = os.path.realpath(report.file.path)
+            root = os.path.realpath(str(settings.MEDIA_ROOT))
+            self.assertTrue(stored.startswith(root),
+                            f"upload escaped MEDIA_ROOT: {stored}")
 
     def test_pet_id_in_url_is_validated(self):
         r = self.client.post(f"{API}/pets/999999/diagnoses",

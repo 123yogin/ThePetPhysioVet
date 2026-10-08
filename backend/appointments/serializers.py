@@ -9,6 +9,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from . import rehab
+from .storage import signed_file_url
 from .validators import normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
@@ -81,7 +82,7 @@ def _sniff_head(file_obj):
 
 def _validate_upload(file_obj):
     if file_obj.size > MAX_UPLOAD_SIZE:
-        raise serializers.ValidationError("File too large. Maximum size is 10 MB.")
+        raise serializers.ValidationError("File is too large (max 10 MB).")
     content_type = getattr(file_obj, "content_type", "") or ""
     if content_type not in ALLOWED_UPLOAD_TYPES:
         raise serializers.ValidationError(
@@ -276,11 +277,9 @@ class PetSerializer(serializers.ModelSerializer):
         read_only_fields = ["doctor_name"]
 
     def get_photo(self, obj):
-        if not obj.photo:
-            return None
-        request = self.context.get("request")
-        url = obj.photo.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link (appointments/storage.py): only rendered for
+        # callers already allowed to see this pet, so the token is the grant.
+        return signed_file_url(obj.photo, self.context.get("request"))
 
     def get_doctor_name(self, obj):
         doctor = obj.doctor
@@ -447,11 +446,9 @@ class DiagnosticReportSerializer(serializers.ModelSerializer):
         read_only_fields = ["original_filename", "size", "mime", "uploaded_at"]
 
     def get_file_url(self, obj):
-        if not obj.file:
-            return None
-        request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link (appointments/storage.py): only rendered for
+        # callers already allowed to see the pet, so the token is the grant.
+        return signed_file_url(obj.file, self.context.get("request"))
 
     def get_is_dicom(self, obj):
         return obj.mime == "application/dicom" or obj.original_filename.lower().endswith(".dcm")
@@ -740,11 +737,8 @@ class QueryAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["original_filename", "mime", "size"]
 
     def get_url(self, obj):
-        if not obj.file:
-            return None
-        request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link -- see DiagnosticReportSerializer.get_file_url.
+        return signed_file_url(obj.file, self.context.get("request"))
 
     def validate_file(self, value):
         return _validate_upload(value)

@@ -34,7 +34,19 @@ class ApiTestCase(APITestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls._media = tempfile.mkdtemp(prefix="qa-media-")
-        cls._media_override = override_settings(MEDIA_ROOT=cls._media)
+        # Uploads are stored in the database in production (Vercel's
+        # filesystem is read-only), so the suite exercises that backend
+        # explicitly. MEDIA_ROOT is still redirected for the few tests that
+        # override back to FileSystemStorage.
+        cls._media_override = override_settings(
+            MEDIA_ROOT=cls._media,
+            STORAGES={
+                "default": {"BACKEND": "appointments.storage.DatabaseStorage"},
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+                },
+            },
+        )
         cls._media_override.enable()
 
     @classmethod

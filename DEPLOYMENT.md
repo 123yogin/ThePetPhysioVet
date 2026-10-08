@@ -7,6 +7,20 @@ for now. £0/month, never sleeps.
 Everything in this repo is vendor-neutral Docker, so if Oracle's ARM capacity lottery
 defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any Docker host.
 
+> **Uploads live in Postgres on Vercel (2026-10-08).** Vercel's serverless filesystem is
+> read-only, so writing uploads to `MEDIA_ROOT` crashed every diagnostic-report, query
+> attachment and pet-photo upload with an HTML 500. When `VERCEL` is set (or
+> `FILE_STORAGE=db` anywhere else) the bytes are stored in the `StoredFile` table
+> (migration `0021`) and served by the signed `GET /api/v1/files/<token>` route. **They
+> count against Neon's storage quota (1 GB on the free plan)**: uploads are capped at
+> 10 MB each and deleting a report/attachment/photo deletes its bytes, but watch
+> `SELECT pg_size_pretty(sum(size)) FROM appointments_storedfile;` and plan an object
+> store before the clinic approaches the limit. A `pg_dump` now includes uploads. Note
+> Vercel also caps a function's request body at ~4.5 MB, so files between 4.5 and 10 MB
+> are rejected at Vercel's edge with a 413 before reaching Django. The Coolify/Docker
+> topology below still uses the filesystem (`media_data` volume) unless you set
+> `FILE_STORAGE=db`.
+
 ---
 
 ## Why this host
@@ -231,7 +245,8 @@ fails" pattern. Belt and braces:
 ```
 
 3. **Back up the `media_data` volume too.** It holds uploaded diagnostic reports and query
-   attachments. Database backups do not cover it.
+   attachments. Database backups do not cover it (unless `FILE_STORAGE=db`, in which case
+   uploads are rows in `appointments_storedfile` and `pg_dump` already has them).
 
 4. **Do a restore drill now, not after an incident.** Coolify has no UI restore:
 

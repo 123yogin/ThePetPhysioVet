@@ -210,14 +210,33 @@ if SERVE_SPA and SPA_DIST_DIR.is_dir():
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+def _default_storage_backend(environ):
+    """Where uploads go.
+
+    Vercel's serverless filesystem is read-only, so writing to MEDIA_ROOT there
+    crashed every upload with an HTML 500. Uploads are stored in Postgres
+    (appointments/storage.py `DatabaseStorage`) when FILE_STORAGE=db or when
+    running on Vercel (it sets VERCEL=1 in every function). Local dev keeps the
+    filesystem by default. An unrecognised value fails fast rather than
+    silently falling back to a backend that cannot write in production.
+    """
+    choice = (environ.get("FILE_STORAGE") or "").strip().lower()
+    if choice not in ("", "db", "filesystem"):
+        raise ImproperlyConfigured(
+            f"FILE_STORAGE must be 'db' or 'filesystem', got {choice!r}."
+        )
+    if choice == "db" or environ.get("VERCEL"):
+        return "appointments.storage.DatabaseStorage"
+    return "django.core.files.storage.FileSystemStorage"
+
+
 # Compressed + hashed filenames (cache-busting) with a manifest, gzip/br
 # pre-compression, and long-lived cache headers — the standard WhiteNoise
-# production storage backend. `default` (media/uploads) storage is left as
-# the plain filesystem backend; media is never served by Django in
-# production (see petphysio/urls.py) so it doesn't need cache-busting here.
+# production storage backend. `default` (uploads) is chosen above; either way
+# uploads are served by the signed `GET /api/v1/files/<token>` route.
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": _default_storage_backend(os.environ),
     },
     "staticfiles": {
         # Manifest storage hashes filenames and REQUIRES a manifest produced by

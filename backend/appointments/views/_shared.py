@@ -10,9 +10,14 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
+import logging
 import re
+from contextlib import contextmanager
+
 from django.core.cache import cache
+from django.db import DatabaseError
 from django.db.models import Q
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from ..models import (
     UserProfile,
@@ -33,6 +38,66 @@ def problem(status_code, title, detail=None):
     """
     body = {"type": "about:blank", "title": title, "status": status_code, "detail": detail or title}
     return Response(body, status=status_code)
+
+
+logger = logging.getLogger(__name__)
+
+# One cap for every upload route (diagnoses, query attachments, pet photos).
+# Uploads are stored in Postgres (appointments/storage.py), so this is also
+# what keeps a single file from eating Neon's storage quota.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+UPLOAD_TOO_LARGE = "File is too large (max 10 MB)."
+UPLOAD_STORAGE_UNAVAILABLE = "Upload storage unavailable, please try again."
+
+
+def reject_oversized_upload(request):
+    """A 400 problem if any file in the request is over the cap, else None.
+
+    Checked before anything is created, so a too-large photo cannot leave a
+    half-made pet behind, and every upload route answers with one message.
+    """
+    for _field, files in request.FILES.lists():
+        for f in files:
+            if (getattr(f, "size", 0) or 0) > MAX_UPLOAD_BYTES:
+                return problem(400, UPLOAD_TOO_LARGE)
+    return None
+
+
+class UploadStorageUnavailable(APIException):
+    status_code = 503
+    default_detail = UPLOAD_STORAGE_UNAVAILABLE
+    default_code = "upload_storage_unavailable"
+
+
+@contextmanager
+def upload_storage_guard(request, operation):
+    """Turn a storage failure into a 503 problem instead of an HTML 500.
+
+    OSError covers a read-only or full filesystem (what Vercel produced);
+    DatabaseError covers DatabaseStorage. Put any `transaction.atomic()`
+    INSIDE this block so the rollback happens before the error is mapped.
+    """
+    try:
+        yield
+    except (OSError, DatabaseError):
+        logger.exception(
+            "upload storage failed: operation=%s user_id=%s",
+            operation, getattr(getattr(request, "user", None), "pk", None),
+        )
+        raise UploadStorageUnavailable()
+
+
+def save_pet_photo(request, pet, photo):
+    """Store `photo` on `pet`, then free the photo it replaced."""
+    old_name = pet.photo.name if pet.photo else ""
+    with upload_storage_guard(request, "pet photo"):
+        pet.photo = photo
+        pet.save()
+    if old_name and old_name != pet.photo.name:
+        try:
+            pet.photo.storage.delete(old_name)
+        except (OSError, DatabaseError):
+            logger.exception("could not delete replaced pet photo: pet_id=%s", pet.pk)
 
 
 def maybe_doctor(request):

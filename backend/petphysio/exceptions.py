@@ -36,6 +36,7 @@ _TITLES = {
     415: "Unsupported media type",
     429: "Too many requests",
     500: "Server error",
+    503: "Service unavailable",
 }
 
 # Anything matching these is Django/DRF talking to itself, not to a person.

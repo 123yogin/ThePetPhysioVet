@@ -7,6 +7,7 @@ Split out of a single 1674-line views.py. Import from `appointments.views`
 as before -- every public name is re-exported by the package.
 """
 
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -24,7 +25,9 @@ from ..serializers import (
     InvoiceSerializer, OwnerPetHistorySerializer,
 )
 
-from ._shared import problem
+from ._shared import (
+    problem, reject_oversized_upload, save_pet_photo, upload_storage_guard,
+)
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsOwner])
@@ -33,6 +36,9 @@ def owner_pets_view(request):
         pets = Pet.objects.filter(owner=request.user).select_related("doctor").order_by("-created_at")
         return Response(PetSerializer(pets, many=True, context={"request": request}).data)
 
+    too_large = reject_oversized_upload(request)
+    if too_large:
+        return too_large
     data = request.data.copy()
     if hasattr(data, "setdefault"):
         data.setdefault("owner_name", request.user.get_full_name() or request.user.username)
@@ -72,11 +78,13 @@ def owner_pets_view(request):
         .distinct()
     )
     inherited_doctor_id = existing_doctor_ids.pop() if len(existing_doctor_ids) == 1 else None
-    pet = serializer.save(owner=request.user, doctor_id=inherited_doctor_id)
-    photo = request.FILES.get("photo")
-    if photo:
-        pet.photo = photo
-        pet.save()
+    # Atomic so a photo that cannot be stored (503) leaves no pet behind for
+    # the retry to duplicate.
+    with transaction.atomic():
+        pet = serializer.save(owner=request.user, doctor_id=inherited_doctor_id)
+        photo = request.FILES.get("photo")
+        if photo:
+            save_pet_photo(request, pet, photo)
     return Response(
         PetSerializer(pet, context={"request": request}).data,
         status=status.HTTP_201_CREATED,
@@ -125,9 +133,13 @@ def owner_pet_diagnoses_view(request, pk):
             ).data
         )
 
+    too_large = reject_oversized_upload(request)
+    if too_large:
+        return too_large
     serializer = DiagnosticReportSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    report = serializer.save(pet=pet)
+    with upload_storage_guard(request, "diagnostic report"), transaction.atomic():
+        report = serializer.save(pet=pet)
     return Response(
         DiagnosticReportSerializer(report, context={"request": request}).data,
         status=status.HTTP_201_CREATED,

@@ -322,6 +322,32 @@ Moves `status: "Pending"` → `"Confirmed"`.
 Validate upload: max 10 MB, allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
 
+### Uploaded files — amended 2026-10-08 (uploads stored in Postgres)
+| GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability** |
+
+**Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
+/owner/pets/:id/diagnoses`, `POST /pets/:id/queries`, `POST /owner/pets/:id/queries`,
+and the `photo` part of `POST /pets`, `PATCH /pets/:id`, `POST /owner/pets` reject any
+file over 10 MB (10 485 760 bytes) with `400` problem+json,
+`detail: "File is too large (max 10 MB)."`, before anything is created. Content-type
+allow-list + magic-byte sniffing (§3 Auth amendment 5) are unchanged.
+
+**Storage failures are a 503, never an HTML 500.** If the upload backend cannot write
+(read-only filesystem, database error), the route answers `503` problem+json,
+`detail: "Upload storage unavailable, please try again."`, and nothing is left behind
+(the record and its file are written in one transaction).
+
+**Download links.** `Diagnosis.file_url`, `QueryAttachment.url` and `Pet.photo` are
+absolute URLs of the form `/api/v1/files/<token>`. The token is a Django
+`TimestampSigner` signature (salt `file-access`) over the storage name, **valid 15
+minutes**; it is only rendered to callers already authorised to see the parent record
+(rule 4), so holding it is the grant — which is what lets a plain `<a href>`/`<img src>`
+open it. A forged, expired, or dangling token is the standard `404` problem. The response
+carries the stored content type (anything outside the upload allow-list is sent as
+`application/octet-stream`), `Content-Disposition: attachment; filename="..."`, and
+`X-Content-Type-Options: nosniff`. Clients must re-fetch the parent record for a fresh
+link rather than caching a URL.
+
 ### Treatment plans
 | GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
 | POST | `/pets/:id/treatment-plans` | plan body | `TreatmentPlan` — same scoping as `GET` |
@@ -672,6 +698,11 @@ and their absence raises `ImproperlyConfigured` at startup — a silently no-op 
 a wrong SPA base URL would look like "reset email sent" while never reaching the user.
 No SMTP provider is configured or invented; `EMAIL_BACKEND`/credentials for a real
 provider are supplied via env/OCI Vault at deploy time.
+
+**Upload storage (added 2026-10-08).** `FILE_STORAGE=db` — or running on Vercel
+(`VERCEL` is set) — stores uploaded bytes in the `StoredFile` table
+(`appointments/storage.py` `DatabaseStorage`); otherwise `FileSystemStorage` under
+`MEDIA_ROOT`. Any other `FILE_STORAGE` value raises `ImproperlyConfigured` at startup.
 
 **Production headers (added after QA round 1).** Behind `if not DEBUG:` set
 `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`,
