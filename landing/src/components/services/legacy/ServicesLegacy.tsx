@@ -4,6 +4,7 @@ import { ArrowUpRight, Activity, Waves, Zap, Hand, Dumbbell, Home, Sparkles, Bed
 import { EntityCardLink } from '../../EntityCardLink';
 import { servicePath } from '../../../seo/routes';
 import { useStagger } from '../../../motion';
+import { pad2 } from '../../../lib/format';
 
 /**
  * The Services layouts used before the expanding panels: card grid
@@ -68,7 +69,7 @@ const ServicesLegacy: React.FC<{ svc: string }> = ({ svc }) => {
                 >
                   <div>
                     <div className="flex items-center justify-between mb-10">
-                      <span className="font-(family-name:--f-display) italic text-4xl text-(--c-accent)/50">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="font-(family-name:--f-display) italic text-4xl text-(--c-accent)/50">{pad2(i + 1)}</span>
                       <div className="icon-nudge p-3 bg-(--c-surface-2) rounded-full">{renderServiceIcon(service.icon)}</div>
                     </div>
                     <h3 className="font-(family-name:--f-display) text-2xl text-(--c-ink) mb-3 font-medium group-hover:text-(--c-accent) transition-colors">{service.title}</h3>
@@ -101,7 +102,7 @@ const ServicesLegacy: React.FC<{ svc: string }> = ({ svc }) => {
                 style={{ top: `calc(var(--nav-h, 100px) + 1.5rem + ${i * 18}px)` }}
               >
                 <div className="md:col-span-5">
-                  <span className="font-(family-name:--f-display) italic text-6xl text-(--c-accent)/40 leading-none">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="font-(family-name:--f-display) italic text-6xl text-(--c-accent)/40 leading-none">{pad2(i + 1)}</span>
                   <h3 className="mt-4 font-(family-name:--f-display) text-3xl sm:text-4xl text-(--c-ink) font-medium group-hover:text-(--c-accent) transition-colors">{service.title}</h3>
                   <p className="mt-3 font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed">{service.fullDesc}</p>
                 </div>

@@ -6,6 +6,7 @@ import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { useStagger } from '../../motion';
 import type { ServiceItem } from '../../types';
+import { pad2 } from '../../lib/format';
 
 /**
  * Bento variant of "Our Services": one big feature tile (the first service,
@@ -173,7 +174,7 @@ const PhotoTile: React.FC<{ service: ServiceItem; index: number; span: string }>
         className="relative z-10 flex h-full flex-col justify-end p-6 sm:p-7"
       >
         <span className="font-(family-name:--f-display) italic text-2xl text-(--c-card)/60">
-          {String(index + 1).padStart(2, '0')}
+          {pad2(index + 1)}
         </span>
         <h3 className="mt-1 font-(family-name:--f-display) text-xl font-medium text-(--c-card) sm:text-2xl">
           {service.title}
@@ -206,7 +207,7 @@ const TypeTile: React.FC<{ service: ServiceItem; index: number; span: string; bg
         <div className="flex items-start justify-between">
           <Icon className="h-11 w-11 text-(--c-ink)/70 sm:h-14 sm:w-14" aria-hidden="true" />
           <span className="font-(family-name:--f-display) italic text-3xl text-(--c-accent)/40">
-            {String(index + 1).padStart(2, '0')}
+            {pad2(index + 1)}
           </span>
         </div>
         <div>

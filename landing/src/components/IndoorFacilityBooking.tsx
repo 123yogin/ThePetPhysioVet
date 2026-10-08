@@ -14,7 +14,7 @@ import { isValidAadhaar } from '../lib/aadhaar';
  * GET /facility/boarding/availability; nothing is hard-coded here.
  */
 
-import { CLINIC_API, isoDate } from '../lib/clinicApi';
+import { CLINIC_API, getJson, isoDate } from '../lib/clinicApi';
 
 interface Duration { key: string; label: string; days: number; price: number }
 interface WalkOption { key: string; label: string; minutes: number }
@@ -30,7 +30,7 @@ interface Props {
 
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
-const rupee = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+import { rupee } from '../lib/format';
 
 export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
   const [menu, setMenu] = React.useState<Menu | null>(null);
@@ -57,8 +57,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
   // Load the duration/walk/price menu once.
   React.useEffect(() => {
     let cancelled = false;
-    fetch(`${CLINIC_API}/facility/boarding/availability`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    getJson('/facility/boarding/availability')
       .then((d: Menu) => !cancelled && setMenu(d))
       .catch(() => {});
     return () => { cancelled = true; };
@@ -69,8 +68,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
     if (!duration || !date) { setSelection(null); return; }
     let cancelled = false;
     setChecking(true);
-    fetch(`${CLINIC_API}/facility/boarding/availability?check_in=${date}&duration=${duration}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    getJson(`/facility/boarding/availability?check_in=${date}&duration=${duration}`)
       .then((d) => !cancelled && setSelection(d.selection ?? null))
       .catch(() => !cancelled && setSelection(null))
       .finally(() => !cancelled && setChecking(false));

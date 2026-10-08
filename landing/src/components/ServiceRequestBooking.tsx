@@ -38,6 +38,7 @@ const WALK_TIMES = ['Morning', 'Evening', 'Late'];
 
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
+import { rupee } from '../lib/format';
 
 export const ServiceRequestBooking: React.FC<Props> = ({
   onClose,
@@ -97,7 +98,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
     });
     const reason = [
       serviceLabel,
-      pkg ? `${pkg.label} (₹${pkg.price.toLocaleString('en-IN')})` : '',
+      pkg ? `${pkg.label} (${rupee(pkg.price)})` : '',
       `preferred day ${prettyDate}`,
       timeOfDay ? `preferred ${timeOfDay.toLowerCase()}` : '',
       form.note,
@@ -194,7 +195,7 @@ export const ServiceRequestBooking: React.FC<Props> = ({
                       on ? 'text-white' : 'text-(--c-accent)'
                     }`}
                   >
-                    ₹{p.price.toLocaleString('en-IN')}
+                    {rupee(p.price)}
                   </span>
                 </button>
               );
