@@ -19,8 +19,10 @@
  */
 
 import { SITE, absoluteUrl } from './siteConfig';
-import { matchRoute, conditionPath, servicePath, specialistPath, type RouteEntity } from './routes';
-import { getPageMeta } from './metadata';
+import { matchRoute, conditionPath, servicePath, specialistPath, carePath, type RouteEntity } from './routes';
+import { getPageMeta, isCareService } from './metadata';
+import { CARE_SERVICES, type CareService } from '../data/careServices';
+import { BOARDING_PRICES, bookableByCode } from '../data/bookableServices';
 import {
   CONDITIONS,
   FAQS,
@@ -45,6 +47,10 @@ const ID = {
   webpage: (path: string) => `${absoluteUrl(path)}#webpage`,
   breadcrumb: (path: string) => `${absoluteUrl(path)}#breadcrumb`,
   service: (id: string) => `${absoluteUrl(servicePath(id))}#service`,
+  care: (id: string) => `${absoluteUrl(carePath(id))}#service`,
+  // Grooming has no page of its own; its Service node lives on the homepage,
+  // where the priced card is.
+  grooming: () => `${SITE.origin}/#service-grooming`,
   condition: (id: string) => `${absoluteUrl(conditionPath(id))}#condition`,
   person: (id: string) => `${absoluteUrl(specialistPath(id))}#person`,
   area: (name: string) => `${SITE.origin}/#area-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
@@ -67,6 +73,30 @@ function openingHoursSpecification(): Node[] {
 }
 
 /** The business node — the anchor of the whole entity graph. */
+
+/** Every Service the business offers: therapies, care services, grooming. */
+function allServiceIds(): string[] {
+  return [
+    ...SERVICES.map((s) => ID.service(s.id)),
+    ...CARE_SERVICES.map((c) => ID.care(c.id)),
+    ...(bookableByCode('Grooming') ? [ID.grooming()] : []),
+  ];
+}
+
+/** Offers that mirror a VISIBLE price list. Never emit prices a page does not show. */
+function offersFrom(list: { label: string; price: number }[], url: string): Node[] {
+  return list.map((p) => ({
+    '@type': 'Offer',
+    name: p.label,
+    price: p.price,
+    priceCurrency: SITE.currency,
+    url,
+  }));
+}
+
+/** areaServed for a service delivered at the clinic: the city, by reference. */
+const cityArea = (): Node[] =>
+  SITE.areaServed.includes(SITE.address.addressLocality) ? [{ '@id': ID.area(SITE.address.addressLocality) }] : [];
 
 /**
  * Strip empty values from the graph before it is emitted.
@@ -138,12 +168,12 @@ export function businessNode(): Node {
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
       name: `${SITE.brandName} treatment modalities`,
-      itemListElement: SERVICES.map((s) => ({
+      itemListElement: allServiceIds().map((id) => ({
         '@type': 'Offer',
-        itemOffered: { '@id': ID.service(s.id) },
+        itemOffered: { '@id': id },
       })),
     },
-    availableService: SERVICES.map((s) => ({ '@id': ID.service(s.id) })),
+    availableService: allServiceIds().map((id) => ({ '@id': id })),
     knowsAbout: CONDITIONS.map((c) => c.title),
     potentialAction: {
       '@type': 'ReserveAction',
@@ -246,8 +276,15 @@ function breadcrumbNode(path: string): Node {
   };
 }
 
-/** A treatment modality as a schema.org Service. */
-export function serviceNode(service: ServiceItem): Node {
+/**
+ * A treatment modality as a schema.org Service.
+ *
+ * @param withPrices emit `offers` for the modality's bookable price list
+ * (hydrotherapy = the Swimming tiers). Only on pages that show those prices
+ * (home and the treatment page itself), so the markup mirrors visible content.
+ */
+export function serviceNode(service: ServiceItem, withPrices = false): Node {
+  const swimming = service.id === 'hydrotherapy' ? bookableByCode('Hydrotherapy') : undefined;
   return {
     '@type': 'Service',
     '@id': ID.service(service.id),
@@ -267,6 +304,70 @@ export function serviceNode(service: ServiceItem): Node {
       { '@type': 'PropertyValue', name: 'Typical session length', value: service.duration },
       ...service.benefits.map((b) => ({ '@type': 'PropertyValue', name: 'Benefit', value: b })),
     ],
+    ...(withPrices && swimming?.priceList
+      ? {
+          alternateName: 'Dog swimming sessions',
+          offers: offersFrom(swimming.priceList, absoluteUrl(servicePath(service.id))),
+        }
+      : {}),
+  };
+}
+
+/**
+ * A care service (boarding) as a schema.org Service. No hoursAvailable: the
+ * "24x7" boarding hours are not yet confirmed against the GBP, and the
+ * physiotherapy hours would be wrong here. Offers mirror the visible table.
+ */
+export function careServiceNode(care: CareService): Node {
+  const url = absoluteUrl(carePath(care.id));
+  return {
+    '@type': 'Service',
+    '@id': ID.care(care.id),
+    name: care.seoTitle,
+    description: care.seoDescription,
+    url,
+    serviceType: care.serviceType,
+    category: 'Pet care',
+    provider: { '@id': ID.business() },
+    areaServed: cityArea(),
+    audience: { '@type': 'Audience', audienceType: 'Pet owners' },
+    offers: care.bookingCode === 'IndoorFacility' ? offersFrom(BOARDING_PRICES, url) : [],
+  };
+}
+
+/** Grooming, from its bookable card on the homepage (the only place it is shown). */
+export function groomingServiceNode(): Node | null {
+  const grooming = bookableByCode('Grooming');
+  if (!grooming) return null;
+  const url = `${SITE.origin}/#book`;
+  return {
+    '@type': 'Service',
+    '@id': ID.grooming(),
+    name: 'Dog grooming',
+    description: grooming.summary,
+    url,
+    serviceType: 'Pet grooming',
+    category: 'Pet care',
+    provider: { '@id': ID.business() },
+    areaServed: cityArea(),
+    audience: { '@type': 'Audience', audienceType: 'Pet owners' },
+    additionalProperty: grooming.includes.map((value) => ({ '@type': 'PropertyValue', name: 'Includes', value })),
+    offers: offersFrom(grooming.priceList ?? [], url),
+  };
+}
+
+/** FAQPage for a care-service page, from the same data as the visible Q&A. */
+export function careFaqNode(care: CareService, path: string): Node | null {
+  if (!care.faqs.length) return null;
+  return {
+    '@type': 'FAQPage',
+    '@id': ID.faq(path),
+    isPartOf: { '@id': ID.webpage(path) },
+    mainEntity: care.faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: { '@type': 'Answer', text: plainText(faq.a) },
+    })),
   };
 }
 
@@ -376,7 +477,22 @@ export function buildGraph(pathname: string): Node {
 
   if (route.kind === 'home') {
     // The home route renders every service, specialist and FAQ, so all are marked up.
-    graph.push(...SERVICES.map(serviceNode), ...SPECIALISTS.map(personNode), faqNode(path));
+    // The bookable cards (boarding, swimming prices, grooming) are on the home
+    // page too, so their Services are marked up with the prices shown there.
+    const grooming = groomingServiceNode();
+    graph.push(
+      ...SERVICES.map((s) => serviceNode(s, true)),
+      ...CARE_SERVICES.map(careServiceNode),
+      ...(grooming ? [grooming] : []),
+      ...SPECIALISTS.map(personNode),
+      faqNode(path),
+    );
+  }
+
+  if (isCareService(entity)) {
+    graph.push(careServiceNode(entity));
+    const faq = careFaqNode(entity, path);
+    if (faq) graph.push(faq);
   }
 
   if (isCondition(entity)) {
@@ -390,11 +506,12 @@ export function buildGraph(pathname: string): Node {
     // Therapies named on the page, linked to the real service entities where they
     // match — via the SAME matcher the condition page renders (servicesForCondition),
     // so the JSON-LD related services and the visible "Treatments used" list agree.
-    graph.push(...servicesForCondition(entity).map(serviceNode));
+    graph.push(...servicesForCondition(entity).map((s) => serviceNode(s)));
   }
 
   if (isService(entity)) {
-    graph.push(serviceNode(entity));
+    // The treatment page shows its own prices (hydrotherapy: swimming tiers).
+    graph.push(serviceNode(entity, true));
     const faq = serviceFaqNode(entity, path);
     if (faq) graph.push(faq);
   }

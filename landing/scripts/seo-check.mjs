@@ -31,7 +31,7 @@ const MIN_ROOT_CONTENT = 1000;
 /** Treatment pages are the service landing pages; below this they are thin. */
 const MIN_TREATMENT_WORDS = 700;
 /** Pages that must exist and be in the sitemap. */
-const REQUIRED_URLS = ['/treatments/hydrotherapy', '/treatments/acupuncture'];
+const REQUIRED_URLS = ['/treatments/hydrotherapy', '/treatments/acupuncture', '/services/pet-boarding'];
 
 if (!existsSync(DIST)) {
   console.error('dist/ not found — run `npm run build` first.');
@@ -111,8 +111,8 @@ for (const file of pages) {
       stems.set(stem, word);
     }
     // Condition and treatment pages are local-intent pages.
-    if (/^\/(conditions|treatments)\//.test(rel) && !/ahmedabad/i.test(title)) {
-      fail(`${rel}: title lacks "Ahmedabad" — condition/treatment pages must carry the locality.`);
+    if (/^\/(conditions|treatments|services)\//.test(rel) && !/ahmedabad/i.test(title)) {
+      fail(`${rel}: title lacks "Ahmedabad" — condition/treatment/service pages must carry the locality.`);
     }
     if (titles.has(title)) fail(`${rel}: duplicate title, also on ${titles.get(title)}`);
     else titles.set(title, rel);
@@ -155,7 +155,7 @@ for (const file of pages) {
   }
 
   // ── Treatment pages: depth. A warning, not a failure -- thin pages still index. ──
-  if (/^\/treatments\//.test(rel)) {
+  if (/^\/(treatments|services)\//.test(rel)) {
     const words = text.split(' ').filter(Boolean).length;
     if (words < MIN_TREATMENT_WORDS) warn(`${rel}: ${words} words in #root (target >= ${MIN_TREATMENT_WORDS}).`);
   }
@@ -174,6 +174,8 @@ for (const file of pages) {
       const parsed = JSON.parse(ld.replace(/\\u003c/g, '<'));
       if (!parsed['@context']) fail(`${rel}: JSON-LD missing @context`);
       if (!Array.isArray(parsed['@graph']) || !parsed['@graph'].length) fail(`${rel}: JSON-LD @graph empty`);
+      // Self-serving ratings never earn stars and can be flagged as spam.
+      if (/"AggregateRating"|"Review"/.test(ld)) fail(`${rel}: JSON-LD contains AggregateRating/Review — keep ratings on the GBP only.`);
     } catch (error) {
       fail(`${rel}: JSON-LD does not parse — ${error.message}`);
     }
@@ -207,6 +209,101 @@ if (existsSync(homeFile)) {
   const homeTitle = first(/<title[^>]*>([^<]*)<\/title>/i, homeHtml) ?? '';
   if (!homeTitle.includes('The Pet Physio Vet')) {
     fail(`/: <title> must contain the brand "The Pet Physio Vet"; got "${homeTitle}"`);
+  }
+}
+
+
+// ── Local SEO (plan 2026-10-08): secondary services must be crawlable ──
+const readBuilt = (path) => {
+  const file = path === '/' ? join(DIST, 'index.html') : join(DIST, path.replace(/^\//, ''), 'index.html');
+  return existsSync(file) ? readFileSync(file, 'utf8') : '';
+};
+const ldGraph = (html) => {
+  const raw = first(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/, html);
+  try { return raw ? JSON.parse(raw.replace(/\\u003c/g, '<'))['@graph'] ?? [] : []; } catch { return []; }
+};
+const typesOf = (node) => [].concat(node['@type'] ?? []);
+const rootText = (html) => (first(/<div id="root">([\s\S]*)<\/body>/i, html) ?? '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+const srcFile = (rel) => readFileSync(join(ROOT, rel), 'utf8');
+const bookableSrc = srcFile('src/data/bookableServices.ts');
+const pricesIn = (block) => [...block.matchAll(/price:\s*(\d+)/g)].map((m) => Number(m[1]));
+const inr = (n) => `₹${n.toLocaleString('en-IN')}`;
+
+{
+  const home = readBuilt('/');
+  const text = rootText(home);
+  // The bookable cards are static content now; the live API only gates Book.
+  for (const title of ['Indoor Facility', 'Physiotherapy', 'Swimming', 'Grooming', 'Walking']) {
+    if (!new RegExp(`<h3[^>]*>${title}</h3>`).test(home)) fail(`/: bookable service card "${title}" is not in the prerendered HTML`);
+  }
+  if (!home.includes('href="/services/pet-boarding"')) fail('/: no crawlable link to /services/pet-boarding');
+  if (!/Find us in Shilaj/.test(text)) fail('/: "Find us in Shilaj" block missing from the prerendered HTML');
+  const homeGraph = ldGraph(home);
+  for (const serviceType of ['Pet boarding', 'Pet grooming']) {
+    const node = homeGraph.find((n) => typesOf(n).includes('Service') && n.serviceType === serviceType);
+    if (!node) fail(`/: JSON-LD has no Service with serviceType "${serviceType}"`);
+    else if (!node.provider || !/#business$/.test(node.provider['@id'] ?? '')) fail(`/: ${serviceType} Service is not linked to the business @id`);
+  }
+}
+
+{
+  const path = '/services/pet-boarding';
+  const html = readBuilt(path);
+  if (html) {
+    const title = first(/<title>([\s\S]*?)<\/title>/i, html) ?? '';
+    const h1 = (first(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i, html) ?? '').replace(/<[^>]+>/g, ' ');
+    // Cannibalisation guard: "physiotherapy" belongs to /treatments/indoor-physiotherapy.
+    if (/physiotherapy/i.test(title) || /physiotherapy/i.test(h1)) fail(`${path}: title/H1 must not use "physiotherapy" (owned by /treatments/indoor-physiotherapy)`);
+    if (!/shilaj/i.test(title)) fail(`${path}: title must name Shilaj`);
+    if (!html.includes('href="/treatments/indoor-physiotherapy"')) fail(`${path}: must link to /treatments/indoor-physiotherapy`);
+    const graph = ldGraph(html);
+    const svc = graph.find((n) => typesOf(n).includes('Service') && n.serviceType === 'Pet boarding');
+    if (!svc) fail(`${path}: JSON-LD has no Service with serviceType "Pet boarding"`);
+    else {
+      if (!/#business$/.test(svc.provider?.['@id'] ?? '')) fail(`${path}: boarding Service is not linked to the business @id`);
+      const offers = [].concat(svc.offers ?? []);
+      if (!offers.length) fail(`${path}: boarding Service has no offers`);
+      const text = rootText(html);
+      for (const o of offers) if (!text.includes(inr(Number(o.price)))) fail(`${path}: offer price ${o.price} is not visible on the page`);
+    }
+    const crumbs = graph.find((n) => typesOf(n).includes('BreadcrumbList'));
+    if (!crumbs || (crumbs.itemListElement ?? []).length !== 3) fail(`${path}: BreadcrumbList must be Home › Services › Pet boarding`);
+    if (!graph.some((n) => typesOf(n).includes('FAQPage'))) fail(`${path}: no FAQPage JSON-LD`);
+  }
+  const indoor = readBuilt('/treatments/indoor-physiotherapy');
+  if (indoor && !indoor.includes(`href="${path}"`)) fail('/treatments/indoor-physiotherapy: must link to /services/pet-boarding');
+}
+
+{
+  // Hydrotherapy owns "dog swimming pool": its swimming prices must be on the page.
+  const path = '/treatments/hydrotherapy';
+  const html = readBuilt(path);
+  const text = rootText(html);
+  const title = first(/<title>([\s\S]*?)<\/title>/i, html) ?? '';
+  if (!/swimming/i.test(title)) fail(`${path}: title must mention swimming`);
+  if (!/Swimming sessions and prices/.test(text)) fail(`${path}: "Swimming sessions and prices" section missing`);
+  const block = bookableSrc.slice(bookableSrc.indexOf("code: 'Hydrotherapy'"), bookableSrc.indexOf("code: 'Grooming'"));
+  for (const price of pricesIn(block)) if (!text.includes(inr(price))) fail(`${path}: swimming price ${inr(price)} not shown`);
+  const svc = ldGraph(html).find((n) => typesOf(n).includes('Service'));
+  if (!svc || ![].concat(svc.offers ?? []).length) fail(`${path}: hydrotherapy Service has no swimming offers`);
+}
+
+{
+  // Boarding prices are a static mirror of the backend's BOARDING_DURATIONS.
+  // When the backend source is present (monorepo builds), they must agree.
+  const backend = resolve(ROOT, '../backend/appointments/models/boarding.py');
+  if (existsSync(backend)) {
+    const py = readFileSync(backend, 'utf8');
+    const want = [...py.matchAll(/"label":\s*"([^"]+)"[^}]*"price":\s*(\d+)/g)].map((m) => `${m[1]}=${m[2]}`);
+    const blockStart = bookableSrc.indexOf('BOARDING_PRICES');
+    const block = bookableSrc.slice(blockStart, bookableSrc.indexOf('];', blockStart));
+    const have = [...block.matchAll(/label:\s*'([^']+)',\s*price:\s*(\d+)/g)].map((m) => `${m[1]}=${m[2]}`);
+    if (want.join('|') !== have.join('|')) {
+      fail(`BOARDING_PRICES in src/data/bookableServices.ts (${have.join(', ')}) disagrees with backend BOARDING_DURATIONS (${want.join(', ')})`);
+    }
+    const beds = Number((py.match(/BOARDING_BEDS\s*=\s*(\d+)/) || [])[1]);
+    const landingBeds = Number((bookableSrc.match(/BOARDING_BEDS\s*=\s*(\d+)/) || [])[1]);
+    if (beds && beds !== landingBeds) fail(`BOARDING_BEDS: landing says ${landingBeds}, backend says ${beds}`);
   }
 }
 
