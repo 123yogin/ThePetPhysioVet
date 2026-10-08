@@ -1,7 +1,8 @@
 import React from 'react';
 import { Activity, Waves, BedDouble, Sparkles, Footprints } from 'lucide-react';
 import { BOOKABLE_SERVICES, BookableService } from '../data/bookableServices';
-import { useRouter } from '../seo/router';
+import { Link, useRouter } from '../seo/router';
+import { carePath, servicePath } from '../seo/routes';
 import { bookingHref } from './BookingPanel';
 import { SplitWords, useStagger } from '../motion';
 import { Pulse } from '../motion/extras';
@@ -24,10 +25,10 @@ import { rupee } from '../lib/format';
  * the tall tile has to sit beside two short ones -- auto-flow would leave a
  * hole under it.
  *
- * Clicking a tile opens what that service includes; it does NOT jump to the
- * booking form. Tile size is the loudest signal on this section, so the visitor
- * gets to read before being asked for their phone number, and the Book button
- * lives inside the panel once they have.
+ * Each tile shows what the service includes (and its prices, where it has
+ * them) as static content, so the prerendered HTML carries every service. The
+ * Book button opens the booking panel for that service and appears only when
+ * the clinic's API lists the code as publicly bookable.
  *
  * Below `lg` the whole thing becomes one column. A two-column bento with row
  * spans cannot survive a 390px screen, and the size hierarchy simply does not
@@ -65,20 +66,32 @@ const PLACEMENT: Record<string, string> = {
   Walking: 'lg:col-start-2 lg:row-start-3',
 };
 
+/**
+ * Where each card's "read more" link goes. A plain crawlable href, so the
+ * prerendered homepage links every bookable service to the page that covers it.
+ * Grooming has no page of its own yet, so it carries no link.
+ */
+const DETAIL_LINKS: Record<string, { href: string; label: string }> = {
+  IndoorFacility: { href: carePath('pet-boarding'), label: 'Pet boarding in Shilaj' },
+  Physiotherapy: { href: '/#services', label: 'Treatment modalities' },
+  Hydrotherapy: { href: servicePath('hydrotherapy'), label: 'Dog swimming pool & hydrotherapy' },
+  Walking: { href: `${carePath('pet-boarding')}#dog-walking`, label: 'Dog walking' },
+};
+
 const Tile: React.FC<{
   service: BookableService;
-  href: string;
+  /** Booking href, or null when the live API does not (yet) offer this code. */
+  bookHref: string | null;
   onOpen: (href: string) => (event: React.MouseEvent) => void;
-}> = ({ service, href, onOpen }) => {
+}> = ({ service, bookHref, onOpen }) => {
   const Icon = ICONS[service.icon] ?? Activity;
+  const detail = DETAIL_LINKS[service.code];
+  const headingId = `book-${service.code.toLowerCase()}`;
   return (
-  <a
-    href={href}
-    onClick={onOpen(href)}
-    aria-label={`${service.title} — what's included`}
-    data-cursor="Book"
+  <article
+    aria-labelledby={headingId}
     data-tilt
-    className={`${PLACEMENT[service.code] ?? ''} group relative overflow-hidden text-left bg-(--c-surface) border border-(--c-line)/30 p-8 sm:p-10 min-h-[220px] flex flex-col justify-between hover:bg-white transition-colors duration-500`}
+    className={`${PLACEMENT[service.code] ?? ''} group relative overflow-hidden text-left bg-(--c-surface) border border-(--c-line)/30 p-8 sm:p-10 min-h-[220px] flex flex-col justify-between gap-6 hover:bg-white transition-colors duration-500`}
   >
     {/* The tile's own icon again, oversized and very faint, as texture.
 
@@ -98,42 +111,76 @@ const Tile: React.FC<{
       className="pointer-events-none absolute -right-8 -bottom-10 w-48 h-48 text-(--c-accent) opacity-[0.06] group-hover:opacity-[0.10] transition-opacity duration-500"
     />
 
-    <span className="icon-nudge relative text-(--c-accent) opacity-70 group-hover:opacity-100 transition-opacity">
+    <span aria-hidden="true" className="icon-nudge relative text-(--c-accent) opacity-70 group-hover:opacity-100 transition-opacity">
       <Icon className="w-7 h-7" />
     </span>
 
-    <span className="relative block">
-      <span className="block font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-2 group-hover:text-(--c-accent) transition-colors">
+    <div className="relative">
+      <h3 id={headingId} className="font-(family-name:--f-display) text-2xl sm:text-3xl text-(--c-ink) font-light mb-2">
         {service.title}
-      </span>
-      <span className="block font-(family-name:--f-body) text-sm text-(--c-body) font-light leading-relaxed max-w-[42ch]">
+      </h3>
+      <p className="font-(family-name:--f-body) text-sm text-(--c-body) font-light leading-relaxed max-w-[42ch]">
         {service.summary}
-      </span>
+      </p>
+
+      {/* What it includes, in the clinic's own words. Static content, so it is
+          in the prerendered HTML whether or not the booking API answers. */}
+      <ul className="mt-4 space-y-1.5 max-w-[42ch]">
+        {service.includes.map((item) => (
+          <li key={item} className="flex gap-2.5 font-(family-name:--f-body) text-xs text-(--c-body) font-light leading-relaxed">
+            <span aria-hidden="true" className="mt-1.5 w-1 h-1 bg-(--c-accent) shrink-0" />
+            {item}
+          </li>
+        ))}
+      </ul>
 
       {/* Price menu, on the card itself for services that have one (Swimming,
-          Grooming). Informational — the visit is still reserved and paid at the
+          Grooming). Informational -- the visit is still reserved and paid at the
           clinic; see the booking panel. */}
       {service.priceList && (
-        <span className="mt-4 block max-w-[42ch] border-t border-(--c-line)/30 pt-3">
+        <dl className="mt-4 block max-w-[42ch] border-t border-(--c-line)/30 pt-3">
           {service.priceList.map((p) => (
-            <span
+            <div
               key={p.label}
               className="flex justify-between gap-4 font-(family-name:--f-body) text-xs text-(--c-body) font-light py-1"
             >
-              <span>{p.label}</span>
-              <span className="text-(--c-ink) font-medium whitespace-nowrap">
+              <dt>{p.label}</dt>
+              <dd className="text-(--c-ink) font-medium whitespace-nowrap">
                 {rupee(p.price)}
-              </span>
-            </span>
+              </dd>
+            </div>
           ))}
-        </span>
+        </dl>
       )}
 
-      <span className="mt-5 inline-block text-xs uppercase tracking-widest text-(--c-accent) font-semibold">
-        What&rsquo;s included &rarr;
-      </span>
-    </span>
-  </a>
+      {/* Actions. The row keeps its height whether or not Book has arrived, so
+          the live check never shifts the layout. Book is gated on the clinic's
+          own /appointment-options: a retired code shows no Book button rather
+          than a form the API would reject. The content above never depends on
+          it. */}
+      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 min-h-11">
+        {bookHref && (
+          <a
+            href={bookHref}
+            onClick={onOpen(bookHref)}
+            data-cursor="Book"
+            aria-label={`Book ${service.title}`}
+            className="inline-flex items-center justify-center min-h-11 px-5 bg-(--c-ink) text-(--c-bg) text-xs uppercase tracking-widest font-semibold hover:bg-(--c-accent) transition-colors"
+          >
+            Book &rarr;
+          </a>
+        )}
+        {detail && (
+          <Link
+            to={detail.href}
+            className="inline-flex items-center min-h-11 text-xs uppercase tracking-widest text-(--c-accent) font-semibold underline-offset-4 hover:underline"
+          >
+            {detail.label}
+          </Link>
+        )}
+      </div>
+    </div>
+  </article>
   );
 };
 
@@ -148,8 +195,9 @@ export const BookableServices: React.FC<BookableServicesProps> = ({ availableCod
   // while the top was on screen (the empty band under the cards).
   const tilesRef = useStagger<HTMLDivElement>({ step: 110, trigger: 'container' }, [availableCodes.join()]);
 
-  const offered = BOOKABLE_SERVICES.filter((s) => availableCodes.includes(s.code));
-  if (offered.length === 0) return null;
+  // Every card renders from static data -- the prerendered page must carry
+  // them, and crawlers never run the API call. Only Book depends on it.
+  const offered = new Set(availableCodes);
 
   const open = (href: string) => (event: React.MouseEvent) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -167,18 +215,18 @@ export const BookableServices: React.FC<BookableServicesProps> = ({ availableCod
           </span>
           <SplitWords className="font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light">What would you like to book?</SplitWords>
           <p className="font-(family-name:--f-body) text-base sm:text-lg text-(--c-body) font-light leading-relaxed mt-4 max-w-[60ch]">
-            Pick a service to see what it includes and request it from there.
-            Not sure which one your pet needs? Choose whichever looks closest,
-            or call the clinic and we will advise.
+            Physiotherapy, swimming, boarding and day care, grooming and walks
+            at our Shilaj clinic. Not sure which one your pet needs? Choose
+            whichever looks closest, or call the clinic and we will advise.
           </p>
         </div>
 
         <div ref={tilesRef} className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-3 gap-px bg-(--c-line)/20">
-          {offered.map((s) => (
+          {BOOKABLE_SERVICES.map((s) => (
             <Tile
               key={s.code}
               service={s}
-              href={bookingHref(path, { service: s.code })}
+              bookHref={offered.has(s.code) ? bookingHref(path, { service: s.code }) : null}
               onOpen={open}
             />
           ))}

@@ -7,7 +7,7 @@ import { Link } from '../seo/router';
 import { conditionPath, servicePath } from '../seo/routes';
 
 /** Render prose containing [[label|/path]] inline links as real, crawlable anchors. */
-const RichText: React.FC<{ text: string }> = ({ text }) => {
+export const RichText: React.FC<{ text: string }> = ({ text }) => {
   const parts = text.split(/(\[\[[^|\]]+\|[^\]]+\]\])/g);
   return (
     <>
