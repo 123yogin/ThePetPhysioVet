@@ -44,7 +44,8 @@ interface Props {
 
 
 import { field, labelCls, primaryBtn } from '../lib/formStyles';
-import { rupee } from '../lib/format';
+import { rupee, boardingHomeDate, shortDate } from '../lib/format';
+import { friendlyApiError, isPlausiblePhone, PHONE_HINT } from '../lib/errors';
 
 export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
   const [menu, setMenu] = React.useState<Menu | null>(null);
@@ -139,7 +140,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       }
       const expiresAt = Date.parse(data.expires_at);
       if (!res.ok || !data.reference || !Number.isFinite(expiresAt)) {
-        setHoldNote(data.detail || 'We could not hold a bed. Please try again.');
+        setHoldNote(friendlyApiError(data.detail, 'We could not hold a bed. Please try again.'));
         return;
       }
       // Seed the countdown now so there is no one-frame "expired" flash.
@@ -167,7 +168,9 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
       : full ? 'Fully booked for those dates — try another date or duration.'
       : !holdLive ? 'Hold a bed first.'
       : !form.petName.trim() || !form.ownerName.trim() || !form.ownerPhone.trim() ? 'Please fill in the required fields.'
+      : !isPlausiblePhone(form.ownerPhone) ? PHONE_HINT
       : !form.emergencyPhone.trim() ? 'Please add an emergency contact number.'
+      : !isPlausiblePhone(form.emergencyPhone) ? `Emergency contact: ${PHONE_HINT.charAt(0).toLowerCase()}${PHONE_HINT.slice(1)}`
       : samePhone ? 'Emergency contact must be a different number.'
       : !aadhaarOk ? aadhaarMsg
       : !terms ? 'Please accept the terms and conditions.'
@@ -213,7 +216,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
         return;
       }
       if (!res.ok) {
-        setError(data.detail || 'We could not book that stay. Please try again.');
+        setError(friendlyApiError(data.detail, 'We could not book that stay. Please try again.'));
         return;
       }
       setBooked({ reference: data.reference, detail: data.detail });
@@ -300,7 +303,11 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
           : selection
             ? full
               ? 'Fully booked for those dates — try another date or duration.'
-              : `${selection.available} of ${menu?.capacity ?? 6} beds free · until ${selection.check_out} · ${rupee(selection.price)}`
+              : `${selection.available} of ${menu?.capacity ?? 6} beds free · ${(() => {
+                  // check_out is the last night; say the day the pet goes home (D4).
+                  const home = boardingHomeDate(selection.check_in, selection.check_out, selection.duration);
+                  return home === selection.check_in ? 'home the same day' : `home ${shortDate(home)}`;
+                })()} · ${rupee(selection.price)}`
             : 'Pick a duration to see availability.'}
       </p>
 
@@ -368,7 +375,7 @@ export const IndoorFacilityBooking: React.FC<Props> = ({ onClose }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label className={labelCls} htmlFor="brd-phone">Phone *</label>
-            <input id="brd-phone" className={field} value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} placeholder="e.g. 98765 43210" />
+            <input id="brd-phone" type="tel" inputMode="tel" autoComplete="tel" className={field} value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} placeholder="e.g. 98765 43210" />
           </div>
           <div>
             <label className={labelCls} htmlFor="brd-email">Email</label>

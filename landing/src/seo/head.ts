@@ -11,6 +11,7 @@
 import { SITE, absoluteUrl } from './siteConfig';
 import { getPageMeta } from './metadata';
 import { serializeGraph } from './schema';
+import { matchRoute } from './routes';
 
 export interface MetaTag {
   /** Attribute used to identify the tag for updates: name, property or httpEquiv. */
@@ -21,13 +22,19 @@ export interface MetaTag {
 
 export interface HeadData {
   title: string;
-  canonical: string;
+  /** null on the 404 template: an error page has no canonical URL. */
+  canonical: string | null;
   metas: MetaTag[];
-  jsonLd: string;
+  /** null on the 404 template: it describes no entity worth structured data. */
+  jsonLd: string | null;
 }
 
 export function buildHead(pathname: string): HeadData {
   const meta = getPageMeta(pathname);
+  // Live QA D8: the 404 template carried canonical=/404 and the site's full
+  // JSON-LD graph. A not-found page is noindex and must not claim a canonical
+  // URL or describe the business as if it were a real page.
+  const isNotFound = matchRoute(pathname).route.kind === 'notfound';
   const metas: MetaTag[] = [
     { key: 'name', keyValue: 'description', content: meta.description },
     { key: 'name', keyValue: 'robots', content: meta.robots },
@@ -37,7 +44,7 @@ export function buildHead(pathname: string): HeadData {
     { key: 'property', keyValue: 'og:site_name', content: SITE.brandName },
     { key: 'property', keyValue: 'og:title', content: meta.title },
     { key: 'property', keyValue: 'og:description', content: meta.description },
-    { key: 'property', keyValue: 'og:url', content: meta.canonical },
+    ...(isNotFound ? [] : [{ key: 'property' as const, keyValue: 'og:url', content: meta.canonical }]),
     { key: 'property', keyValue: 'og:locale', content: SITE.locale },
     { key: 'property', keyValue: 'og:image', content: meta.image },
     { key: 'property', keyValue: 'og:image:alt', content: meta.imageAlt },
@@ -64,7 +71,12 @@ export function buildHead(pathname: string): HeadData {
     metas.push({ key: 'name', keyValue: 'msvalidate.01', content: SITE.verification.bing });
   }
 
-  return { title: meta.title, canonical: meta.canonical, metas, jsonLd: serializeGraph(pathname) };
+  return {
+    title: meta.title,
+    canonical: isNotFound ? null : meta.canonical,
+    metas,
+    jsonLd: isNotFound ? null : serializeGraph(pathname),
+  };
 }
 
 const escapeAttr = (value: string): string =>
@@ -79,14 +91,18 @@ export function renderHeadHtml(pathname: string): string {
   const head = buildHead(pathname);
   const lines = [
     `<title>${escapeAttr(head.title)}</title>`,
-    `<link rel="canonical" href="${escapeAttr(head.canonical)}" />`,
-    // Single-language site: a self-referencing hreflang plus x-default is the
-    // correct, explicit signal (it tells search/AI engines the page targets this
-    // language and is the default for all others), not an omission.
-    `<link rel="alternate" hreflang="${escapeAttr(SITE.lang.toLowerCase())}" href="${escapeAttr(head.canonical)}" />`,
-    `<link rel="alternate" hreflang="x-default" href="${escapeAttr(head.canonical)}" />`,
+    ...(head.canonical
+      ? [
+          `<link rel="canonical" href="${escapeAttr(head.canonical)}" />`,
+          // Single-language site: a self-referencing hreflang plus x-default is the
+          // correct, explicit signal (it tells search/AI engines the page targets this
+          // language and is the default for all others), not an omission.
+          `<link rel="alternate" hreflang="${escapeAttr(SITE.lang.toLowerCase())}" href="${escapeAttr(head.canonical)}" />`,
+          `<link rel="alternate" hreflang="x-default" href="${escapeAttr(head.canonical)}" />`,
+        ]
+      : []),
     ...head.metas.map((m) => `<meta ${m.key}="${m.keyValue}" content="${escapeAttr(m.content)}" />`),
-    `<script type="application/ld+json">${head.jsonLd}</script>`,
+    ...(head.jsonLd ? [`<script type="application/ld+json">${head.jsonLd}</script>`] : []),
   ];
   return lines.join('\n    ');
 }
@@ -114,17 +130,26 @@ export function applyHead(pathname: string): void {
     el.setAttribute('content', tag.content);
   };
   head.metas.forEach(setMeta);
+  if (!head.canonical) {
+    document.head.querySelector('meta[property="og:url"]')?.remove();
+  }
 
   let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-  if (!canonical) {
+  if (!head.canonical) {
+    canonical?.remove();
+  } else if (!canonical) {
     canonical = document.createElement('link');
     canonical.rel = 'canonical';
     canonical.setAttribute('data-seo', 'managed');
     document.head.appendChild(canonical);
   }
-  canonical.href = head.canonical;
+  if (canonical && head.canonical) canonical.href = head.canonical;
 
   let ld = document.head.querySelector<HTMLScriptElement>('script[type="application/ld+json"][data-seo="managed"]');
+  if (!head.jsonLd) {
+    ld?.remove();
+    return;
+  }
   if (!ld) {
     ld = document.createElement('script');
     ld.type = 'application/ld+json';

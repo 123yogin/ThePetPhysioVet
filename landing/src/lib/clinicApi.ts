@@ -1,3 +1,5 @@
+import { friendlyApiError } from './errors';
+
 /**
  * Shared booking helpers — the clinic API base URL and the local-date formatter
  * were copy-pasted across every booking subform (BookingForm,
@@ -45,7 +47,7 @@ export async function postEnquiry(payload: Record<string, unknown>): Promise<any
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body?.detail || 'We could not send your enquiry. Please try again.');
+    throw new Error(friendlyApiError(body?.detail, 'We could not send your enquiry. Please try again.'));
   }
   return body;
 }
