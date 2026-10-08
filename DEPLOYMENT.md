@@ -12,23 +12,35 @@ defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any 
 > diagnostic-report, query attachment and pet-photo upload with an HTML 500. New uploads now
 > go to the **private** Blob store **`petphysio-files`** (region `iad1`), which is connected
 > to the Vercel project; Vercel injects **`BLOB_READ_WRITE_TOKEN`** into Production, Preview
-> and Development, and its presence selects `appointments/storage_blob.py::BlobStorage`.
+> and Development, but only **Production** (`VERCEL_ENV=production`) selects
+> `appointments/storage_blob.py::BlobStorage` from it.
 > The `StoredFile` table stays as the index (name, size, type, uploader, blob URL; migration
 > `0025` made `content` nullable and added `blob_url`), so the owner quota and global
 > ceiling still sum `StoredFile.size`. Private blobs are never public URLs: the signed
 > `GET /api/v1/files/<token>` route fetches the blob server-side with the token and streams
 > it back (attachment + nosniff + original filename).
 >
-> **Storage selection** (`settings._default_storage_backend`): `FILE_STORAGE=blob`, or
-> `FILE_STORAGE` unset with `BLOB_READ_WRITE_TOKEN` set → Blob (explicit `blob` with no or
-> a malformed token refuses to boot); `FILE_STORAGE=db`, or unset on Vercel with no token →
-> Postgres (`DatabaseStorage`, the fallback); otherwise the local filesystem. A local
-> `.env` from `vercel env pull` contains the token and therefore writes to the real store —
-> set `FILE_STORAGE=filesystem` for local work. Rows written earlier by `DatabaseStorage`
-> keep their bytes in `StoredFile.content` and are still served from Postgres; move them
-> with `python manage.py migrate_files_to_blob` (dry run) then `--apply` (production had 0
-> stored files at the switch). A `pg_dump` no longer contains Blob-backed uploads — the
-> store is their only copy.
+> **Storage selection** (`settings._default_storage_backend`):
+> - `FILE_STORAGE=blob` → Blob, in any environment (no or a malformed token refuses to boot).
+> - `FILE_STORAGE` unset + `BLOB_READ_WRITE_TOKEN` set + `VERCEL_ENV=production` → Blob.
+> - `FILE_STORAGE=db`, or `FILE_STORAGE` unset on Vercel otherwise (Preview, Development,
+>   or no token) → Postgres (`DatabaseStorage`). Previews hold the same token but must never
+>   write to or delete from the production store, which a preview database copied from
+>   production could otherwise do.
+> - Anything else, e.g. local dev with a `.env` from `vercel env pull` → the local
+>   filesystem. (If that `.env` also carries `VERCEL=1`, the Vercel rule above gives
+>   Postgres; still never Blob.) Set `FILE_STORAGE=filesystem` to be explicit.
+>
+> Rows written earlier by `DatabaseStorage` keep their bytes in `StoredFile.content` and are
+> still served from Postgres; move them with `python manage.py migrate_files_to_blob` (dry
+> run) then `--apply` (production had 0 stored files at the switch). A `pg_dump` no longer
+> contains Blob-backed uploads — the store is their only copy.
+>
+> **Orphan blobs.** If an upload's request transaction rolls back after the Blob PUT, the
+> blob has no `StoredFile` row. `python manage.py cleanup_orphan_blobs` (dry run) lists
+> blobs older than 1 hour with no row; `--apply` deletes them. Run it against production
+> with the production token and `DATABASE_URL` only. Listing costs one advanced operation
+> per 1,000 blobs; deletes are free.
 >
 > **Vercel Blob Hobby limits** (vercel.com/docs/vercel-blob/usage-and-pricing, updated
 > 2026-09-23): 1 GB storage/month, 10,000 simple operations (cache-miss reads, `head`),

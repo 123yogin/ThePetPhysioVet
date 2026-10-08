@@ -11,6 +11,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
@@ -54,6 +55,8 @@ class FakeBlob:
         self.blobs = {}  # pathname -> (bytes, content_type)
         self.requests = []
         self.fail_with = None  # HTTP status to answer every request with
+        self.uploaded_at = {}  # pathname -> ISO timestamp (default: now)
+        self.page_size = 1000
 
     def _error(self, req, status, code):
         body = json.dumps({"error": {"code": code, "message": code}}).encode()
@@ -87,6 +90,21 @@ class FakeBlob:
                 "url": url, "downloadUrl": url + "?download=1", "pathname": pathname,
                 "contentType": headers.get("x-content-type", ""),
                 "contentDisposition": "", "etag": '"e1"',
+            }).encode())
+        if req.full_url.startswith(API_ROOT + "?") and method == "GET":  # list()
+            q = parse_qs(parts.query)
+            names = sorted(self.blobs)
+            start = int(q.get("cursor", ["0"])[0])
+            limit = min(int(q.get("limit", ["1000"])[0]), self.page_size)
+            page = names[start:start + limit]
+            more = start + limit < len(names)
+            now = datetime.now(timezone.utc).isoformat()
+            return _Resp(json.dumps({
+                "blobs": [{"url": f"https://{STORE_HOST}/{n}", "pathname": n,
+                           "size": len(self.blobs[n][0]),
+                           "uploadedAt": self.uploaded_at.get(n, now), "etag": '"e"'}
+                          for n in page],
+                "cursor": str(start + limit) if more else None, "hasMore": more,
             }).encode())
         if req.full_url == API_ROOT + "/delete" and method == "POST":
             for url in json.loads(req.data)["urls"]:
@@ -246,17 +264,35 @@ class StorageSelectionTests(SimpleTestCase):
             self.pick({"FILE_STORAGE": "blob", "BLOB_READ_WRITE_TOKEN": "not-a-token-xyz"})
         self.assertNotIn("not-a-token-xyz", str(ctx.exception))
 
-    def test_token_alone_selects_blob(self):
-        self.assertEqual(self.pick({"BLOB_READ_WRITE_TOKEN": TOKEN}), self.BLOB)
-        self.assertEqual(self.pick({"BLOB_READ_WRITE_TOKEN": TOKEN, "VERCEL": "1"}), self.BLOB)
+    def test_token_selects_blob_only_in_vercel_production(self):
+        env = {"BLOB_READ_WRITE_TOKEN": TOKEN, "VERCEL": "1", "VERCEL_ENV": "production"}
+        self.assertEqual(self.pick(env), self.BLOB)
+
+    def test_token_on_vercel_preview_or_development_uses_db(self):
+        for vercel_env in ("preview", "development"):
+            with self.subTest(vercel_env=vercel_env):
+                env = {"BLOB_READ_WRITE_TOKEN": TOKEN, "VERCEL": "1", "VERCEL_ENV": vercel_env}
+                self.assertEqual(self.pick(env), self.DB)
+
+    def test_pulled_token_locally_keeps_filesystem(self):
+        self.assertEqual(self.pick({"BLOB_READ_WRITE_TOKEN": TOKEN}), self.FS)
+        self.assertEqual(
+            self.pick({"BLOB_READ_WRITE_TOKEN": TOKEN, "VERCEL_ENV": "development"}), self.FS)
+
+    def test_explicit_blob_is_honoured_anywhere(self):
+        for extra in ({}, {"VERCEL": "1", "VERCEL_ENV": "preview"}):
+            with self.subTest(extra=extra):
+                env = {"FILE_STORAGE": "blob", "BLOB_READ_WRITE_TOKEN": TOKEN, **extra}
+                self.assertEqual(self.pick(env), self.BLOB)
 
     def test_explicit_db_and_filesystem_win_over_token(self):
-        self.assertEqual(self.pick({"FILE_STORAGE": "db", "BLOB_READ_WRITE_TOKEN": TOKEN}), self.DB)
-        self.assertEqual(
-            self.pick({"FILE_STORAGE": "filesystem", "BLOB_READ_WRITE_TOKEN": TOKEN}), self.FS)
+        prod = {"BLOB_READ_WRITE_TOKEN": TOKEN, "VERCEL": "1", "VERCEL_ENV": "production"}
+        self.assertEqual(self.pick({**prod, "FILE_STORAGE": "db"}), self.DB)
+        self.assertEqual(self.pick({**prod, "FILE_STORAGE": "filesystem"}), self.FS)
 
     def test_vercel_without_token_falls_back_to_db(self):
         self.assertEqual(self.pick({"VERCEL": "1"}), self.DB)
+        self.assertEqual(self.pick({"VERCEL": "1", "VERCEL_ENV": "production"}), self.DB)
 
     def test_local_default_is_filesystem(self):
         self.assertEqual(self.pick({}), self.FS)
@@ -391,3 +427,63 @@ class MigrateFilesToBlobCommandTests(BlobTestMixin, TestCase):
     def test_apply_without_token_refuses(self):
         with self.assertRaises(CommandError):
             self.run_cmd("--apply")
+
+
+class CleanupOrphanBlobsCommandTests(BlobTestMixin, TestCase):
+    OLD = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+
+    def setUp(self):
+        super().setUp()
+        self.storage = BlobStorage()
+        self.kept = self.storage.save("pets/kept.png", ContentFile(b"K"))
+        self.blob.uploaded_at[self.kept] = self.OLD
+        self.blob.blobs["pets/orphan.png"] = (b"O", "image/png")
+        self.blob.uploaded_at["pets/orphan.png"] = self.OLD
+        self.blob.blobs["pets/young.png"] = (b"Y", "image/png")  # uploaded just now
+
+    def run_cmd(self, *args):
+        out = io.StringIO()
+        call_command("cleanup_orphan_blobs", *args, stdout=out)
+        return out.getvalue()
+
+    def test_list_call_shape(self):
+        self.run_cmd()
+        listing = [r for r in self.blob.requests if r["url"].startswith(API_ROOT + "?")][0]
+        self.assertEqual(listing["method"], "GET")
+        self.assertEqual(listing["headers"]["authorization"], f"Bearer {TOKEN}")
+        self.assertEqual(listing["headers"]["x-api-version"], "12")
+        self.assertEqual(listing["timeout"], 10)
+
+    def test_dry_run_lists_only_old_unindexed_blobs(self):
+        out = self.run_cmd()
+        self.assertIn("pets/orphan.png", out)
+        self.assertNotIn("pets/young.png", out)
+        self.assertNotIn(self.kept, out)
+        self.assertIn("--apply", out)
+        self.assertFalse(any(r["method"] == "POST" for r in self.blob.requests))
+        self.assertIn("pets/orphan.png", self.blob.blobs)
+
+    def test_apply_deletes_only_orphans(self):
+        out = self.run_cmd("--apply")
+        self.assertIn("Deleted 1 orphan blob(s)", out)
+        self.assertEqual(set(self.blob.blobs), {self.kept, "pets/young.png"})
+        self.assertTrue(StoredFile.objects.filter(name=self.kept).exists())
+
+    def test_follows_pagination(self):
+        self.blob.page_size = 1
+        for i in range(3):
+            self.blob.blobs[f"query_attachments/o{i}.pdf"] = (b"x", "application/pdf")
+            self.blob.uploaded_at[f"query_attachments/o{i}.pdf"] = self.OLD
+        self.run_cmd("--apply")
+        self.assertEqual(set(self.blob.blobs), {self.kept, "pets/young.png"})
+
+    def test_listing_failure_is_command_error_without_token(self):
+        self.blob.fail_with = 500
+        with self.assertRaises(CommandError) as ctx:
+            self.run_cmd()
+        self.assertNotIn(TOKEN, str(ctx.exception))
+
+    @override_settings(BLOB_READ_WRITE_TOKEN="")
+    def test_without_token_refuses(self):
+        with self.assertRaises(CommandError):
+            self.run_cmd()

@@ -22,7 +22,10 @@ dist/index.js `del`/`get`) and vercel.com/docs/vercel-blob/private-storage:
         x-allow-overwrite: 0|1, x-content-type. JSON reply carries `url`.
 - read: GET https://<storeId>.private.blob.vercel-storage.com/<name> with
         authorization: Bearer <token> (storeId = 4th "_" field of the token).
-- del:  POST https://vercel.com/api/blob/delete, JSON {"urls": [<url>]}.
+- del:  POST https://vercel.com/api/blob/delete, JSON {"urls": [<url>, ...]}.
+- list: GET https://vercel.com/api/blob?limit=<n>[&cursor=<c>] (index.js
+        `list`); JSON {blobs: [{url, pathname, size, uploadedAt, etag}],
+        cursor, hasMore}. Used only by `manage.py cleanup_orphan_blobs`.
 
 `exists`/`size` answer from the index rather than the Blob `head` call: the
 row is authoritative for our names, and Hobby includes only 10k simple
@@ -76,7 +79,8 @@ def _allowed_url(url):
     parts = urlsplit(url)
     host = (parts.hostname or "").lower()
     return parts.scheme == "https" and (
-        host.endswith(BLOB_HOST_SUFFIX) or url.startswith(BLOB_API_URL + "/")
+        host.endswith(BLOB_HOST_SUFFIX)
+        or url.startswith(BLOB_API_URL + "/") or url.startswith(BLOB_API_URL + "?")
     )
 
 
@@ -150,12 +154,35 @@ class BlobStorage(DatabaseStorage):
             raise BlobStorageError("Vercel Blob put failed: unexpected response")
         return url
 
-    def _delete_blob(self, url):
+    def list_blobs(self, limit=1000):
+        """Yield every blob in the store as the API's dict (url, pathname,
+        size, uploadedAt, etag), following `cursor` while `hasMore`. Each page
+        is one advanced operation."""
+        cursor = None
+        while True:
+            params = {"limit": str(limit)}
+            if cursor:
+                params["cursor"] = cursor
+            with self._request("list", "GET", f"{BLOB_API_URL}?{urlencode(params)}") as resp:
+                try:
+                    page = json.loads(resp.read())
+                except ValueError:
+                    raise BlobStorageError("Vercel Blob list failed: unexpected response") from None
+            yield from page.get("blobs") or []
+            cursor = page.get("cursor")
+            if not (page.get("hasMore") and cursor):
+                return
+
+    def delete_blobs(self, urls):
+        """Delete blobs by URL in one call (the API takes a list)."""
         self._request(
             "delete", "POST", f"{BLOB_API_URL}/delete",
-            data=json.dumps({"urls": [url]}).encode(),
+            data=json.dumps({"urls": list(urls)}).encode(),
             headers={"content-type": "application/json"},
         ).close()
+
+    def _delete_blob(self, url):
+        self.delete_blobs([url])
 
     # --- Storage API ----------------------------------------------------
 

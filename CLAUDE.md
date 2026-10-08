@@ -414,16 +414,18 @@ Django or nginx — never add one back.
 
 ## Uploads in Vercel Blob — 2026-10-08 (supersedes the bytes-in-Postgres part above)
 New uploads go to the **private** Vercel Blob store `petphysio-files` via
-`appointments/storage_blob.py::BlobStorage`, selected by `FILE_STORAGE=blob` or by
-`BLOB_READ_WRITE_TOKEN` being set with `FILE_STORAGE` unset (Vercel injects the token in
-Production, Preview and Development). `StoredFile` is now the **index** (name, size, type,
+`appointments/storage_blob.py::BlobStorage`, selected by `FILE_STORAGE=blob` (anywhere) or,
+with `FILE_STORAGE` unset, by `BLOB_READ_WRITE_TOKEN` **and** `VERCEL_ENV=production`.
+Vercel injects the token into Preview and Development too; those fall back to
+`DatabaseStorage`, and local dev stays on the filesystem, so nothing but production
+touches the store. `StoredFile` is now the **index** (name, size, type,
 uploader, `blob_url`; `content` NULL for Blob rows) — quota, ceiling and token binding work
 as before. Rows with bytes in `content` are still served from Postgres;
-`manage.py migrate_files_to_blob [--apply]` moves them. HTTP is stdlib urllib (10 s
+`manage.py migrate_files_to_blob [--apply]` moves them, and
+`manage.py cleanup_orphan_blobs [--apply]` removes blobs older than 1 h with no row. HTTP is stdlib urllib (10 s
 timeout, redirects refused, token never logged), calls copied from the `@vercel/blob`
 2.8.1 source — see the module docstring. Tests fake the opener
-(`tests/test_blob_storage.py::FakeBlob`); **never let a test reach the network.** A pulled
-`.env` contains the real token: set `FILE_STORAGE=filesystem` for local dev.
+(`tests/test_blob_storage.py::FakeBlob`); **never let a test reach the network.**
 
 ## Local dev — run both (two terminals)
 - **Backend:** `cd backend && DEBUG=true ./.venv/bin/python manage.py runserver 127.0.0.1:8000`

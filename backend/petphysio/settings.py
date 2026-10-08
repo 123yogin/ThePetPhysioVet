@@ -222,16 +222,16 @@ def _default_storage_backend(environ):
     Vercel's serverless filesystem is read-only, so writing to MEDIA_ROOT there
     crashed every upload with an HTML 500. In order:
 
-    - FILE_STORAGE=blob, or FILE_STORAGE unset with BLOB_READ_WRITE_TOKEN set
-      (Vercel injects it once a Blob store is connected): a private Vercel Blob
-      store (appointments/storage_blob.py `BlobStorage`). Explicit `blob`
+    - FILE_STORAGE=blob (honoured anywhere), or FILE_STORAGE unset with
+      BLOB_READ_WRITE_TOKEN set AND VERCEL_ENV=production: the private Vercel
+      Blob store (appointments/storage_blob.py `BlobStorage`). Explicit `blob`
       without a usable token fails fast.
-    - FILE_STORAGE=db, or FILE_STORAGE unset on Vercel (VERCEL=1) without a
-      token: Postgres (appointments/storage.py `DatabaseStorage`), the fallback.
-    - Otherwise (local dev, FILE_STORAGE=filesystem): MEDIA_ROOT.
-
-    Note a local `.env` pulled from Vercel carries the token, which selects the
-    real Blob store; set FILE_STORAGE=filesystem to keep dev uploads local.
+    - FILE_STORAGE=db, or FILE_STORAGE unset on Vercel (VERCEL=1) otherwise --
+      Preview and Development deployments get the token too, but must not
+      write to (or delete from) the production store: Postgres
+      (appointments/storage.py `DatabaseStorage`).
+    - Otherwise (local dev, FILE_STORAGE=filesystem): MEDIA_ROOT, even when a
+      `.env` pulled from Vercel carries the token.
     An unrecognised value fails fast rather than silently falling back to a
     backend that cannot write in production.
     """
@@ -241,7 +241,8 @@ def _default_storage_backend(environ):
             f"FILE_STORAGE must be 'blob', 'db' or 'filesystem', got {choice!r}."
         )
     token = _blob_token(environ)
-    if choice == "blob" or (choice == "" and token):
+    production = environ.get("VERCEL_ENV", "").strip().lower() == "production"
+    if choice == "blob" or (choice == "" and token and production):
         # Same shape the @vercel/blob SDK parses: vercel_blob_rw_<storeId>_<secret>.
         # The message never echoes the value -- it is a credential.
         parts = token.split("_")
