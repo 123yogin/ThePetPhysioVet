@@ -573,6 +573,15 @@ export const GALLERY_ITEMS: GalleryItem[] = [
     altText: 'Still from a reel in which Dr. Dhanvi Patel explains a physiotherapy session',
     videoUrl: '/reels/reel-therapy-explained.mp4',
     previewUrl: '/reels/reel-therapy-explained-loop.mp4'
+  },
+  {
+    id: 'r5',
+    title: 'Bubble the kitten walks again',
+    category: 'Patient stories',
+    imageUrl: '',
+    altText: 'Reel following Bubble, a kitten who could not stand after a dog bite, through laser therapy and balance-ball work',
+    videoUrl: '/reels/reel-kitten-bubble.mp4',
+    previewUrl: '/reels/reel-kitten-bubble-loop.mp4'
   }
 ];
 
