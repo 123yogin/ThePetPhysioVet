@@ -91,10 +91,10 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
                     src={condition.imageUrl}
                     alt={condition.altText}
                     width={400}
-                    height={300}
+                    height={500}
                     loading="lazy"
                     decoding="async"
-                    className="w-full aspect-[4/3] object-cover bg-(--c-surface-3)"
+                    className="w-full aspect-[4/5] object-cover bg-(--c-surface-3)"
                   />
                   <div className="p-4">
                     <h3 className="font-(family-name:--f-display) text-lg text-(--c-ink) font-medium group-hover:text-(--c-accent) transition-colors">

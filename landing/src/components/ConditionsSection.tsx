@@ -124,12 +124,12 @@ export const ConditionsSection: React.FC = () => {
                     on every card -- eight blank rectangles that read as failed
                     loads rather than as cards awaiting a photograph. */}
                 {condition.imageUrl && (
-                  <div data-drift className="rv-img aspect-[4/3] relative overflow-hidden mb-5 bg-(--c-surface-3)">
+                  <div data-drift className="rv-img aspect-[4/5] relative overflow-hidden mb-5 bg-(--c-surface-3)">
                     <img
                       src={condition.imageUrl}
                       alt={condition.altText}
                       width={400}
-                      height={300}
+                      height={500}
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out grayscale-[10%]"
