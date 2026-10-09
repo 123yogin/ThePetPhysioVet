@@ -21,26 +21,52 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
     return () => mq.removeEventListener('change', apply);
   }, []);
 
-  // Play the loops only while the gallery is on screen. Eight looping videos
-  // kept decoding off-screen while the visitor read other sections -- a
-  // steady CPU/battery drain on phones that competes with scroll smoothness.
+  // How many times each row's tiles repeat inside one marquee copy. One copy
+  // must be wider than the screen, or the end of the strip shows as an empty
+  // gap on wide displays (a row of two photos and two narrow reel tiles is
+  // only ~1,150px). Measured after mount from the real tile widths; the
+  // server and first client render use 1, so markup still matches.
+  const [reps, setReps] = React.useState(1);
   const sectionRef = React.useRef<HTMLElement>(null);
+  React.useEffect(() => {
+    const measure = () => {
+      const el = sectionRef.current;
+      if (!el) return;
+      let need = 1;
+      el.querySelectorAll<HTMLElement>('[data-marquee-row]').forEach((rowEl) => {
+        const n = Number(rowEl.dataset.marqueeRow);
+        const tiles = Array.from(rowEl.children).slice(0, n) as HTMLElement[];
+        if (!tiles.length) return;
+        const gap = parseFloat(getComputedStyle(rowEl).columnGap) || 0;
+        const unit = tiles.reduce((w, t) => w + t.offsetWidth + gap, 0);
+        need = Math.max(need, Math.ceil((window.innerWidth + 1) / unit));
+      });
+      setReps((r) => (r === need ? r : need));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  // Play each loop only while that tile is actually on screen. The marquee
+  // repeats tiles, so there are many more <video> elements than reels; letting
+  // every one decode (off-screen or not) is a real CPU/battery drain on phones.
   React.useEffect(() => {
     const el = sectionRef.current;
     if (!el || prefersReducedMotion) return;
-    const videos = (): HTMLVideoElement[] => Array.from(el.querySelectorAll('video'));
     const io = new IntersectionObserver(
-      ([entry]) => {
-        videos().forEach((v) => {
-          if (entry.isIntersecting) v.play().catch(() => {});
+      (entries) => {
+        entries.forEach(({ target, isIntersecting }) => {
+          const v = target as HTMLVideoElement;
+          if (isIntersecting) v.play().catch(() => {});
           else v.pause();
         });
       },
-      { rootMargin: '200px 0px' },
+      { rootMargin: '100px' },
     );
-    io.observe(el);
+    el.querySelectorAll('video').forEach((v) => io.observe(v));
     return () => io.disconnect();
-  }, [prefersReducedMotion]);
+  }, [prefersReducedMotion, reps]);
 
   return (
     <section ref={sectionRef} id="gallery" className="py-20 sm:py-28 bg-(--c-card) overflow-x-clip">
@@ -88,16 +114,23 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
         <div className="mx-[calc(50%-50vw)] space-y-6 overflow-hidden motion-reduce:overflow-visible">
           {[0, 1].map((rowIndex) => {
             const row = GALLERY_ITEMS.filter((_, i) => i % 2 === rowIndex);
+            // One marquee copy = the row repeated `reps` times; rendered twice
+            // for the seamless -50% loop. Under reduced motion there is no
+            // marquee, so the row is shown once.
+            const copy = Array.from({ length: reps }, () => row).flat();
+            const tiles = prefersReducedMotion ? row : [...copy, ...copy];
             return (
               <div
                 key={rowIndex}
+                data-marquee-row={row.length}
                 className="group/row flex w-max gap-6 motion-safe:animate-marquee motion-reduce:w-full motion-reduce:flex-wrap motion-reduce:justify-center hover:[animation-play-state:paused]"
                 style={{
                   animationDirection: rowIndex === 1 ? 'reverse' : 'normal',
-                  animationDuration: rowIndex === 1 ? '46s' : '38s',
+                  // Longer strip, same speed.
+                  animationDuration: `${(rowIndex === 1 ? 46 : 38) * reps}s`,
                 }}
               >
-                {[...row, ...row].map((item, i) => (
+                {tiles.map((item, i) => (
                   <button
                     type="button"
                     key={`${item.id}-${i}`}
