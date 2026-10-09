@@ -71,7 +71,7 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
                 controls
                 preload="metadata"
                 aria-label={condition.altText}
-                className="w-full aspect-[4/3] object-cover bg-(--c-surface-3)"
+                className="w-full aspect-video object-cover bg-(--c-surface-3)"
               />
             ) : condition.imageUrl ? (
               <img
