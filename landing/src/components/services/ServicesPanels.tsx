@@ -16,7 +16,7 @@ const PHOTOS: Record<string, { src: string; alt: string; video?: string; poster?
   },
   'manual-therapy': {
     src: '/photos/services/manual-therapy.webp',
-    alt: 'Dr. Dhanvi Patel giving hands-on treatment to a Labrador lying on the therapy mat',
+    alt: "A therapist's hands massaging a Labrador during a manual therapy session",
   },
   electrophysical: {
     src: '/photos/services/electrophysical.webp',
@@ -30,7 +30,7 @@ const PHOTOS: Record<string, { src: string; alt: string; video?: string; poster?
   },
   acupuncture: {
     src: '/photos/services/acupuncture.webp',
-    alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, at the clinic',
+    alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, working treatment points along a Labrador',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',
