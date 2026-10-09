@@ -24,12 +24,12 @@ const PHOTOS: Record<string, PanelPhoto> = {
     focus: '50% 55%',
   },
   'manual-therapy': {
-    src: '/photos/services/manual-therapy-v2.webp',
+    src: '/photos/services/manual-therapy-hd.webp',
     alt: 'Dr. Dhanvi Patel giving hands-on treatment to a golden dog at the clinic',
     focus: '50% 30%',
   },
   electrophysical: {
-    src: '/photos/services/electrophysical-v2.webp',
+    src: '/photos/services/electrophysical-hd.webp',
     alt: 'Dr. Dhanvi Patel in laser safety goggles giving Class IV laser therapy to a kitten',
     focus: '50% 25%',
   },
@@ -41,7 +41,7 @@ const PHOTOS: Record<string, PanelPhoto> = {
     focus: '50% 40%',
   },
   acupuncture: {
-    src: '/photos/services/acupuncture-v2.webp',
+    src: '/photos/services/acupuncture-hd.webp',
     alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, working treatment points along a Labrador',
     focus: '50% 8%',
   },
