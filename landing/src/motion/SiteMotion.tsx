@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { PageCurtain, CursorBubble, Magnetic, ImageDrift, Tilt, ImageFadeIn } from './extras';
+import { PageCurtain, Magnetic, ImageDrift, Tilt, ImageFadeIn } from './extras';
 import { SmoothScroll, CursorTrail, ScrollTicks } from './index';
 
 /**
@@ -45,7 +45,10 @@ export const SiteMotion: React.FC = () => {
       <CursorTrail />
       <ScrollTicks />
       <PageCurtain />
-      <CursorBubble />
+      {/* CursorBubble (the "Play" / "View" / "Open" / "Book" disc that
+          followed the pointer) removed at the owner's request -- it covered
+          the footage it was labelling. data-cursor attributes stay: the lab
+          CSS still uses them as selectors. */}
       <Magnetic />
       <ImageDrift />
       <Tilt />

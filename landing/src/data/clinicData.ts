@@ -26,8 +26,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Laser Therapy', 'Hydrotherapy', 'Targeted Massage', 'Joint Supplements Plan', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: 'Ongoing maintenance & visible improvement within 3-4 weeks',
     imageUrl:
-      '/photos/conditions/arthritis.jpg',
-    altText: 'A Labrador resting — a breed prone to arthritis in later life',
+      '/photos/conditions/arthritis-card.webp',
+    altText: 'Class IV laser therapy on a dog at The Pet Physio Vet clinic',
+    videoUrl: '/videos/cond-arthritis.mp4',
+    posterUrl: '/videos/cond-arthritis-poster.jpg',
   },
   {
     id: 'ivdd',
@@ -43,8 +45,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Electro-acupuncture', 'TENS', 'Hydrotherapy — Indoor Swimming Pool', 'Class IV Laser', 'Neuromuscular Electrical Stimulation', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture'],
     expectedRecoveryTime: '6 to 16 weeks based on severity (Grade I to V)',
     imageUrl:
-      '/photos/conditions/ivdd.jpg',
-    altText: 'A Dachshund, a breed prone to intervertebral disc disease (IVDD)',
+      '/photos/conditions/ivdd-card.webp',
+    altText: 'A German Shepherd puppy swimming in a support harness in the clinic pool',
+    videoUrl: '/videos/cond-ivdd.mp4',
+    posterUrl: '/videos/cond-ivdd-poster.jpg',
   },
   {
     id: 'hip-dysplasia',
@@ -60,8 +64,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Physiotherapy', 'Therapeutic Exercise (Peanut Ball)', 'Indoor Swimming Pool', 'Cryotherapy & Heat Modalities', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '6 to 8 weeks for baseline stabilization',
     imageUrl:
-      '/photos/conditions/hip-dysplasia.webp',
-    altText: 'Golden Retriever doing core stabilization on a peanut ball',
+      '/photos/conditions/hip-dysplasia-card.webp',
+    altText: 'Dr. Dhanvi Patel working hands-on with a Labrador in the clinic exercise room',
+    videoUrl: '/videos/cond-hip-dysplasia.mp4',
+    posterUrl: '/videos/cond-hip-dysplasia-poster.jpg',
   },
   {
     id: 'post-surgical',
@@ -77,8 +83,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Class IV Laser Therapy', 'Passive Range of Motion (PROM)', 'Controlled Aquatic Gait Retraining', 'Home Cryotherapy Protocol', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 12 weeks guided post-op milestones',
     imageUrl:
-      '/photos/conditions/post-surgical.jpg',
-    altText: 'A Boxer resting during recovery after orthopaedic surgery',
+      '/photos/conditions/post-surgical-card.webp',
+    altText: 'A therapist applying laser therapy to a Labrador during post-surgical rehab',
+    videoUrl: '/videos/cond-post-surgical.mp4',
+    posterUrl: '/videos/cond-post-surgical-poster.jpg',
   },
   {
     id: 'neurological-recovery',
@@ -94,8 +102,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Proprioceptive Circuit Exercises', 'Electrical Muscle Stimulation', 'Hydrotherapy', 'Laser Therapy', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 20 weeks individualized neural program',
     imageUrl:
-      '/photos/conditions/neurological-recovery.jpg',
-    altText: 'A Rottweiler standing alert during neurological rehabilitation',
+      '/photos/conditions/neurological-recovery-card.webp',
+    altText: 'A German Shepherd puppy walking through the clinic pool to rebuild coordination',
+    videoUrl: '/videos/cond-neurological-recovery.mp4',
+    posterUrl: '/videos/cond-neurological-recovery-poster.jpg',
   },
   {
     id: 'sports-injury',
@@ -111,8 +121,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['High-Power Laser', 'Myofascial Trigger Point Release', 'Aquatic Conditioning', 'Plyometric Strength Building', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '4 to 10 weeks to return to agility & outdoor sports',
     imageUrl:
-      '/photos/conditions/sports-injury.webp',
-    altText: 'Athletic agility dog training and undergoing injury conditioning',
+      '/photos/conditions/sports-injury-card.webp',
+    altText: 'A happy Labrador being towelled off after an aquatic conditioning session',
+    videoUrl: '/videos/cond-sports-injury.mp4',
+    posterUrl: '/videos/cond-sports-injury-poster.jpg',
   },
   {
     id: 'senior-mobility',
@@ -128,8 +140,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Gentle Massage', 'Warm Water Hydrotherapy Walk', 'Low-Impact Balance Matting', 'Nonslip Assistive Gear Consultation', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: 'Continuous weekly or bi-weekly comfort care program',
     imageUrl:
-      '/photos/conditions/senior-mobility.webp',
-    altText: 'Senior dog comfortably resting in a warm rehabilitation clinic',
+      '/photos/conditions/senior-mobility-card.webp',
+    altText: 'A 12.5-year-old German Shepherd receiving therapy at The Pet Physio Vet',
+    videoUrl: '/videos/cond-senior-mobility.mp4',
+    posterUrl: '/videos/cond-senior-mobility-poster.jpg',
   },
   {
     id: 'obesity-rehab',
@@ -145,8 +159,10 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Indoor Pool Swimming Sessions', 'Targeted Metabolic Caloric Plan', 'Land Resistance Walks', 'Progressive Weight Milestones', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 16 weeks target body condition restoration',
     imageUrl:
-      '/photos/conditions/obesity-rehab.webp',
-    altText: 'Dog swimming in the indoor hydrotherapy pool during weight management rehabilitation',
+      '/photos/conditions/obesity-rehab-card.webp',
+    altText: 'A black Labrador swimming for a treat in the clinic hydrotherapy pool',
+    videoUrl: '/videos/cond-obesity-rehab.mp4',
+    posterUrl: '/videos/cond-obesity-rehab-poster.jpg',
   }
 ];
 
@@ -567,6 +583,15 @@ export const GALLERY_ITEMS: GalleryItem[] = [
     altText: 'Still from a reel in which Dr. Dhanvi Patel explains a physiotherapy session',
     videoUrl: '/reels/reel-therapy-explained.mp4',
     previewUrl: '/reels/reel-therapy-explained-loop.mp4'
+  },
+  {
+    id: 'r5',
+    title: 'Bubble the kitten walks again',
+    category: 'Patient stories',
+    imageUrl: '',
+    altText: 'Reel following Bubble, a kitten who could not stand after a dog bite, through laser therapy and balance-ball work',
+    videoUrl: '/reels/reel-kitten-bubble.mp4',
+    previewUrl: '/reels/reel-kitten-bubble-loop.mp4'
   }
 ];
 

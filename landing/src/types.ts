@@ -9,6 +9,10 @@ export interface ConditionItem {
   expectedRecoveryTime: string;
   imageUrl: string;
   altText: string;
+  /** Optional muted, looping clip that shows the matching therapy in action;
+   *  when set, the card plays it (with `posterUrl`/`imageUrl` as the still). */
+  videoUrl?: string;
+  posterUrl?: string;
   /** Hand-written page <h1>. Falls back to the entity title. */
   seoH1?: string;
   /** Hand-written <title> (<= 60 chars as displayed). Preferred over the template. */

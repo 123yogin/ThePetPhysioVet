@@ -10,34 +10,84 @@ import { pad2 } from '../../lib/format';
  * One photo per service, picked from the clinic's own photo set (there are no
  * per-service shoots). Alt text describes only what each frame actually shows.
  */
-const PHOTOS: Record<string, { src: string; alt: string }> = {
+type PanelPhoto = { src: string; alt: string; video?: string; poster?: string; focus?: string };
+
+/*
+ * `focus` is the CSS object-position of the subject's face. Panels are cropped
+ * to very different shapes -- a near-square when open, a tall sliver when
+ * closed, a short wide strip on phones -- so cropping from the centre cut off
+ * eyes and heads. Each image is pinned to where its subject actually is.
+ */
+const PHOTOS: Record<string, PanelPhoto> = {
   'indoor-physiotherapy': {
-    src: '/photos/senior-beagle.webp',
-    alt: 'Dr. Dhanvi Patel cradling a senior beagle during attentive residential care',
+    src: '/photos/services/indoor-physiotherapy-panel.webp',
+    alt: 'Dr. Dhanvi Patel hugging a German Shepherd on the therapy mats at the clinic',
+    focus: '50% 20%',
   },
   'manual-therapy': {
-    src: '/photos/therapy-platform.webp',
-    alt: 'A Labrador supported in an overhead harness during a hands-on assisted therapy session at the clinic',
+    src: '/photos/services/manual-therapy-hd.webp',
+    alt: 'Dr. Dhanvi Patel giving hands-on treatment to a golden dog at the clinic',
+    focus: '50% 30%',
   },
   electrophysical: {
-    src: '/photos/clinic-german-shepherd.webp',
-    alt: 'A German Shepherd on the padded therapy mats at the Shilaj clinic during a session',
+    src: '/photos/services/electrophysical-hd.webp',
+    alt: 'Dr. Dhanvi Patel in laser safety goggles giving Class IV laser therapy to a kitten',
+    focus: '50% 25%',
   },
   hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
-    alt: 'A Golden Retriever swimming in the indoor hydrotherapy pool, supported by a harness',
+    alt: 'A dog swimming in the clinic indoor hydrotherapy pool, treat-guided by the therapist',
+    video: '/videos/hydrotherapy.mp4',
+    poster: '/videos/hydrotherapy-poster.jpg',
+    focus: '50% 40%',
   },
   acupuncture: {
-    src: '/photos/dhanvi-patel.webp',
-    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
+    src: '/photos/services/acupuncture-hd.webp',
+    alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, working treatment points along a Labrador',
+    focus: '50% 8%',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',
     alt: 'Dr. Dhanvi Patel with two Labradors during a home visit',
+    focus: '55% 30%',
   },
 };
 
 const num = (i: number) => pad2(i + 1);
+
+/** A panel shows a still photo unless it has a `video`, which then autoplays
+ *  muted and looping (poster/photo is the fallback still). */
+const PanelMedia: React.FC<{
+  photo: PanelPhoto;
+  className?: string; width: number; height: number;
+}> = ({ photo, className, width, height }) =>
+  photo.video ? (
+    <video
+      className={className}
+      style={{ objectPosition: photo.focus }}
+      src={photo.video}
+      poster={photo.poster ?? photo.src}
+      width={width}
+      height={height}
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      aria-label={photo.alt}
+    />
+  ) : (
+    <img
+      src={photo.src}
+      alt={photo.alt}
+      width={width}
+      height={height}
+      loading="lazy"
+      decoding="async"
+      className={className}
+      style={{ objectPosition: photo.focus }}
+    />
+  );
 
 /*
  * Scroll-driven mode (desktop, motion allowed): the row pins while the page
@@ -173,13 +223,10 @@ const ServicesPanels: React.FC = () => {
                 data-cursor="View"
                 className="absolute inset-0 block focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset"
               >
-                <img
-                  src={photo.src}
-                  alt={photo.alt}
+                <PanelMedia
+                  photo={photo}
                   width={800}
                   height={600}
-                  loading="lazy"
-                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-(--c-ink) via-(--c-ink)/35 to-(--c-ink)/5" />
@@ -266,13 +313,10 @@ const ServicesPanels: React.FC = () => {
                 onClick={() => setOpenMobile(isOpen ? -1 : i)}
                 className="relative block h-[88px] w-full cursor-pointer text-left"
               >
-                <img
-                  src={photo.src}
-                  alt={photo.alt}
+                <PanelMedia
+                  photo={photo}
                   width={800}
                   height={200}
-                  loading="lazy"
-                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-(--c-ink)/90 via-(--c-ink)/45 to-(--c-ink)/10" />
