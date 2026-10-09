@@ -58,18 +58,33 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
           </div>
 
           <div className="lg:col-span-5">
-            {condition.imageUrl && (
+            {condition.videoUrl ? (
+              <video
+                src={condition.videoUrl}
+                poster={condition.posterUrl ?? condition.imageUrl}
+                width={800}
+                height={600}
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls
+                preload="metadata"
+                aria-label={condition.altText}
+                className="w-full max-w-[300px] mx-auto aspect-[9/16] object-cover bg-(--c-surface-3)"
+              />
+            ) : condition.imageUrl ? (
               <img
-              src={condition.imageUrl}
-              alt={condition.altText}
-              width={800}
-              height={600}
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-              className="w-full aspect-[4/3] object-cover bg-(--c-surface-3)"
-            />
-            )}
+                src={condition.imageUrl}
+                alt={condition.altText}
+                width={800}
+                height={600}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                className="w-full max-w-[300px] mx-auto aspect-[9/16] object-cover bg-(--c-surface-3)"
+              />
+            ) : null}
           </div>
         </header>
 

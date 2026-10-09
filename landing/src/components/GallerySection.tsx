@@ -22,26 +22,32 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
     return () => mq.removeEventListener('change', apply);
   }, []);
 
-  // Play the loops only while the gallery is on screen. Eight looping videos
-  // kept decoding off-screen while the visitor read other sections -- a
-  // steady CPU/battery drain on phones that competes with scroll smoothness.
+  // How many times each row's tiles repeat inside one marquee copy. One copy
+  // must be wider than the screen, or the end of the strip shows as an empty
+  // gap on wide displays (a row of two photos and two narrow reel tiles is
+  // only ~1,150px). Measured after mount from the real tile widths; the
+  // server and first client render use 1, so markup still matches.
+  const [reps, setReps] = React.useState(1);
   const sectionRef = React.useRef<HTMLElement>(null);
   React.useEffect(() => {
-    const el = sectionRef.current;
-    if (!el || prefersReducedMotion) return;
-    const videos = (): HTMLVideoElement[] => Array.from(el.querySelectorAll('video'));
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        videos().forEach((v) => {
-          if (entry.isIntersecting) v.play().catch(() => {});
-          else v.pause();
-        });
-      },
-      { rootMargin: '200px 0px' },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [prefersReducedMotion]);
+    const measure = () => {
+      const el = sectionRef.current;
+      if (!el) return;
+      let need = 1;
+      el.querySelectorAll<HTMLElement>('[data-marquee-row]').forEach((rowEl) => {
+        const n = Number(rowEl.dataset.marqueeRow);
+        const tiles = Array.from(rowEl.children).slice(0, n) as HTMLElement[];
+        if (!tiles.length) return;
+        const gap = parseFloat(getComputedStyle(rowEl).columnGap) || 0;
+        const unit = tiles.reduce((w, t) => w + t.offsetWidth + gap, 0);
+        need = Math.max(need, Math.ceil((window.innerWidth + 1) / unit));
+      });
+      setReps((r) => (r === need ? r : need));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   return (
     <section ref={sectionRef} id="gallery" className="py-20 sm:py-28 bg-(--c-card) overflow-x-clip">
@@ -89,16 +95,23 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
         <div className="mx-[calc(50%-50vw)] space-y-6 overflow-hidden motion-reduce:overflow-visible">
           {[0, 1].map((rowIndex) => {
             const row = GALLERY_ITEMS.filter((_, i) => i % 2 === rowIndex);
+            // One marquee copy = the row repeated `reps` times; rendered twice
+            // for the seamless -50% loop. Under reduced motion there is no
+            // marquee, so the row is shown once.
+            const copy = Array.from({ length: reps }, () => row).flat();
+            const tiles = prefersReducedMotion ? row : [...copy, ...copy];
             return (
               <div
                 key={rowIndex}
+                data-marquee-row={row.length}
                 className="group/row flex w-max gap-6 motion-safe:animate-marquee motion-reduce:w-full motion-reduce:flex-wrap motion-reduce:justify-center hover:[animation-play-state:paused]"
                 style={{
                   animationDirection: rowIndex === 1 ? 'reverse' : 'normal',
-                  animationDuration: rowIndex === 1 ? '46s' : '38s',
+                  // Longer strip, same speed.
+                  animationDuration: `${(rowIndex === 1 ? 46 : 38) * reps}s`,
                 }}
               >
-                {[...row, ...row].map((item, i) => (
+                {tiles.map((item, i) => (
                   <button
                     type="button"
                     key={`${item.id}-${i}`}
@@ -109,7 +122,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                     tabIndex={i >= row.length ? -1 : undefined}
                     onClick={() => onSelectImage(item)}
                     data-cursor={item.videoUrl ? 'Play' : 'Open'}
-                    className="relative group shrink-0 w-[240px] sm:w-[300px] overflow-hidden bg-(--c-surface-3) cursor-pointer border border-(--c-line)/30 hover:border-(--c-ink) transition-all text-left block appearance-none"
+                    className={`relative group shrink-0 ${item.videoUrl ? 'w-[180px] sm:w-[225px]' : 'w-[240px] sm:w-[300px]'} overflow-hidden bg-(--c-surface-3) cursor-pointer border border-(--c-line)/30 hover:border-(--c-ink) transition-all text-left block appearance-none`}
                   >
                     {/* Portrait tiles, because every asset is portrait.
 
@@ -117,14 +130,16 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                         photographs are 3:4 and the reels 9:16 -- so everything
                         in this gallery was being centre-cropped by a landscape
                         box, slicing heads off and cutting the reels' burned-in
-                        captions mid-word. The tile is now 3:4, the photographs
-                        fit it exactly, and the reel loops are re-encoded to the
-                        same 3:4 rather than squeezed into it.
+                        captions mid-word. Photo tiles are 3:4, which the
+                        photographs fit exactly. Reel tiles are 9:16 at the same
+                        height (narrower), and their loops are the full 9:16
+                        frame -- a 3:4 crop of a reel cut the doctor's face off
+                        mid-treatment, so nothing in a reel is cropped now.
 
                         A reel plays its own small loop, continuously.
 
                         The loop is a separate, smaller rendition: 12 seconds,
-                        360px wide, no audio, about 1.9MB for all four. Playing
+                        432x768, no audio, under 1.5MB each. Playing
                         the full reels here instead would have downloaded ~15MB
                         and decoded four audio tracks before anyone asked to
                         watch anything. The full reel, with sound, is fetched
@@ -140,7 +155,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                         src={item.previewUrl || item.videoUrl}
                         label={item.altText}
                         reducedMotion={prefersReducedMotion}
-                        className="w-full aspect-[3/4] object-cover bg-(--c-surface-3) grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
+                        className="w-full aspect-[9/16] object-cover bg-(--c-surface-3) grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
                       />
                     ) : (
                       <img

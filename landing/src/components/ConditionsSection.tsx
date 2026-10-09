@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { CONDITIONS } from '../data/clinicData';
-import { ArrowRight, Info } from 'lucide-react';
+import { ArrowRight, Info, Play } from 'lucide-react';
 import { EntityCardLink } from './EntityCardLink';
 import { conditionPath } from '../seo/routes';
 import { SplitWords, useReveal, useStagger } from '../motion';
@@ -124,16 +124,21 @@ export const ConditionsSection: React.FC = () => {
                     on every card -- eight blank rectangles that read as failed
                     loads rather than as cards awaiting a photograph. */}
                 {condition.imageUrl && (
-                  <div data-drift className="rv-img aspect-[4/3] relative overflow-hidden mb-5 bg-(--c-surface-3)">
+                  <div data-drift className="rv-img aspect-[4/5] relative overflow-hidden mb-5 bg-(--c-surface-3)">
                     <img
                       src={condition.imageUrl}
                       alt={condition.altText}
                       width={400}
-                      height={300}
+                      height={500}
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out grayscale-[10%]"
                     />
+                    {condition.videoUrl && (
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-(--c-ink)/80 text-white text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full">
+                        <Play className="w-3 h-3 fill-white" /> Watch
+                      </div>
+                    )}
                     <div className="absolute top-3 right-3 bg-(--c-bg)/90 backdrop-blur-xs p-1.5 rounded-full text-(--c-ink) opacity-0 group-hover:opacity-100 transition-opacity">
                       <Info className="w-4 h-4" />
                     </div>
