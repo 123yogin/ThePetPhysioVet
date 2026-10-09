@@ -61,8 +61,8 @@ export const CONDITIONS: ConditionItem[] = [
     imageUrl:
       '/photos/conditions/hip-dysplasia.webp',
     altText: 'Golden Retriever doing core stabilization on a peanut ball',
-    videoUrl: '/videos/exercise.mp4',
-    posterUrl: '/videos/exercise-poster.jpg',
+    videoUrl: '/videos/hip.mp4',
+    posterUrl: '/videos/hip-poster.jpg',
   },
   {
     id: 'post-surgical',
@@ -80,8 +80,8 @@ export const CONDITIONS: ConditionItem[] = [
     imageUrl:
       '/photos/conditions/post-surgical.jpg',
     altText: 'A Boxer resting during recovery after orthopaedic surgery',
-    videoUrl: '/videos/laser.mp4',
-    posterUrl: '/videos/laser-poster.jpg',
+    videoUrl: '/videos/postsurgical.mp4',
+    posterUrl: '/videos/postsurgical-poster.jpg',
   },
   {
     id: 'neurological-recovery',
@@ -99,8 +99,8 @@ export const CONDITIONS: ConditionItem[] = [
     imageUrl:
       '/photos/conditions/neurological-recovery.jpg',
     altText: 'A Rottweiler standing alert during neurological rehabilitation',
-    videoUrl: '/videos/exercise.mp4',
-    posterUrl: '/videos/exercise-poster.jpg',
+    videoUrl: '/videos/neuro.mp4',
+    posterUrl: '/videos/neuro-poster.jpg',
   },
   {
     id: 'sports-injury',
@@ -118,8 +118,8 @@ export const CONDITIONS: ConditionItem[] = [
     imageUrl:
       '/photos/conditions/sports-injury.webp',
     altText: 'Athletic agility dog training and undergoing injury conditioning',
-    videoUrl: '/videos/exercise.mp4',
-    posterUrl: '/videos/exercise-poster.jpg',
+    videoUrl: '/videos/sports.mp4',
+    posterUrl: '/videos/sports-poster.jpg',
   },
   {
     id: 'senior-mobility',
@@ -156,8 +156,8 @@ export const CONDITIONS: ConditionItem[] = [
     imageUrl:
       '/photos/conditions/obesity-rehab.webp',
     altText: 'Dog swimming in the indoor hydrotherapy pool during weight management rehabilitation',
-    videoUrl: '/videos/hydrotherapy.mp4',
-    posterUrl: '/videos/hydrotherapy-poster.jpg',
+    videoUrl: '/videos/exercise.mp4',
+    posterUrl: '/videos/exercise-poster.jpg',
   }
 ];
 
