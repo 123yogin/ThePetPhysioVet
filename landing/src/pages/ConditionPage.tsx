@@ -71,7 +71,7 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
                 controls
                 preload="metadata"
                 aria-label={condition.altText}
-                className="w-full max-w-[360px] mx-auto aspect-[3/4] object-cover bg-(--c-surface-3)"
+                className="w-full max-w-[300px] mx-auto aspect-[9/16] object-cover bg-(--c-surface-3)"
               />
             ) : condition.imageUrl ? (
               <img
@@ -82,7 +82,7 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
                 loading="eager"
                 fetchPriority="high"
                 decoding="async"
-                className="w-full max-w-[360px] mx-auto aspect-[3/4] object-cover bg-(--c-surface-3)"
+                className="w-full max-w-[300px] mx-auto aspect-[9/16] object-cover bg-(--c-surface-3)"
               />
             ) : null}
           </div>
