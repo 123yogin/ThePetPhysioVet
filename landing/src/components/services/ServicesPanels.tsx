@@ -19,9 +19,9 @@ type PanelPhoto = { src: string; alt: string; video?: string; poster?: string; f
  */
 const PHOTOS: Record<string, PanelPhoto> = {
   'indoor-physiotherapy': {
-    src: '/photos/clinic-german-shepherd.webp',
+    src: '/photos/services/indoor-physiotherapy-panel.webp',
     alt: 'Dr. Dhanvi Patel hugging a German Shepherd on the therapy mats at the clinic',
-    focus: '50% 55%',
+    focus: '50% 20%',
   },
   'manual-therapy': {
     src: '/photos/services/manual-therapy-hd.webp',

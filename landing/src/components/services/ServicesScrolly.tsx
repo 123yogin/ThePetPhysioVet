@@ -11,7 +11,7 @@ import { prefersReducedMotion } from '../../motion/engine';
  */
 const PHOTO: Record<string, { src: string; alt: string; video?: string; poster?: string }> = {
   'indoor-physiotherapy': {
-    src: '/photos/clinic-german-shepherd.webp',
+    src: '/photos/services/indoor-physiotherapy-panel.webp',
     alt: 'Dr. Dhanvi Patel hugging a German Shepherd on the therapy mats at the clinic',
   },
   'manual-therapy': {
