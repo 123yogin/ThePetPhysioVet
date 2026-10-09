@@ -11,16 +11,16 @@ import { prefersReducedMotion } from '../../motion/engine';
  */
 const PHOTO: Record<string, { src: string; alt: string; video?: string; poster?: string }> = {
   'indoor-physiotherapy': {
-    src: '/photos/clinic-german-shepherd.webp',
-    alt: 'Dr. Dhanvi Patel embracing a German Shepherd on the padded therapy mats at the Shilaj clinic',
+    src: '/photos/services/indoor-physiotherapy.webp',
+    alt: 'A Labrador resting comfortably on the therapy mats during a stay at the clinic',
   },
   'manual-therapy': {
-    src: '/photos/therapy-ramp.webp',
-    alt: "A Labrador supported in a sling harness on the clinic's therapy mats during a hands-on assisted exercise",
+    src: '/photos/services/manual-therapy.webp',
+    alt: 'Dr. Dhanvi Patel giving hands-on treatment to a Labrador lying on the therapy mat',
   },
   electrophysical: {
-    src: '/photos/therapy-platform.webp',
-    alt: 'A Labrador supported upright in a harness, front paws resting on a raised platform, during a supported exercise at the clinic',
+    src: '/photos/services/electrophysical.webp',
+    alt: 'Class IV laser therapy applied to a Labrador, with the electrotherapy unit behind',
   },
   hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
@@ -29,8 +29,8 @@ const PHOTO: Record<string, { src: string; alt: string; video?: string; poster?:
     poster: '/videos/hydrotherapy-poster.jpg',
   },
   acupuncture: {
-    src: '/photos/dhanvi-patel.webp',
-    alt: 'Dr. Dhanvi Patel sitting on the therapy mats at the clinic, holding a beagle',
+    src: '/photos/services/acupuncture.webp',
+    alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, at the clinic',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',
