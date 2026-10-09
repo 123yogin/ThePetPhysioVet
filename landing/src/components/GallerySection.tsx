@@ -108,7 +108,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                     tabIndex={i >= row.length ? -1 : undefined}
                     onClick={() => onSelectImage(item)}
                     data-cursor={item.videoUrl ? 'Play' : 'Open'}
-                    className="relative group shrink-0 w-[240px] sm:w-[300px] overflow-hidden bg-(--c-surface-3) cursor-pointer border border-(--c-line)/30 hover:border-(--c-ink) transition-all text-left block appearance-none"
+                    className={`relative group shrink-0 ${item.videoUrl ? 'w-[180px] sm:w-[225px]' : 'w-[240px] sm:w-[300px]'} overflow-hidden bg-(--c-surface-3) cursor-pointer border border-(--c-line)/30 hover:border-(--c-ink) transition-all text-left block appearance-none`}
                   >
                     {/* Portrait tiles, because every asset is portrait.
 
@@ -116,14 +116,16 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                         photographs are 3:4 and the reels 9:16 -- so everything
                         in this gallery was being centre-cropped by a landscape
                         box, slicing heads off and cutting the reels' burned-in
-                        captions mid-word. The tile is now 3:4, the photographs
-                        fit it exactly, and the reel loops are re-encoded to the
-                        same 3:4 rather than squeezed into it.
+                        captions mid-word. Photo tiles are 3:4, which the
+                        photographs fit exactly. Reel tiles are 9:16 at the same
+                        height (narrower), and their loops are the full 9:16
+                        frame -- a 3:4 crop of a reel cut the doctor's face off
+                        mid-treatment, so nothing in a reel is cropped now.
 
                         A reel plays its own small loop, continuously.
 
                         The loop is a separate, smaller rendition: 12 seconds,
-                        360px wide, no audio, about 1.9MB for all four. Playing
+                        432x768, no audio, under 1.5MB each. Playing
                         the full reels here instead would have downloaded ~15MB
                         and decoded four audio tracks before anyone asked to
                         watch anything. The full reel, with sound, is fetched
@@ -143,7 +145,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                         playsInline
                         preload="metadata"
                         aria-label={item.altText}
-                        className="w-full aspect-[3/4] object-cover grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
+                        className="w-full aspect-[9/16] object-cover grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
                       />
                     ) : (
                       <img
