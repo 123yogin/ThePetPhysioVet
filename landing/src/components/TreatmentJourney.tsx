@@ -1,9 +1,25 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SplitWords, useReveal, useSectionProgress, useStagger } from '../motion';
 import { Pulse, PawTrail, setPawTrail } from '../motion/extras';
 import { JOURNEY_STEPS } from '../data/clinicData';
 import { CheckCircle2, ChevronRight } from 'lucide-react';
 import { useLab } from '../lab/Lab';
+
+/**
+ * A real case alongside the five steps: Bubble, a kitten treated at the
+ * clinic after a dog bite. Each step gets the matching stretch of his reel
+ * ([start, end] seconds), looped while that step is the one being read.
+ * Same order as JOURNEY_STEPS.
+ */
+const BUBBLE_SRC = '/reels/reel-kitten-bubble-journey.mp4';
+const BUBBLE_POSTER = '/reels/reel-kitten-bubble-journey-poster.jpg';
+const BUBBLE_MOMENTS: { range: [number, number]; caption: string }[] = [
+  { range: [0, 4.5], caption: "Bubble arrives — a kitten who couldn't stand after a dog bite." },
+  { range: [17.5, 21.5], caption: 'Dr. Dhanvi checks how he moves and where it hurts.' },
+  { range: [4.8, 16.5], caption: 'Laser therapy and hands-on work, session by session.' },
+  { range: [21.5, 28], caption: 'Standing and stepping on the balance ball.' },
+  { range: [28.5, 35], caption: 'Walking with confidence again.' },
+];
 
 export const TreatmentJourney: React.FC = () => {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
@@ -25,11 +41,71 @@ export const TreatmentJourney: React.FC = () => {
   const railLine = useRef<HTMLSpanElement>(null);
   const railPaws = useRef<HTMLDivElement>(null);
   const railCount = useRef<HTMLSpanElement>(null);
+
+  // Bubble's clip follows the step being read. Like the counter, this is
+  // driven straight from the scroll callback (no React state), and only on
+  // desktop, where the column is sticky and stays in view beside the steps.
+  // On narrow screens the clip sits above the list, so it just plays through.
+  const bubbleVideo = useRef<HTMLVideoElement>(null);
+  const bubbleCaption = useRef<HTMLParagraphElement>(null);
+  const bubbleStep = useRef(-1);
+  const syncBubble = useRef(false);
+  const showBubbleStep = (idx: number) => {
+    const v = bubbleVideo.current;
+    if (!syncBubble.current || !v || idx === bubbleStep.current) return;
+    bubbleStep.current = idx;
+    v.currentTime = BUBBLE_MOMENTS[idx].range[0];
+    if (bubbleCaption.current) bubbleCaption.current.textContent = BUBBLE_MOMENTS[idx].caption;
+  };
+  useEffect(() => {
+    const v = bubbleVideo.current;
+    if (!v) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    syncBubble.current = mq.matches;
+    v.loop = !mq.matches;
+    // Hold each step on its own moment: wrap back to the start of the range.
+    const onTime = () => {
+      const i = bubbleStep.current;
+      if (syncBubble.current && i >= 0 && v.currentTime >= BUBBLE_MOMENTS[i].range[1]) {
+        v.currentTime = BUBBLE_MOMENTS[i].range[0];
+      }
+    };
+    // A seek made before the file has loaded is dropped; re-apply it.
+    const onMeta = () => {
+      const i = bubbleStep.current;
+      if (syncBubble.current && i >= 0) v.currentTime = BUBBLE_MOMENTS[i].range[0];
+    };
+    v.addEventListener('timeupdate', onTime);
+    v.addEventListener('loadedmetadata', onMeta);
+    // Fetch and play only while the section is near the screen.
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting && !reduce) v.play().catch(() => {});
+        else v.pause();
+      },
+      { rootMargin: '200px 0px' },
+    );
+    io.observe(v);
+    return () => {
+      v.removeEventListener('timeupdate', onTime);
+      v.removeEventListener('loadedmetadata', onMeta);
+      io.disconnect();
+    };
+  }, []);
+
   const railRef = useSectionProgress<HTMLOListElement>((p) => {
     if (railLine.current) railLine.current.style.transform = `scaleY(${p})`;
     setPawTrail(railPaws.current, p);
     const n = JOURNEY_STEPS.length;
-    if (railCount.current) railCount.current.textContent = String(Math.min(n, Math.max(1, Math.ceil(p * n)))).padStart(2, '0');
+    // The step being read: the last one whose top has crossed the middle of
+    // the screen. (Deriving it from p ran a step ahead of the reader.)
+    let reading = 0;
+    railRef.current?.querySelectorAll<HTMLElement>(':scope > li').forEach((li, i) => {
+      if (li.getBoundingClientRect().top <= window.innerHeight * 0.5) reading = i;
+    });
+    if (railCount.current) railCount.current.textContent = String(reading + 1).padStart(2, '0');
+    showBubbleStep(reading);
     railRef.current?.querySelectorAll<HTMLElement>('[data-step]').forEach((el, idx) => {
       el.classList.toggle('is-lit', p >= idx / n);
     });
@@ -53,6 +129,28 @@ export const TreatmentJourney: React.FC = () => {
                 <span ref={railCount}>01</span>
                 <span className="text-2xl not-italic text-(--c-line)"> / {String(JOURNEY_STEPS.length).padStart(2, '0')}</span>
               </p>
+              <figure className="mt-8 max-w-[220px]">
+                <span className="text-[10px] uppercase tracking-widest text-(--c-accent) font-semibold mb-2 block font-(family-name:--f-body)">
+                  Follow Bubble's recovery
+                </span>
+                <video
+                  ref={bubbleVideo}
+                  src={BUBBLE_SRC}
+                  poster={BUBBLE_POSTER}
+                  muted
+                  playsInline
+                  preload="none"
+                  aria-label="Reel of Bubble, a kitten treated at the clinic after a dog bite, from assessment to walking again"
+                  className="w-full aspect-[9/16] object-cover rounded-[var(--lab-card)] bg-(--c-surface-3) border border-(--c-line)/30"
+                />
+                <figcaption
+                  ref={bubbleCaption}
+                  aria-live="off"
+                  className="mt-3 font-(family-name:--f-body) text-sm text-(--c-body) font-light leading-snug"
+                >
+                  {BUBBLE_MOMENTS[0].caption}
+                </figcaption>
+              </figure>
             </div>
           </div>
           <ol ref={railRef} className="lg:col-span-7 relative pl-12 sm:pl-16">
