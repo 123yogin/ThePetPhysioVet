@@ -11,16 +11,16 @@ import { prefersReducedMotion } from '../../motion/engine';
  */
 const PHOTO: Record<string, { src: string; alt: string; video?: string; poster?: string }> = {
   'indoor-physiotherapy': {
-    src: '/photos/services/indoor-physiotherapy.webp',
-    alt: 'A Labrador resting comfortably on the therapy mats during a stay at the clinic',
+    src: '/photos/clinic-german-shepherd.webp',
+    alt: 'Dr. Dhanvi Patel hugging a German Shepherd on the therapy mats at the clinic',
   },
   'manual-therapy': {
-    src: '/photos/services/manual-therapy.webp',
-    alt: "A therapist's hands massaging a Labrador during a manual therapy session",
+    src: '/photos/services/manual-therapy-v2.webp',
+    alt: 'Dr. Dhanvi Patel giving hands-on treatment to a golden dog at the clinic',
   },
   electrophysical: {
-    src: '/photos/services/electrophysical.webp',
-    alt: 'Class IV laser therapy applied to a Labrador, with the electrotherapy unit behind',
+    src: '/photos/services/electrophysical-v2.webp',
+    alt: 'Dr. Dhanvi Patel in laser safety goggles giving Class IV laser therapy to a kitten',
   },
   hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
@@ -29,7 +29,7 @@ const PHOTO: Record<string, { src: string; alt: string; video?: string; poster?:
     poster: '/videos/hydrotherapy-poster.jpg',
   },
   acupuncture: {
-    src: '/photos/services/acupuncture.webp',
+    src: '/photos/services/acupuncture-v2.webp',
     alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, working treatment points along a Labrador',
   },
   'home-care': {

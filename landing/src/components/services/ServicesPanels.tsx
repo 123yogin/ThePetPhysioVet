@@ -9,32 +9,46 @@ import { onFrame, track, prefersReducedMotion } from '../../motion/engine';
  * One photo per service, picked from the clinic's own photo set (there are no
  * per-service shoots). Alt text describes only what each frame actually shows.
  */
-const PHOTOS: Record<string, { src: string; alt: string; video?: string; poster?: string }> = {
+type PanelPhoto = { src: string; alt: string; video?: string; poster?: string; focus?: string };
+
+/*
+ * `focus` is the CSS object-position of the subject's face. Panels are cropped
+ * to very different shapes -- a near-square when open, a tall sliver when
+ * closed, a short wide strip on phones -- so cropping from the centre cut off
+ * eyes and heads. Each image is pinned to where its subject actually is.
+ */
+const PHOTOS: Record<string, PanelPhoto> = {
   'indoor-physiotherapy': {
-    src: '/photos/services/indoor-physiotherapy.webp',
-    alt: 'A Labrador resting comfortably on the therapy mats during a stay at the clinic',
+    src: '/photos/clinic-german-shepherd.webp',
+    alt: 'Dr. Dhanvi Patel hugging a German Shepherd on the therapy mats at the clinic',
+    focus: '50% 55%',
   },
   'manual-therapy': {
-    src: '/photos/services/manual-therapy.webp',
-    alt: "A therapist's hands massaging a Labrador during a manual therapy session",
+    src: '/photos/services/manual-therapy-v2.webp',
+    alt: 'Dr. Dhanvi Patel giving hands-on treatment to a golden dog at the clinic',
+    focus: '50% 30%',
   },
   electrophysical: {
-    src: '/photos/services/electrophysical.webp',
-    alt: 'Class IV laser therapy applied to a Labrador, with the electrotherapy unit behind',
+    src: '/photos/services/electrophysical-v2.webp',
+    alt: 'Dr. Dhanvi Patel in laser safety goggles giving Class IV laser therapy to a kitten',
+    focus: '50% 25%',
   },
   hydrotherapy: {
     src: '/photos/pool-swim-blue.webp',
     alt: 'A dog swimming in the clinic indoor hydrotherapy pool, treat-guided by the therapist',
     video: '/videos/hydrotherapy.mp4',
     poster: '/videos/hydrotherapy-poster.jpg',
+    focus: '50% 40%',
   },
   acupuncture: {
-    src: '/photos/services/acupuncture.webp',
+    src: '/photos/services/acupuncture-v2.webp',
     alt: 'Dr. Dhanvi Patel, Certified Veterinary Acupuncturist, working treatment points along a Labrador',
+    focus: '50% 8%',
   },
   'home-care': {
     src: '/photos/home-visit-labradors.webp',
     alt: 'Dr. Dhanvi Patel with two Labradors during a home visit',
+    focus: '55% 30%',
   },
 };
 
@@ -43,12 +57,13 @@ const num = (i: number) => String(i + 1).padStart(2, '0');
 /** A panel shows a still photo unless it has a `video`, which then autoplays
  *  muted and looping (poster/photo is the fallback still). */
 const PanelMedia: React.FC<{
-  photo: { src: string; alt: string; video?: string; poster?: string };
+  photo: PanelPhoto;
   className?: string; width: number; height: number;
 }> = ({ photo, className, width, height }) =>
   photo.video ? (
     <video
       className={className}
+      style={{ objectPosition: photo.focus }}
       src={photo.video}
       poster={photo.poster ?? photo.src}
       width={width}
@@ -69,6 +84,7 @@ const PanelMedia: React.FC<{
       loading="lazy"
       decoding="async"
       className={className}
+      style={{ objectPosition: photo.focus }}
     />
   );
 
