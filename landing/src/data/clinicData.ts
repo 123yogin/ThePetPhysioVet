@@ -21,8 +21,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Laser Therapy', 'Hydrotherapy', 'Targeted Massage', 'Joint Supplements Plan', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: 'Ongoing maintenance & visible improvement within 3-4 weeks',
     imageUrl:
-      '/photos/conditions/arthritis.jpg',
-    altText: 'A Labrador resting — a breed prone to arthritis in later life',
+      '/photos/conditions/arthritis-frame.webp',
+    altText: 'Class IV laser therapy being applied to a dog at the clinic',
     videoUrl: '/videos/laser.mp4',
     posterUrl: '/videos/laser-poster.jpg',
   },
@@ -40,8 +40,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Electro-acupuncture', 'TENS', 'Hydrotherapy — Indoor Swimming Pool', 'Class IV Laser', 'Neuromuscular Electrical Stimulation', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture'],
     expectedRecoveryTime: '6 to 16 weeks based on severity (Grade I to V)',
     imageUrl:
-      '/photos/conditions/ivdd.jpg',
-    altText: 'A Dachshund, a breed prone to intervertebral disc disease (IVDD)',
+      '/photos/conditions/ivdd-frame.webp',
+    altText: 'A dog swimming in the clinic indoor hydrotherapy pool',
     videoUrl: '/videos/hydrotherapy.mp4',
     posterUrl: '/videos/hydrotherapy-poster.jpg',
   },
@@ -59,8 +59,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Physiotherapy', 'Therapeutic Exercise (Peanut Ball)', 'Indoor Swimming Pool', 'Cryotherapy & Heat Modalities', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '6 to 8 weeks for baseline stabilization',
     imageUrl:
-      '/photos/conditions/hip-dysplasia.webp',
-    altText: 'Golden Retriever doing core stabilization on a peanut ball',
+      '/photos/conditions/hip-dysplasia-frame.webp',
+    altText: 'A dog in guided aquatic therapy at the clinic pool',
     videoUrl: '/videos/exercise.mp4',
     posterUrl: '/videos/exercise-poster.jpg',
   },
@@ -78,8 +78,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Class IV Laser Therapy', 'Passive Range of Motion (PROM)', 'Controlled Aquatic Gait Retraining', 'Home Cryotherapy Protocol', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 12 weeks guided post-op milestones',
     imageUrl:
-      '/photos/conditions/post-surgical.jpg',
-    altText: 'A Boxer resting during recovery after orthopaedic surgery',
+      '/photos/conditions/post-surgical-frame.webp',
+    altText: 'Class IV laser therapy on a dog during post-surgical recovery',
     videoUrl: '/videos/laser.mp4',
     posterUrl: '/videos/laser-poster.jpg',
   },
@@ -97,8 +97,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Proprioceptive Circuit Exercises', 'Electrical Muscle Stimulation', 'Hydrotherapy', 'Laser Therapy', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 20 weeks individualized neural program',
     imageUrl:
-      '/photos/conditions/neurological-recovery.jpg',
-    altText: 'A Rottweiler standing alert during neurological rehabilitation',
+      '/photos/conditions/neurological-recovery-frame.webp',
+    altText: 'A dog doing guided aquatic exercise during neurological rehabilitation',
     videoUrl: '/videos/exercise.mp4',
     posterUrl: '/videos/exercise-poster.jpg',
   },
@@ -116,8 +116,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['High-Power Laser', 'Myofascial Trigger Point Release', 'Aquatic Conditioning', 'Plyometric Strength Building', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '4 to 10 weeks to return to agility & outdoor sports',
     imageUrl:
-      '/photos/conditions/sports-injury.webp',
-    altText: 'Athletic agility dog training and undergoing injury conditioning',
+      '/photos/conditions/sports-injury-frame.webp',
+    altText: 'A dog in guided aquatic conditioning at the clinic',
     videoUrl: '/videos/exercise.mp4',
     posterUrl: '/videos/exercise-poster.jpg',
   },
@@ -135,8 +135,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Gentle Massage', 'Warm Water Hydrotherapy Walk', 'Low-Impact Balance Matting', 'Nonslip Assistive Gear Consultation', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: 'Continuous weekly or bi-weekly comfort care program',
     imageUrl:
-      '/photos/conditions/senior-mobility.webp',
-    altText: 'Senior dog comfortably resting in a warm rehabilitation clinic',
+      '/photos/conditions/senior-mobility-frame.webp',
+    altText: 'A senior dog resting with its owner during a gentle care session',
     videoUrl: '/videos/senior.mp4',
     posterUrl: '/videos/senior-poster.jpg',
   },
@@ -154,8 +154,8 @@ export const CONDITIONS: ConditionItem[] = [
     recommendedTherapies: ['Indoor Pool Swimming Sessions', 'Targeted Metabolic Caloric Plan', 'Land Resistance Walks', 'Progressive Weight Milestones', 'Pulsed electro-magnetic field (PEMF)', 'Acupuncture', 'Electro-acupuncture', 'TENS'],
     expectedRecoveryTime: '8 to 16 weeks target body condition restoration',
     imageUrl:
-      '/photos/conditions/obesity-rehab.webp',
-    altText: 'Dog swimming in the indoor hydrotherapy pool during weight management rehabilitation',
+      '/photos/conditions/obesity-rehab-frame.webp',
+    altText: 'A dog swimming in the hydrotherapy pool for weight management',
     videoUrl: '/videos/hydrotherapy.mp4',
     posterUrl: '/videos/hydrotherapy-poster.jpg',
   }
