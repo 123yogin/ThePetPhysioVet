@@ -12,6 +12,8 @@ from decimal import Decimal
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+from .files import diagnostic_report_upload_to
+
 
 class DiagnosticReport(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -26,13 +28,13 @@ class DiagnosticReport(models.Model):
         ("MRI", "MRI"),
         ("CT", "CT Scan"),
         ("ULTRASOUND", "Ultrasound"),
-        ("BLOOD", "Blood Work"),
+        ("BLOOD", "Blood Report"),
         ("OTHER", "Other"),
     )
 
     pet = models.ForeignKey("appointments.Pet", on_delete=models.CASCADE, related_name="diagnostic_reports")
     report_type = models.CharField(max_length=20, choices=REPORT_TYPES, default="OTHER")
-    file = models.FileField(upload_to="diagnostic_reports/")
+    file = models.FileField(upload_to=diagnostic_report_upload_to)
     original_filename = models.CharField(max_length=255, blank=True, default="")
     size = models.PositiveIntegerField(default=0)
     mime = models.CharField(max_length=100, blank=True, default="")
@@ -55,6 +57,10 @@ class TreatmentPlan(models.Model):
 
     pet = models.ForeignKey("appointments.Pet", on_delete=models.CASCADE, related_name="treatment_plans")
     therapies = models.JSONField(default=list, blank=True)
+    # Structured checklist schedule: [{"therapy", "frequency", "weekdays": [0-6]}].
+    # Validated by TreatmentPlanSerializer; rehab.py turns it into RehabSession
+    # rows. Legacy plans keep the free-text fields above and an empty schedule.
+    schedule = models.JSONField(default=list, blank=True)
     frequency = models.CharField(max_length=100, blank=True, default="")
     frequency_custom = models.CharField(max_length=255, blank=True, default="")
     duration = models.CharField(max_length=100, blank=True, default="")
@@ -71,6 +77,48 @@ class TreatmentPlan(models.Model):
 
     def __str__(self):
         return f"Treatment Plan for {self.pet.name}"
+
+class RehabSession(models.Model):
+    """One planned therapy on one day of a plan -- a tickable checklist cell.
+
+    Only DUE/DONE/SKIPPED are stored. MISSED (DUE and in the past) and
+    DONE_LATE (DONE on a different day than planned) are derived at read time,
+    so no scheduled job is needed to keep them true.
+    """
+
+    STATUS_CHOICES = (
+        ("DUE", "Due"),
+        ("DONE", "Done"),
+        ("SKIPPED", "Skipped"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    plan = models.ForeignKey(
+        "appointments.TreatmentPlan", on_delete=models.CASCADE, related_name="sessions",
+    )
+    therapy = models.CharField(max_length=100)
+    planned_date = models.DateField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="DUE")
+    done_on = models.DateField(null=True, blank=True)
+    done_by = models.ForeignKey(
+        "appointments.UserProfile", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    note = models.TextField(blank=True, default="")
+    skip_reason = models.TextField(blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["planned_date", "therapy"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan", "therapy", "planned_date"], name="uniq_rehab_session_cell",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.therapy} on {self.planned_date} ({self.status})"
+
 
 class ProgressNote(models.Model):
     """One session in a course of rehab.

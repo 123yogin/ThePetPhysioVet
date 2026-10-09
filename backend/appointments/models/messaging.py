@@ -9,6 +9,8 @@ import uuid
 
 from django.db import models
 
+from .files import query_attachment_upload_to
+
 
 class QueryThread(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -38,7 +40,7 @@ class QueryMessage(models.Model):
 class QueryAttachment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     message = models.ForeignKey("appointments.QueryMessage", on_delete=models.CASCADE, related_name="attachments")
-    file = models.FileField(upload_to="query_attachments/")
+    file = models.FileField(upload_to=query_attachment_upload_to)
     original_filename = models.CharField(max_length=255, blank=True, default="")
     mime = models.CharField(max_length=100, blank=True, default="")
     size = models.PositiveIntegerField(default=0)

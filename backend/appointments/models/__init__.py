@@ -16,11 +16,12 @@ re-exported here, so no call site had to change.
 from .accounts import UserProfile, PasswordResetToken  # noqa: F401
 from .pets import Pet  # noqa: F401
 from .scheduling import Appointment  # noqa: F401
-from .clinical import DiagnosticReport, TreatmentPlan, ProgressNote  # noqa: F401
+from .clinical import DiagnosticReport, TreatmentPlan, RehabSession, ProgressNote  # noqa: F401
 from .billing import Invoice, LineItem, Payment, Package  # noqa: F401
 from .notifications import Notification, NotificationPref  # noqa: F401
 from .messaging import QueryThread, QueryMessage, QueryAttachment  # noqa: F401
 from .enquiries import Enquiry  # noqa: F401
+from .files import StoredFile  # noqa: F401
 from .facility import (  # noqa: F401
     FacilityBooking, FACILITY_BEDS, FACILITY_MAX_SLOTS_PER_BOOKING,
     FACILITY_HOLD_SECONDS,
@@ -31,6 +32,7 @@ from .boarding import (  # noqa: F401
     BOARDING_WALK_OPTIONS, BOARDING_WALK_KEYS,
     duration_days, duration_price, duration_label, duration_hours,
 )
+from .sms import SmsMessage  # noqa: F401
 
 __all__ = [
     "UserProfile",
@@ -50,6 +52,8 @@ __all__ = [
     "QueryMessage",
     "QueryAttachment",
     "Enquiry",
+    "StoredFile",
     "FacilityBooking",
     "BoardingBooking",
+    "SmsMessage",
 ]

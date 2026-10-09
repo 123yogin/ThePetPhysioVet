@@ -269,6 +269,7 @@ endpoint; verified as a no-op against the (single-doctor) seed data.
 | POST | `/appointments/:id/reschedule` | `{date, time}` | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/complete` | | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/confirm` | | `Appointment` — **new, 2026-08-21 (G1)**, doctor-scoped |
+| POST | `/appointments/:id/cancel` | `{reason?}` | `Appointment` (`status: "Cancelled"`, `cancel_reason`) — **new, 2026-10-08 (live QA B1)**, doctor-scoped (404 for another practice's). 400 if already `Completed`/`Cancelled`. A past date is allowed (no-shows). Frees the slot. |
 | POST | `/appointments/:id/reschedule-approve` | | `Appointment` — doctor-scoped |
 | POST | `/appointments/:id/reschedule-reject` | | `Appointment` — doctor-scoped |
 | GET | `/appointments/:id/share` | | `{whatsapp_url, sms_url, pet_name, owner_name, owner_phone}` — doctor-scoped |
@@ -319,20 +320,176 @@ Moves `status: "Pending"` → `"Confirmed"`.
 | POST | `/pets/:id/diagnoses` | multipart `{file, report_type, notes?}` | `Diagnosis` — same scoping as `GET` |
 | DELETE | `/diagnoses/:id` | | 204 — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up: previously any doctor could delete another practice's diagnostic report by ID) |
 
-Validate upload: max 10 MB, allow `image/*` + `application/pdf` + `application/dicom`.
+Validate upload: max 4 MB (amended 2026-10-08, was 10 MB), allow `image/*` + `application/pdf` + `application/dicom`.
 Reject anything else with 400. Store `original_filename`, `size`, `mime` from the upload.
+
+### Uploaded files — amended 2026-10-08 (uploads stored in Postgres, then Vercel Blob)
+The 2026-10-08 move of upload bytes to a private Vercel Blob store changed **no part of
+this contract**: same routes, limits, problem bodies, token format and download headers.
+The bytes are read server-side and streamed back by `/files/:token`; no Blob URL is ever
+returned to a client. A Blob outage on upload is the same `503` below.
+
+| GET | `/files/:token` | | the file bytes — **no bearer header; the signed token is the capability**. `Content-Disposition: attachment` carries the uploader's original filename (sanitised; RFC 5987 `filename*` for non-ASCII) when the token was issued with one, else the storage key's basename |
+
+**Size cap, every upload route.** `POST /pets/:id/diagnoses`, `POST
+/owner/pets/:id/diagnoses`, `POST /pets/:id/queries`, `POST /owner/pets/:id/queries`,
+and the `photo` part of `POST /pets`, `PATCH /pets/:id`, `POST /owner/pets` reject any
+file over 4 MB (4 194 304 bytes) with `400` problem+json,
+`detail: "File is too large (max 4 MB)."`, before anything is created. 4 MB, not 10:
+production is Vercel serverless, which rejects any request body over ~4.5 MB at its edge
+(a bare 413 that never reaches Django), so the cap sits below that with room for multipart
+overhead. Content-type allow-list + magic-byte sniffing (§3 Auth amendment 5) are unchanged.
+
+**Pet photos are images only.** The `photo` part must be JPEG, PNG, WebP or HEIC/HEIF
+(`image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`), checked against
+its leading bytes; anything else is `400` problem+json,
+`detail: "Pet photo must be a JPEG, PNG, WebP or HEIC image."`, and no pet is created or
+changed.
+
+**Storage failures are a 503, never an HTML 500.** If the upload backend cannot write
+(read-only filesystem, database error, Vercel Blob unreachable), the route answers `503` problem+json,
+`detail: "Upload storage unavailable, please try again."`, and nothing is left behind
+(the record and its file are written in one transaction).
+
+**Storage-exhaustion limits (security review, 2026-10-08).** Uploaded bytes share the
+database with every clinical record, so every upload route (any request carrying a file)
+is also subject to, in this order:
+- **Rate limits:** 30 upload requests per user per hour and 60 per client IP per hour →
+  `429` problem+json. Requests without files are not counted.
+- **Per-owner quota:** an OWNER account may hold at most 100 MB of uploads in total
+  (summed over `StoredFile.uploaded_by`) → `400` problem+json
+  `"Upload limit reached for your account (100 MB). Please contact the clinic."`.
+  Doctors are exempt.
+- **Global ceiling:** once total stored upload bytes would exceed `FILE_STORAGE_MAX_MB`
+  (default 700 MB) → `503` problem+json
+  `"File storage is nearly full — please contact the clinic."`.
+
+Quota and ceiling are soft under concurrency (parallel uploads can overshoot by one
+request each). `POST /auth/signup` is limited to 10 per client IP per hour (`429`) so the
+per-owner quota cannot be multiplied with throwaway accounts.
+
+**Storage names.** Uploads are stored under random names —
+`diagnostic_reports/<uuid32><ext>`, `query_attachments/<uuid32><ext>`,
+`pets/<uuid32><ext>` — never the client's filename, which is kept only in
+`original_filename` for display. A name is never reused after a delete.
+
+**There is no `/media/` route.** Neither Django nor the nginx container serves uploads by
+path any more (both returned files to anyone holding the URL); `/media/...` is a 404.
+
+**Download links.** `Diagnosis.file_url`, `QueryAttachment.url` and `Pet.photo` are
+absolute URLs of the form `/api/v1/files/<token>`. The token is a Django
+`TimestampSigner` signature (salt `file-access`) over `[storage name, StoredFile id]`
+(database storage; the id is `null` for local filesystem storage), **valid 15 minutes**.
+A token stops working when its row is deleted, even if the name were ever stored again.
+The route is rate limited to 300 requests per client IP per hour (`429`); it is only rendered to callers already authorised to see the parent record
+(rule 4), so holding it is the grant — which is what lets a plain `<a href>`/`<img src>`
+open it. A forged, expired, or dangling token is the standard `404` problem. The response
+carries the stored content type (anything outside the upload allow-list is sent as
+`application/octet-stream`), `Content-Disposition: attachment; filename="..."`, and
+`X-Content-Type-Options: nosniff`. Clients must re-fetch the parent record for a fresh
+link rather than caching a URL.
 
 ### Treatment plans
 | GET | `/pets/:id/treatment-plans` | | `TreatmentPlan[]` — **doctor-scoped via the pet** (amended 2026-08-21, L1 follow-up) |
 | POST | `/pets/:id/treatment-plans` | plan body | `TreatmentPlan` — same scoping as `GET` |
 | GET | `/treatment-plans/:id` | | `TreatmentPlan` — **doctor-scoped via `pet__doctor`** (amended 2026-08-21, L1 follow-up) |
+| PATCH | `/treatment-plans/:id` | partial plan body (incl. `schedule`) | `TreatmentPlan` — doctor-scoped; rebuilds only future DUE sessions, never DONE/SKIPPED; never invents an `end_date` |
+| POST | `/treatment-plans/:id/extend` | `{days?: 1..366 = 7}` | `TreatmentPlan` — `end_date += days`, cadence continues from original `start_date`; doctor-scoped |
 | POST | `/treatment-plans/:id/progress-notes` | `{session_no?, notes}` | `ProgressNote` — same scoping |
+
+`TreatmentPlan` gains (2026-10-08, rehab checklist): `schedule` = `[{therapy, frequency, weekdays}]`
+(therapy from the catalogue; frequency one of `EVERYDAY|ALTERNATE_DAY|TWICE_WEEKLY|WEEKLY|BIWEEKLY`;
+weekdays 0=Mon..6=Sun, exactly 0/0/2/1/1 of them) and read-only `sessions` =
+`[{id, therapy, planned_date, status DUE|DONE|SKIPPED, display_status (adds MISSED, DONE_LATE),
+done_on, done_by_name, note, skip_reason}]`. On **create** only: no `end_date` and no `duration`
+-> `end_date = start_date + 6`; a parseable `duration` ("4WK", "10 days") -> derived end date.
+Max span 366 days. The owner `GET /owner/pets/:id` payload carries both, read-only, with `done_by_name` always `null` (owners never see staff identity).
+
+### Rehab checklist
+| GET | `/rehab/therapies` | | `{groups:[{group, therapies[]}], frequencies:[{code,label,weekdays_required}]}` — any authenticated user |
+| GET | `/rehab/today` | | `{today, due:[Session+{pet:{id,name}, plan:{id,start_date,end_date}}], pending:[...]}` — doctor-scoped; `due` = all sessions planned today (any status), `pending` = DUE before today; ACTIVE plans only |
+| POST | `/rehab/sessions/:id/done` | `{done_on?, note?}` | `Session` — `planned_date <= done_on <= today` else 400; default today; idempotent |
+| POST | `/rehab/sessions/:id/skip` | `{reason?}` | `Session` |
+| POST | `/rehab/sessions/:id/undo` | | `Session` back to DUE (clears done_on/done_by/skip_reason) |
+
+Session routes are doctor-only: owner 403, another practice's session 404.
+
+Plan lifecycle (amended 2026-10-08, final review):
+- `PATCH /treatment-plans/:id {status}`: moving away from `ACTIVE` (`COMPLETED` / `PAUSED`) deletes the plan's
+  `DUE` sessions with `planned_date >= today` (so they can never turn MISSED); DONE/SKIPPED and past DUE rows
+  stay. Moving back to `ACTIVE` regenerates future sessions from today (no past backfill). `completed_at` is
+  set when the status becomes `COMPLETED` and cleared when it returns to `ACTIVE`.
+- `POST /treatment-plans/:id/extend {days}`: `new_end = max(old_end, today - 1) + days`; sessions are created
+  only from that base + 1 (a lapsed plan never gets past MISSED rows). Cadence stays anchored on the original
+  `start_date`.
+- `PATCH` with a `start_date` different from the stored one is **400** (`errors.start_date`) once the plan has
+  any sessions. Re-sending the same value is accepted.
+- Plan creation (plan row + sessions) is atomic.
+
+### Boarding (indoor-facility stays) — amended 2026-10-08
+Six beds, counted per date over a stay's range across active stays **and unexpired holds**. Expired holds
+never count (lazy expiry, no sweeper). Check + insert run under a Postgres advisory lock, so two visitors
+racing for the last bed get one 201 and one 409.
+
+| Auth | Method | Path | Body | Response |
+|---|---|---|---|---|
+| public | POST | `/facility/boarding/holds` | `{check_in, duration}` | 201 `{reference, expires_at, check_out, price}`; 409 full; 400 bad date/duration; **429** (same message) when the IP has had 15 *successful* holds in the hour (409/400 attempts do not count) or already has 2 unexpired holds. Honeypot returns the same shape (computed `expires_at`/`check_out`/`price`), nothing stored. Holds `FACILITY_HOLD_SECONDS` (600 s). |
+| public | POST | `/facility/boarding/holds/:ref/confirm` | intake body below (`checkIn`/`duration` ignored — fixed by the hold) | 201 same shape as direct create (`{reference, check_in, check_out, duration, price, status:"PENDING", detail}`); **410** `Hold expired` (also when the held check-in date is already past); **404** unknown or not `HELD`; 400 invalid |
+| public / doctor | POST | `/facility/boarding` | intake body below | 201 as above (doctor token: status `CONFIRMED`, `source:"doctor"`); 409 full |
+| doctor | GET | `/facility/boarding?status=&include_held=1` | | `{results: Booking[], pending_count}`; `HELD` rows hidden unless `include_held=1`, which returns only *unexpired* holds |
+| doctor | POST | `/facility/boarding/:ref/status` | `{action}` | a `HELD` row is 404. **400** problem when `check_in` or `complete` is sent before the stay's `check_in` date (clinic-local day): `This stay starts on Sat 21 Nov, so it cannot be checked in before then.` |
+
+**`check_out` is the LAST BED-NIGHT (inclusive), not the pickup day.** A 48 h stay from 20 Nov has `check_out = 2026-11-21` and the pet goes home on 22 Nov; a 24 h stay from the 8th has `check_out` = the 8th and goes home on the 9th; a stay shorter than a day has `check_out = check_in`. Capacity counts beds per date over `check_in..check_out` inclusive. UIs show it as "Last night: Sat 21 Nov · Goes home: Sun 22 Nov" (`departure_date()` on the model is the display-only pickup day).
+
+| doctor | POST | `/facility/boarding/:ref/convert` | | 200 `Booking` with `owner_id`, `pet_id` set. **409** problem `Several clients share this phone — open the right client and link manually.` when more than one OWNER account has the phone and the email does not pick one (nothing created). 404 unknown/HELD; owner role 403 |
+
+Intake body (camelCase): `petName, ownerName, ownerPhone, ownerEmail?, checkIn, duration, foodBy?, utensilsBy?,
+medicinesBy?, blanketBy?, foodPreference?, walkTimes?, aadhaar?, termsAccepted, website?(honeypot)` plus
+**`emergencyContactPhone` (REQUIRED for every new booking, incl. holds-confirm and doctor-entered)** and
+`emergencyContactName?` (<=150). Both phones go through `normalise_phone`; if the emergency number is the same
+number as `ownerPhone` after normalisation (spacing, `+91`, leading `0` ignored) -> 400
+`emergencyContactPhone: Emergency contact must be a different number`. Existing rows default to `""`.
+
+Doctor `Booking` JSON adds: `emergency_contact_name`, `emergency_contact_phone`, `owner_id` (uuid|null),
+`pet_id` (uuid|null), `pet_link_status` (`"linked"` pet set | `"owner_only"` owner set, pet null | `"unlinked"`),
+`previous_reports` (null when no pet linked; else the linked pet's `DiagnosticReport` JSON — same serializer as
+the pet page, newest first: `id, report_type, report_type_display, uploaded_at, file_url, ...` — and `[]` when
+the pet belongs to another doctor's practice), `expires_at` (HELD only), status may be `HELD`. `aadhaar` is **masked** on every staff response (`"XXXX XXXX 1234"`, last four only; `""` when none) — the full number never leaves the server.
+
+Matching (server-side, on create / confirm): the normalised `ownerPhone` equals exactly one OWNER's account
+phone or a pet's `owner_phone` (compared ignoring spacing and `+91`) -> `owner`; that owner has exactly one pet
+named `petName` (case-insensitive, trimmed) -> `pet`. Any ambiguity leaves the link empty. **Privacy:** the
+public create/confirm responses are the same shape and template text for known and unknown phones; owner/pet/report
+data appear only on doctor routes.
+
+Convert: find-or-create owner (existing matched owner, else phone, else email; new owners get an unusable
+password) and pet (by name under that owner), link both. Idempotent and serialised: a second call, or a stay already
+auto-linked to a pet, creates nothing. The owner-portal `GET /owner/bookings` excludes `HELD` rows.
+
+**Owner visibility (amended 2026-10-08, live QA D1 — privacy).** The automatic phone match above is a
+**staff hint only**: signup does not verify a phone, so it never makes a stay visible to the matched account.
+`Booking` JSON adds `owner_verified` (bool) and `owner_account` (`{id, name, email, phone}` of the linked
+account, or null — doctor routes only, so staff can check who it is). `owner_verified` is `true` only when the
+stay was created/confirmed with a valid OWNER bearer token, when `convert` **created** the owner account itself,
+or after staff call **`POST /facility/boarding/:ref/confirm-client`** (doctor; 400 when no account is linked;
+404 unknown/HELD; idempotent; returns the `Booking`). `convert` finding an EXISTING account by phone or email
+does **not** verify it (signup verifies neither). Enquiries follow the same rule: `Enquiry.owner` +
+`owner_verified` (+ `owner_account` on the doctor JSON); convert verifies only an owner it created; otherwise
+staff call **`POST /enquiries/:id/confirm-client`** (doctor; 400 until converted). `GET /owner/bookings` returns
+only facility bookings whose `owner` is the caller (signed-in create), and enquiries/stays with `owner = caller
+AND owner_verified`. Migration 0021 backfills converted enquiries only where convert created the owner account
+(unusable password, joined after the enquiry); others stay unlinked. Public responses are unchanged.
+
+**Lazy matching (2026-10-08, live QA B3).** `GET /facility/boarding` (doctor) re-runs the same match for active
+(`PENDING`/`CONFIRMED`/`CHECKED_IN`) stays with no owner and persists the result (unverified), so a client who
+signed up after booking is recognised. Ambiguous phones stay unlinked. Public routes are unaffected.
 
 ### Billing
 | GET | `/invoices?pet=` | | `Invoice[]` — **doctor-scoped** (amended 2026-08-21, L1: `pet__doctor`, plus invoices with no `pet` at all — see below) |
 | POST | `/invoices` | `{pet_id, line_items[], tax?, payment_mode?, total_sessions?}` | `Invoice` — the `pet_id` lookup is doctor-scoped too (amended 2026-08-21, L1 follow-up) |
 | GET | `/invoices/:id` | | `Invoice` — **doctor-scoped, same as the list** (amended 2026-08-21, L1 follow-up: previously reachable by any doctor by ID) |
-| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID) |
+| POST | `/invoices/:id/payments` | `{amount_paid, gateway_ref?, idempotency_key?}` | `Payment` — doctor-scoped (a money-touching mutation; previously any doctor could take payment on another practice's invoice by ID). 400 on a voided invoice; the void and balance checks run under a row lock on the invoice (shared with `/void`), so a payment and a void cannot interleave. |
+| POST | `/invoices/:id/void` | `{reason?}` | `Invoice` with `payment_status: "VOID"`, `balance_due: 0`, `voided_at`, `void_reason` — **new, 2026-10-08 (live QA B7)**, doctor-scoped. Only an invoice with nothing paid (400 otherwise). Idempotent (repeat returns the voided invoice). The invoice keeps its number and lines; it is excluded from `/revenue` and owes nothing. |
 
 **Doctor-scoping and orphan invoices (amended 2026-08-21 — L1, extended to detail
 routes the same day).** `Invoice` has no direct `doctor` FK; doctor-scoping on
@@ -365,6 +522,46 @@ Server computes `subtotal` from line items, `total = subtotal + tax`,
 | POST | `/notifications/mark-all-read` | | 204 |
 | GET | `/notification-prefs?owner_phone=` | | pref |
 | PUT | `/notification-prefs` | `{owner_phone, sms_opt_out}` | pref |
+
+### SMS — added 2026-10-08 (transactional texts via the Android gateway)
+| Method | Path | Auth | Body / query | Response |
+| --- | --- | --- | --- | --- |
+| GET | `/sms/log?page=&page_size=` | **doctor** | `page` ≥ 1 (default 1), `page_size` 1–100 (default 25); non-integers → 400 | `{mode, sent_today, daily_limit, count, page, page_size, results: SmsLogEntry[]}` |
+| POST | `/sms/test` | **doctor** | `{to}` (any phone `normalise_phone` accepts that folds to E.164) | 201 `SmsLogEntry` — sends "Pet Physio Vet test message"; **counts toward the daily cap**; 10/hour/doctor (429) |
+| GET | `/cron/sms-reminders` | `Authorization: Bearer $CRON_SECRET` (constant-time compare; anything else, including a user JWT or an unset secret → 401) | — | `{date, appointment_reminders: Counts, checkout_reminders: Counts}` |
+| POST | `/sms/webhook` | HMAC-SHA256: `X-Signature` = hex HMAC(`SMS_WEBHOOK_SIGNING_KEY`, raw body + `X-Timestamp`), timestamp within ±5 min → else 401; 404 while the key is unset | gateway event `{event, payload: {messageId, reason?}, ...}` | `{result: "updated" \| "ignored" \| "unknown"}` |
+
+`SmsLogEntry = {id, created_at, sent_at, to, kind, status, error, provider}` — `to` is
+**masked except the last four digits** (`*********3210`). `kind` ∈ `appointment_confirmed`,
+`appointment_moved`, `appointment_reminder`, `boarding_confirmed`, `boarding_checkout`, `test`.
+`status` ∈ `QUEUED`, `SENT` (accepted by the provider), `DELIVERED`, `FAILED`, `SKIPPED_OPTOUT`,
+`SKIPPED_LIMIT` (clinic-wide `SMS_DAILY_LIMIT` or `SMS_PER_PHONE_DAILY_LIMIT`, default 3, per
+number per day), `SKIPPED_COUNTRY` (calling code not in `SMS_ALLOWED_COUNTRY_CODES`, default
+`+91`), `SKIPPED_DISABLED`. A send that timed out without an answer stays `FAILED` but keeps
+`sent_at` (it may have gone out), so it counts toward both limits. `error` never contains a
+phone number (digit runs of 7+ are masked). `mode` ∈ `android_gateway`, `console`, `disabled`.
+The log follows the `_doctor_scoped` posture: texts about another doctor's appointment are
+not listed; clinic-level texts (boarding, tests) are.
+
+`Counts = {considered, sent, already_sent, skipped, failed, deferred}`. The cron run is
+idempotent (one row per kind + appointment/stay + date, enforced by a unique key), stops
+starting sends after ~20 s or 3 consecutive gateway failures (`deferred`), and a re-run
+retries FAILED/deferred ones. It reminds **tomorrow's** `Confirmed`/`Rescheduled` visits **that have a doctor and were booked,
+confirmed or moved by a doctor** (`Appointment.confirmed_at`/`confirmed_by`, migration 0024 —
+never set by an owner action) and
+sends check-out reminders for overnight stays (≥ 24 h, `CONFIRMED`/`CHECKED_IN`) whose
+departure day is **today**.
+
+Automatic texts are also sent on: `POST /appointments/:id/confirm`, `POST /enquiries/:id/convert`
+(Confirm & Book), `POST /facility/boarding/<ref>/status {action: "confirm"}` and a
+doctor-created stay ("confirmed"), and on `POST /appointments/:id/reschedule` and
+`/reschedule-approve` ("moved to …", once per new date/time).
+
+**Amended 2026-10-08 (security review):** `POST /owner/appointments/:id/accept` only accepts a
+visit whose status is `Rescheduled` (a new time the clinic proposed); anything else → 400
+"Nothing to accept." It previously confirmed any appointment, including the owner's own
+Pending booking or reschedule request. They never change the response of those routes — an SMS failure is
+logged and recorded, never returned.
 
 ### Queries
 | GET | `/queries/inbox` | | `{results: QueryThread[]}` — **doctor-scoped, messages-only** (amended 2026-08-21, D3 + L1) |
@@ -434,6 +631,10 @@ before it becomes a real patient/clinical record. `Enquiry` is a new model:
 `preferred_date` (nullable), `preferred_specialist` (blank-default), `status`
 (`NEW`/`CONVERTED`/`DISMISSED`), `created_at`, `converted_appointment` (nullable FK,
 set on conversion), `actioned_by`/`actioned_at` (audit trail for convert/dismiss).
+**Amended 2026-10-08 (live QA):** nullable `owner` FK (set when submitted with a valid OWNER bearer token, and
+by `convert` — never from the phone; it is what `GET /owner/bookings` reads), and the doctor JSON adds
+`reference` (`ENQ-XXXXXXXX`, derived from the id exactly as the create response shows it). Unknown `/api/*`
+paths now return a JSON `404` problem (`application/problem+json`) instead of Django's HTML page.
 UUID primary key, one plain `CreateModel` migration (`0002_enquiry`) — this project's
 migration chain was flattened to a single `0001_initial` on 2026-09-02 (see the
 breaking-change note at the top of this document) specifically so nothing here repeats
@@ -445,7 +646,7 @@ SQLite.
 |---|---|---|---|---|
 | POST | `/enquiries` | **PUBLIC** (`AllowAny` + `authentication_classes([])`) | `{firstName, lastName, petName, speciesBreed, email, phone, reason, preferredDate?, preferredSpecialist?}` | `201 {id, reference, detail}` |
 | GET | `/enquiries?status=` | Doctor (`IsDoctor`) | — | `{results: Enquiry[], new_count}` |
-| POST | `/enquiries/:id/convert` | Doctor | `{date, time, visit_type}` | `Enquiry` (with nested `appointment`) |
+| POST | `/enquiries/:id/convert` | Doctor | `{date, time, visit_type}` | `Enquiry` (with nested `appointment`); **400** when `date`/`time` is unparseable or already in the past (clinic-local time) |
 | POST | `/enquiries/:id/dismiss` | Doctor | — | `Enquiry` |
 
 **`POST /enquiries` is the only unauthenticated write in this app**, and the sole
@@ -491,7 +692,8 @@ owner from `pet_name`/`species_breed` (case-insensitive name match against the
 owner's existing pets — never duplicates one), assigned to the converting doctor.
 `species` is a best-effort guess off `species_breed` (`"cat"`/`"dog"` substring match,
 default `"Dog"`); `species_breed` itself is stored verbatim in `breed`. Creates the
-`Appointment` as `Pending`, owned by the converting doctor, using the supplied
+`Appointment` as **`Confirmed`** (amended 2026-10-08, live QA B2 — was `Pending`; the doctor chose the
+date/time and pressed "Confirm & Book", so a second confirm step was redundant), owned by the converting doctor, using the supplied
 `date`/`time`/`visit_type` — `visit_type` is validated against
 `Appointment.VISIT_TYPES` (never a fourth hardcoded vocabulary; see the B1/B2 history
 above). Marks the enquiry `CONVERTED` and links `converted_appointment`. Wrapped in a
@@ -604,6 +806,13 @@ and their absence raises `ImproperlyConfigured` at startup — a silently no-op 
 a wrong SPA base URL would look like "reset email sent" while never reaching the user.
 No SMTP provider is configured or invented; `EMAIL_BACKEND`/credentials for a real
 provider are supplied via env/OCI Vault at deploy time.
+
+**Upload storage (added 2026-10-08).** `FILE_STORAGE=db` — or running on Vercel
+(`VERCEL` is set) — stores uploaded bytes in the `StoredFile` table
+(`appointments/storage.py` `DatabaseStorage`); otherwise `FileSystemStorage` under
+`MEDIA_ROOT`. Any other `FILE_STORAGE` value raises `ImproperlyConfigured` at startup.
+`FILE_STORAGE_MAX_MB` (default `700`, positive integer, else `ImproperlyConfigured`) is
+the global ceiling on stored upload bytes.
 
 **Production headers (added after QA round 1).** Behind `if not DEBUG:` set
 `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`,

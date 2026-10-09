@@ -13,9 +13,10 @@
  */
 
 import { CONDITIONS, SERVICES, SPECIALISTS } from '../data/clinicData';
+import { CARE_SERVICES, type CareService } from '../data/careServices';
 import type { ConditionItem, ServiceItem, Specialist } from '../types';
 
-export type RouteKind = 'home' | 'condition' | 'service' | 'specialist' | 'privacy' | 'terms' | 'notfound';
+export type RouteKind = 'home' | 'condition' | 'service' | 'care' | 'specialist' | 'privacy' | 'terms' | 'notfound';
 
 export interface RouteDef {
   /** Origin-relative path, no trailing slash (except "/"). */
@@ -34,11 +35,15 @@ export interface RouteDef {
 export const SEGMENTS = {
   condition: 'conditions',
   service: 'treatments',
+  // Care services (boarding, ...) are not therapies, so they get their own
+  // segment rather than sharing /treatments.
+  care: 'services',
   specialist: 'team',
 } as const;
 
 export const conditionPath = (id: string) => `/${SEGMENTS.condition}/${id}`;
 export const servicePath = (id: string) => `/${SEGMENTS.service}/${id}`;
+export const carePath = (id: string) => `/${SEGMENTS.care}/${id}`;
 export const specialistPath = (id: string) => `/${SEGMENTS.specialist}/${id}`;
 
 export const ROUTES: RouteDef[] = [
@@ -56,6 +61,14 @@ export const ROUTES: RouteDef[] = [
     path: servicePath(s.id),
     kind: 'service',
     entityId: s.id,
+    priority: 0.8,
+    changefreq: 'monthly',
+  })),
+
+  ...CARE_SERVICES.map<RouteDef>((c) => ({
+    path: carePath(c.id),
+    kind: 'care',
+    entityId: c.id,
     priority: 0.8,
     changefreq: 'monthly',
   })),
@@ -78,7 +91,7 @@ export const ROUTES: RouteDef[] = [
 /** Routes eligible for prerendering and the sitemap. */
 export const indexableRoutes = (): RouteDef[] => ROUTES.filter((r) => !r.noindex);
 
-export type RouteEntity = ConditionItem | ServiceItem | Specialist | null;
+export type RouteEntity = ConditionItem | ServiceItem | CareService | Specialist | null;
 
 export interface RouteMatch {
   route: RouteDef;
@@ -105,6 +118,8 @@ export function matchRoute(pathname: string): RouteMatch {
       return { route, entity: CONDITIONS.find((c) => c.id === route.entityId) ?? null };
     case 'service':
       return { route, entity: SERVICES.find((s) => s.id === route.entityId) ?? null };
+    case 'care':
+      return { route, entity: CARE_SERVICES.find((c) => c.id === route.entityId) ?? null };
     case 'specialist':
       return { route, entity: SPECIALISTS.find((p) => p.id === route.entityId) ?? null };
     default:

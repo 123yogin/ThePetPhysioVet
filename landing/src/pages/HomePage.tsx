@@ -27,6 +27,7 @@ import { SpecialistsSection } from '../components/SpecialistsSection';
 import { SplitDoorsReveal } from '../components/SplitDoorsReveal';
 import { GallerySection } from '../components/GallerySection';
 import { FaqSection } from '../components/FaqSection';
+import { FindUs } from '../components/FindUs';
 import { Footer } from '../components/Footer';
 
 // An image viewer -- the one overlay this page still owns. The booking form
@@ -90,31 +91,35 @@ export const HomePage: React.FC = () => {
           />
         </div>
 
-        <TrustMetrics />
+        <div className="cv-auto"><TrustMetrics /></div>
 
         {/* Services before Conditions: lead with what the clinic offers, then
             what it treats, and let the journey explain how a course of it runs.
             TreatmentJourney moved down with them rather than staying put --
             it describes the process that follows both, so sitting between them
             would have split "what we do" from "what we treat". */}
-        <ServicesSection />
+        <div className="cv-auto"><ServicesSection /></div>
 
-        <ConditionsSection />
+        <div className="cv-auto"><ConditionsSection /></div>
 
         <TreatmentJourney />
 
-        <SuccessStories />
+        <div className="cv-auto"><SuccessStories /></div>
 
         {/* Split-doors reveal: the heading parts to uncover the clinician. */}
         <SplitDoorsReveal>
           <SpecialistsSection onOpenBookingWithSpecialist={handleBookWithSpecialist} />
         </SplitDoorsReveal>
 
-        <GallerySection
-          onSelectImage={(item) => setSelectedGalleryImage(item)}
-        />
+        <div className="cv-auto">
+          <GallerySection
+            onSelectImage={(item) => setSelectedGalleryImage(item)}
+          />
+        </div>
 
-        <BookableServices availableCodes={publicServiceCodes} />
+        <div className="cv-auto">
+          <BookableServices availableCodes={publicServiceCodes} />
+        </div>
 
         {/* No standalone contact block here any more.
 
@@ -130,7 +135,17 @@ export const HomePage: React.FC = () => {
             this?" -- worth reading, but they were standing between a visitor
             who had decided and the thing they decided to do. Questions belong
             after the ask, for the people who still have one. */}
-        <FaqSection />
+        <div className="cv-auto"><FaqSection /></div>
+
+        {/* Where the clinic is, in crawlable text: address, landmark, map,
+            phone, WhatsApp and hours, all from siteConfig. Local searchers
+            ("pet physio Shilaj", "vet near Thaltej") need the place before
+            anything else. */}
+        <div id="find-us" className="cv-auto bg-(--c-bg) py-16 sm:py-20 scroll-mt-24">
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
+            <FindUs />
+          </div>
+        </div>
       </main>
 
       {/* No <NapBlock /> here, deliberately.
@@ -142,7 +157,7 @@ export const HomePage: React.FC = () => {
       }
 
       {/* Closing drift above the footer, carrying the clinic's own tagline. */}
-      <div className="py-10 sm:py-14 bg-(--c-bg) border-t border-(--c-line)/30 overflow-hidden">
+      <div className="cv-auto py-10 sm:py-14 bg-(--c-bg) border-t border-(--c-line)/30 overflow-hidden">
         <ScrollMarquee
           text={`${SITE.tagline} —`}
           baseSpeed={2.5}
@@ -152,7 +167,7 @@ export const HomePage: React.FC = () => {
       </div>
 
       {/* Footer */}
-      <Footer />
+      <div className="cv-auto"><Footer /></div>
 
       {/* Overlays. Not the content cards -- those are pages now. */}
       <LightboxModal

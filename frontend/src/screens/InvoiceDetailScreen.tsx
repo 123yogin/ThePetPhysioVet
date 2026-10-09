@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchInvoiceDetail, addPayment } from '../api/billing';
+import { fetchInvoiceDetail, addPayment, voidInvoice } from '../api/billing';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useFlash } from '../lib/flash';
 import { humanizeStatus } from '../lib/labels';
 
@@ -16,6 +17,9 @@ export const InvoiceDetailScreen: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [refNo, setRefNo] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Live QA B7: a mistaken invoice could not be withdrawn.
+  const [confirmVoid, setConfirmVoid] = useState(false);
+  const [voiding, setVoiding] = useState(false);
 
   const { data: inv, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoice', invoiceId],
@@ -42,6 +46,20 @@ export const InvoiceDetailScreen: React.FC = () => {
       addFlash(err.message || 'Failed to record payment', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleVoid = async (reason: string) => {
+    setVoiding(true);
+    try {
+      await voidInvoice(invoiceId, reason || undefined);
+      addFlash('Invoice voided', 'success');
+      setConfirmVoid(false);
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Could not void the invoice', 'error');
+    } finally {
+      setVoiding(false);
     }
   };
 
@@ -83,6 +101,14 @@ export const InvoiceDetailScreen: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {inv.payment_status === 'VOID' && (
+          <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
+            Voided{inv.voided_at ? ` on ${inv.voided_at.substring(0, 10)}` : ''}
+            {inv.void_reason ? ` — ${inv.void_reason}` : ''}. Nothing is owed on this invoice and it is not
+            counted in revenue.
+          </div>
+        )}
 
         <div className="table-wrap" style={{ marginBottom: '24px' }}>
           <table>
@@ -132,7 +158,7 @@ export const InvoiceDetailScreen: React.FC = () => {
           </div>
         </div>
 
-        {Number(inv.balance_due) > 0 && (
+        {inv.payment_status !== 'VOID' && Number(inv.balance_due) > 0 && (
           <div style={{ paddingTop: '20px', borderTop: '1px solid var(--glass-border)' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>Record Payment</h3>
             <form onSubmit={handleAddPayment} style={{ display: 'flex', gap: '12px' }}>
@@ -158,7 +184,29 @@ export const InvoiceDetailScreen: React.FC = () => {
             </form>
           </div>
         )}
+
+        {inv.payment_status !== 'VOID' && Number(inv.amount_paid) === 0 && (
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ color: '#b71c1c' }} onClick={() => setConfirmVoid(true)}>
+              Void invoice
+            </button>
+          </div>
+        )}
       </div>
+
+      <ConfirmDialog
+        open={confirmVoid}
+        title={`Void ${inv.invoice_no}?`}
+        body="The invoice keeps its number but owes nothing, cannot take payments and is left out of revenue. This cannot be undone."
+        confirmLabel="Void invoice"
+        cancelLabel="Keep invoice"
+        danger
+        busy={voiding}
+        reasonLabel="Reason (optional)"
+        reasonPlaceholder="e.g. Raised twice by mistake"
+        onConfirm={handleVoid}
+        onClose={() => setConfirmVoid(false)}
+      />
     </div>
   );
 };

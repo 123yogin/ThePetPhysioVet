@@ -92,9 +92,95 @@ export function formatMoney(amount?: number | string | null, currency = 'INR'): 
   const n = typeof amount === 'string' ? Number(amount) : amount ?? 0;
   const value = Number.isFinite(n as number) ? (n as number) : 0;
   const symbol = CURRENCY_SYMBOLS[currency];
-  const digits = value.toLocaleString(undefined, {
+  const digits = value.toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
   return symbol ? `${symbol}${digits}` : `${currency} ${digits}`;
+}
+
+/**
+ * The day a boarded pet goes home (live QA D4). The API's `check_out` is the
+ * stay's inclusive LAST BED-NIGHT — what capacity counts — so a 24-hour stay
+ * from the 8th has check_out = the 8th and leaves on the 9th. A stay shorter
+ * than a day leaves the day it arrived. Display only; never for capacity.
+ */
+export function boardingDeparture(checkIn: string, checkOut: string, duration: string): string {
+  const sub = /^(\d+)h$/.exec(duration || '');
+  if (sub && Number(sub[1]) < 24) return checkIn;
+  const d = new Date(`${checkOut}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return checkOut;
+  d.setDate(d.getDate() + 1);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** "2026-11-21" -> "Sat 21 Nov" (calendar date, never "Today"/"Tomorrow"). */
+export function plainDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const wd = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  const rest = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${wd} ${rest}`;
+}
+
+/**
+ * "Last night: Sat 21 Nov · Goes home: Sun 22 Nov". `check_out` from the API is
+ * the inclusive last bed-night, so both ends are spelled out (live QA R2).
+ */
+export function boardingStayLabel(checkIn: string, checkOut: string, duration: string): string {
+  const home = boardingDeparture(checkIn, checkOut, duration);
+  if (home === checkIn) return `Same-day stay · Goes home: ${plainDate(home)}`;
+  return `Last night: ${plainDate(checkOut)} · Goes home: ${plainDate(home)}`;
+}
+
+/**
+ * "Owner brings: food, utensils · Clinic provides: blanket" from the four
+ * boarding intake fields. Replaces "food owner, utensils owner, …" (live QA B6).
+ */
+export function boardingProvidesLine(intake: Record<string, string | undefined>): string {
+  const items: [string, string][] = [
+    ['food', 'food_by'], ['utensils', 'utensils_by'], ['medicines', 'medicines_by'], ['blanket', 'blanket_by'],
+  ];
+  const owner = items.filter(([, k]) => intake[k] !== 'clinic').map(([n]) => n);
+  const clinic = items.filter(([, k]) => intake[k] === 'clinic').map(([n]) => n);
+  const parts: string[] = [];
+  if (owner.length) parts.push(`Owner brings: ${owner.join(', ')}`);
+  if (clinic.length) parts.push(`Clinic provides: ${clinic.join(', ')}`);
+  return parts.join(' · ');
+}
+
+/** Diagnostic report types, shared by the staff and owner upload forms.
+ *  Values match DiagnosticReport.REPORT_TYPES on the backend. */
+export const REPORT_TYPES: { value: string; label: string }[] = [
+  { value: 'XRAY', label: 'X-Ray' },
+  { value: 'MRI', label: 'MRI Scan' },
+  { value: 'CT', label: 'CT Scan' },
+  { value: 'ULTRASOUND', label: 'Ultrasound' },
+  { value: 'BLOOD', label: 'Blood Report' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+/**
+ * Mid-sentence "when" for a booking: "tomorrow, Fri 9 Oct at 9:00 AM",
+ * "Mon 12 Oct at 2:30 PM". Lower-case relative word (it follows "for"), always
+ * with the explicit date, and the time when known.
+ */
+export function bookingWhen(iso?: string | null, time?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso.slice(0, 10) + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  const wd = d.toLocaleDateString('en-GB', { weekday: 'short' }).replace(',', '');
+  const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+  const explicit = `${wd} ${d.getDate()} ${mon}`;
+  const rel = friendlyDate(iso.slice(0, 10));
+  const relative = ['Today', 'Tomorrow', 'Yesterday'].includes(rel) ? `${rel.toLowerCase()}, ` : '';
+  let at = '';
+  const m = time ? /^(\d{1,2}):(\d{2})/.exec(time) : null;
+  if (m) {
+    const h = Number(m[1]);
+    at = ` at ${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+  return `${relative}${explicit}${at}`;
 }

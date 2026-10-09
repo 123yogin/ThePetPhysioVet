@@ -373,16 +373,47 @@ class PermissionConfigTests(ApiTestCase):
     # for the same split-posture reason but are doctor-only in practice: each
     # authenticates and requires role == DOCTOR by hand before any read/mutation,
     # so a public caller reaches nothing. Widened to exactly sixteen, and no wider.
+    #
+    # AMENDED 2026-10-08 for boarding bed holds: `boarding_hold_view` (POST
+    # /facility/boarding/holds) and `boarding_hold_confirm_view` (POST
+    # .../holds/<ref>/confirm) are PUBLIC for the same reason as the facility
+    # hold pair -- a visitor holding a bed cannot be expected to hold a token --
+    # and are the enquiries category (unauthenticated intake; the hold takes dates
+    # only and neither response reveals any client data). The new
+    # `boarding_convert_view` is NOT AllowAny (IsAuthenticated + IsDoctor).
+    # Widened to exactly eighteen, and no wider.
+    #
+    # AMENDED 2026-10-08 for uploads stored in Postgres: `file_download_view`
+    # (GET /files/<token>) is a THIRD category -- a signed capability. The
+    # 15-minute TimestampSigner token (salt "file-access") is only rendered by
+    # serializers for callers already authorised to see the parent record, and
+    # a forged/expired token is a 404 (test_file_storage.py). It must accept no
+    # bearer header because the SPA opens files via plain <a href>/<img src>.
+    # Widened to exactly nineteen, and no wider.
+    #
+    # AMENDED 2026-10-08 for SMS (appointments/sms/): a FOURTH category --
+    # machine callers holding a shared secret instead of a user JWT.
+    # `cron_sms_reminders_view` (GET /cron/sms-reminders) is called by Vercel
+    # Cron, which sends `Authorization: Bearer $CRON_SECRET` and can hold no
+    # user token; the view compares that header in constant time and 401s
+    # anything else, including a valid doctor JWT and an unset CRON_SECRET
+    # (test_sms.CronTests). `sms_webhook_view` (POST /sms/webhook) is called by
+    # the Android gateway, which signs each body with HMAC-SHA256 (X-Signature
+    # over raw body + X-Timestamp); the view 401s a bad/missing/stale signature
+    # and 404s while SMS_WEBHOOK_SIGNING_KEY is unset (test_sms.WebhookTests).
+    # Neither returns any patient data. Widened to exactly twenty-one.
     ALLOWANY_ALLOWLIST = [
         "appointment_options_view",
         "boarding_availability_view", "boarding_ending_soon_view",
+        "boarding_hold_confirm_view", "boarding_hold_view",
         "boarding_status_view", "boarding_view",
+        "cron_sms_reminders_view",
         "enquiries_view",
         "facility_availability_view", "facility_booking_status_view",
         "facility_bookings_view", "facility_confirm_view",
-        "facility_hold_view", "login_view",
+        "facility_hold_view", "file_download_view", "login_view",
         "password_reset_confirm_view", "password_reset_request_view",
-        "refresh_view", "signup_view",
+        "refresh_view", "signup_view", "sms_webhook_view",
     ]
 
     def test_allowany_only_on_login_signup_refresh_password_reset_and_enquiries(self):

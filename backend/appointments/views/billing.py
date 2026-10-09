@@ -125,6 +125,13 @@ def invoice_detail_view(request, pk):
     return Response(InvoiceSerializer(invoice).data)
 
 
+def _locked_invoice(pk):
+    """The invoice row, locked for the rest of the transaction. `of=("self",)`
+    because callers' scoping joins nullable pet/doctor rows, and Postgres
+    refuses FOR UPDATE on the nullable side of an outer join."""
+    return Invoice.objects.select_for_update(of=("self",)).get(pk=pk)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsDoctor])
 def invoice_payments_view(request, pk):
@@ -151,31 +158,73 @@ def invoice_payments_view(request, pk):
     if amount_paid <= 0:
         return problem(400, "amount_paid must be a positive amount.")
 
-    # Known-issue #3: overpayment used to be accepted, driving balance_due
-    # (and the dashboard's pending_payments sum) negative.
-    if amount_paid > invoice.balance_due:
-        return problem(
-            400,
-            "amount_paid exceeds the invoice's balance due.",
-            f"amount_paid ({amount_paid}) exceeds balance_due ({invoice.balance_due}).",
-        )
+    # Review fix (live QA B7): re-read the invoice under a row lock so a void
+    # (which takes the same lock) and a payment cannot interleave -- without it
+    # a payment that read the invoice just before a concurrent void committed
+    # would be recorded against a voided invoice.
+    with transaction.atomic():
+        invoice = _locked_invoice(invoice.pk)
+        if invoice.is_void:
+            return problem(400, "This invoice has been voided and cannot take a payment.")
 
-    try:
-        payment = Payment.objects.create(
-            invoice=invoice,
-            amount_paid=amount_paid,
-            gateway_ref=request.data.get("gateway_ref", ""),
-            status="SUCCESS",
-            idempotency_key=idempotency_key,
-        )
-    except IntegrityError:
-        # Race: another request with the same idempotency_key committed first.
-        existing = Payment.objects.filter(idempotency_key=idempotency_key).first()
-        if not existing:
-            raise
-        return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
+        # Known-issue #3: overpayment used to be accepted, driving balance_due
+        # (and the dashboard's pending_payments sum) negative.
+        if amount_paid > invoice.balance_due:
+            return problem(
+                400,
+                "amount_paid exceeds the invoice's balance due.",
+                f"amount_paid ({amount_paid}) exceeds balance_due ({invoice.balance_due}).",
+            )
+
+        try:
+            # Savepoint, so an idempotency-key collision does not poison the
+            # outer transaction holding the lock.
+            with transaction.atomic():
+                payment = Payment.objects.create(
+                    invoice=invoice,
+                    amount_paid=amount_paid,
+                    gateway_ref=request.data.get("gateway_ref", ""),
+                    status="SUCCESS",
+                    idempotency_key=idempotency_key,
+                )
+        except IntegrityError:
+            # Race: another request with the same idempotency_key committed first.
+            existing = Payment.objects.filter(idempotency_key=idempotency_key).first()
+            if not existing:
+                raise
+            return Response(PaymentSerializer(existing).data, status=status.HTTP_200_OK)
 
     return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsDoctor])
+def invoice_void_view(request, pk):
+    """Live QA B7 (2026-10-08): a mistaken invoice could not be withdrawn.
+
+    POST /invoices/:id/void {reason?} -- doctor-only, scoped like every invoice
+    route (404 for another practice's). Only an invoice with nothing paid can be
+    voided; one with a payment needs a refund, which this app does not record.
+    A voided invoice keeps its number and lines (the sequence stays gap-free),
+    owes nothing, takes no payments and is excluded from /revenue. Repeating
+    the call is a no-op that returns the voided invoice.
+    """
+    with transaction.atomic():
+        invoice = get_object_or_404(
+            _doctor_scoped(Invoice, request, lookup="pet__doctor").select_for_update(of=("self",)), pk=pk,
+        )
+        if invoice.is_void:
+            return Response(InvoiceSerializer(invoice).data)
+        if invoice.amount_paid > 0:
+            return problem(
+                400,
+                "Only an unpaid invoice can be voided.",
+                "This invoice already has a payment recorded against it.",
+            )
+        invoice.voided_at = timezone.now()
+        invoice.void_reason = str(request.data.get("reason") or "").strip()[:255]
+        invoice.save(update_fields=["voided_at", "void_reason"])
+    return Response(InvoiceSerializer(invoice).data)
 
 
 @api_view(["GET"])
@@ -195,8 +244,9 @@ def revenue_view(request):
 
     # L1 fix: scoped to the requesting doctor via `_doctor_scoped` (see
     # invoices_view for the same NULL-doctor "claimable pool" posture).
+    # A voided invoice was never owed, so it is not revenue (live QA B7).
     invoices = _doctor_scoped(Invoice, request, lookup="pet__doctor").filter(
-        created_at__date__gte=start, created_at__date__lte=end,
+        created_at__date__gte=start, created_at__date__lte=end, voided_at__isnull=True,
     )
     total_revenue = sum((inv.total for inv in invoices), Decimal("0.00"))
 

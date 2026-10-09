@@ -39,6 +39,14 @@ import React from 'react';
  */
 const HERO_VIDEO = '/hero-loop.mp4';
 const HERO_POSTER = '/hero-poster.jpg';
+/**
+ * WebP renditions of the same poster frame, served by srcset. The 640px one
+ * (29 KB vs the 81 KB JPEG) covers a phone's arch at ~1.75x; the 1080px one is
+ * the desktop size. The JPEG stays as the src fallback and the og:image.
+ *   cwebp -q 72 -resize 640 0 public/hero-poster.jpg -o public/hero-poster-640.webp
+ *   cwebp -q 75 public/hero-poster.jpg -o public/hero-poster-1080.webp
+ */
+const HERO_POSTER_SRCSET = '/hero-poster-640.webp 640w, /hero-poster-1080.webp 1080w';
 
 import { Calendar, ChevronRight, Activity } from 'lucide-react';
 import { Roll } from '../motion';
@@ -53,44 +61,85 @@ interface HeroProps {
 
 /* ---- Shared hero parts (every layout variant uses the same content) ---- */
 
-const HeroMedia: React.FC<{ overlay?: React.ReactNode; tint?: string }> = ({ overlay, tint = 'grayscale-[15%] opacity-90' }) => (
-  <>
-    {HERO_VIDEO ? (
-      <video
-        // muted + playsInline are load-bearing: without both, iOS and
-        // Chrome refuse to autoplay and the poster is all anyone sees.
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="none"
-        poster={HERO_POSTER}
-        aria-hidden="true"
-        className={`w-full h-full object-cover ${tint} transition-opacity duration-700 motion-reduce:hidden`}
-      >
-        <source src={HERO_VIDEO} type="video/mp4" />
-      </video>
-    ) : null}
+/**
+ * Whether this visitor should get the looping footage at all: wide screens
+ * only (on a phone the arch sits below the copy and the 1.7 MB clip was the
+ * heaviest thing on first load), never under reduced motion or Save-Data.
+ */
+function wantsHeroVideo(): boolean {
+  if (!HERO_VIDEO || typeof window === 'undefined') return false;
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  return (
+    window.matchMedia('(min-width: 1024px)').matches &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
+    !connection?.saveData
+  );
+}
 
-    {/* LCP element: eager + high priority, explicit dimensions to reserve space (CLS).
-        Also the poster, and the whole hero for anyone who has asked their
-        system for reduced motion -- autoplaying video is a genuine problem
-        for some people, not a preference. */}
-    <img
-      src={HERO_POSTER}
-      alt="A clinician steadying a white Indian Spitz on the padded mats at The Pet Physio Vet in Shilaj, Ahmedabad"
-      width={1080}
-      height={1920}
-      loading="eager"
-      fetchPriority="high"
-      decoding="async"
-      className={`w-full h-full object-cover ${tint} transition-opacity duration-700${
-        HERO_VIDEO ? ' hidden motion-reduce:block' : ''
-      }`}
-    />
-    {overlay}
-  </>
-);
+const HeroMedia: React.FC<{ overlay?: React.ReactNode; tint?: string }> = ({ overlay, tint = 'grayscale-[15%] opacity-90' }) => {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = React.useState(false);
+
+  // The video is attached only after the page has loaded, so it never competes
+  // with the poster (the LCP image), fonts or the app bundle. Until it is
+  // actually playing it is transparent and the poster shows through.
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !wantsHeroVideo()) return;
+    let cancelled = false;
+    const start = () => {
+      if (cancelled || video.getAttribute('src')) return;
+      video.src = HERO_VIDEO;
+      video.play().catch(() => {});
+    };
+    if (document.readyState === 'complete') start();
+    else window.addEventListener('load', start, { once: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('load', start);
+    };
+  }, []);
+
+  return (
+    <>
+      {/* LCP element: eager + high priority, explicit dimensions to reserve
+          space (CLS). Always rendered and always visible -- the video fades in
+          over it only once it is playing, so phones, reduced-motion and
+          Save-Data visitors simply keep the still. */}
+      <img
+        src={HERO_POSTER}
+        srcSet={HERO_POSTER_SRCSET}
+        sizes="(min-width: 1024px) 50vw, 100vw"
+        alt="A clinician steadying a white Indian Spitz on the padded mats at The Pet Physio Vet in Shilaj, Ahmedabad"
+        width={1080}
+        height={1920}
+        loading="eager"
+        fetchPriority="high"
+        decoding="async"
+        className={`w-full h-full object-cover ${tint}`}
+      />
+      {HERO_VIDEO ? (
+        <video
+          ref={videoRef}
+          // muted + playsInline are load-bearing: without both, iOS and
+          // Chrome refuse to play inline. No src and preload="none" in the
+          // HTML: nothing is fetched until the effect above decides to.
+          muted
+          loop
+          playsInline
+          preload="none"
+          aria-hidden="true"
+          tabIndex={-1}
+          onPlaying={() => setPlaying(true)}
+          className={`absolute inset-0 w-full h-full object-cover ${tint} transition-opacity duration-700 motion-reduce:hidden ${
+            playing ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      ) : null}
+      {overlay}
+    </>
+  );
+};
 
 const HeroBadge: React.FC<{ tone?: 'light' | 'dark' }> = ({ tone = 'light' }) => (
   <div
@@ -229,6 +278,9 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBooking }) => {
     const video = el?.querySelector('video');
     if (!el || !video) return;
     const io = new IntersectionObserver(([e]) => {
+      // No src means the footage was skipped (phone, reduced motion,
+      // Save-Data) or has not been attached yet.
+      if (!video.getAttribute('src')) return;
       if (e.isIntersecting) video.play().catch(() => {});
       else video.pause();
     });

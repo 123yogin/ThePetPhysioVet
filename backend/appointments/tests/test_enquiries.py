@@ -16,6 +16,9 @@ from appointments.models import Appointment, Enquiry, Pet, UserProfile
 
 from .base import API, ApiTestCase
 
+# A booking date that is always in the future (convert refuses the past).
+FUTURE_DATE = (__import__("datetime").date.today() + __import__("datetime").timedelta(days=30)).isoformat()
+
 VALID_PAYLOAD = {
     "firstName": "Priya",
     "lastName": "Sharma",
@@ -209,20 +212,45 @@ class EnquiryConvertTests(ApiTestCase):
 
     def _convert(self, **overrides):
         self.auth(self.doctor)
-        body = {"date": "2026-10-05", "time": "10:30", "visit_type": "Initial"}
+        body = {"date": FUTURE_DATE, "time": "10:30", "visit_type": "Initial"}
         body.update(overrides)
         return self.client.post(f"{API}/enquiries/{self.enquiry.id}/convert", body, format="json")
+
+    def test_convert_leaves_new_pet_sex_unknown(self):
+        r = self._convert()
+        self.assertEqual(r.status_code, 200, r.content)
+        pet = Pet.objects.get(name=self.enquiry.pet_name, owner__email__iexact=self.enquiry.email)
+        self.assertEqual(pet.sex, "")
+
+    def test_convert_into_the_past_is_400(self):
+        before = Appointment.objects.count()
+        r = self._convert(date="2020-01-01", time="10:00")
+        self.assertEqual(r.status_code, 400)
+        self.enquiry.refresh_from_db()
+        self.assertEqual(self.enquiry.status, "NEW")
+        self.assertEqual(Appointment.objects.count(), before)
+
+    def test_convert_earlier_today_is_400(self):
+        from django.utils import timezone
+        now = timezone.localtime()
+        past = now - __import__("datetime").timedelta(minutes=30)
+        if past.date() == now.date():  # skip in the first half hour of the day
+            r = self._convert(date=now.date().isoformat(), time=past.strftime("%H:%M"))
+            self.assertEqual(r.status_code, 400)
+
+    def test_convert_bad_date_is_400(self):
+        self.assertEqual(self._convert(date="nonsense").status_code, 400)
 
     def test_owner_cannot_reach_it(self):
         self.auth(self.owner_a)
         r = self.client.post(f"{API}/enquiries/{self.enquiry.id}/convert",
-                              {"date": "2026-10-05", "time": "10:30", "visit_type": "Initial"},
+                              {"date": FUTURE_DATE, "time": "10:30", "visit_type": "Initial"},
                               format="json")
         self.assertEqual(r.status_code, 403, r.content)
 
     def test_requires_authentication(self):
         r = self.anon().post(f"{API}/enquiries/{self.enquiry.id}/convert",
-                              {"date": "2026-10-05", "time": "10:30", "visit_type": "Initial"},
+                              {"date": FUTURE_DATE, "time": "10:30", "visit_type": "Initial"},
                               format="json")
         self.assertEqual(r.status_code, 401, r.content)
 
@@ -245,10 +273,10 @@ class EnquiryConvertTests(ApiTestCase):
         appt = Appointment.objects.get(pk=self.enquiry.converted_appointment_id)
         self.assertEqual(appt.pet_id, pet.id)
         self.assertEqual(appt.doctor_id, self.doctor.id)
-        self.assertEqual(appt.status, "Pending")
+        self.assertEqual(appt.status, "Confirmed")
         self.assertEqual(appt.visit_type, "Initial")
         self.assertEqual(appt.visit_type_display, "Initial Consultation")
-        self.assertEqual(str(appt.date), "2026-10-05")
+        self.assertEqual(str(appt.date), FUTURE_DATE)
         self.assertEqual(appt.reason_notes, "Rear leg stiffness")
 
         # Response body carries the enquiry + nested appointment.
@@ -267,7 +295,7 @@ class EnquiryConvertTests(ApiTestCase):
 
         pet = Pet.objects.get(owner=self.owner_a, name="Rex2")
         appt = Appointment.objects.get(pet=pet)
-        self.assertEqual(appt.status, "Pending")
+        self.assertEqual(appt.status, "Confirmed")
         # Existing owner's real, usable password must be untouched.
         self.owner_a.refresh_from_db()
         self.assertTrue(self.owner_a.has_usable_password())
@@ -283,7 +311,9 @@ class EnquiryConvertTests(ApiTestCase):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(Pet.objects.filter(owner=self.owner_a).count(), before_pet_count)
 
-        appt = Appointment.objects.get(pet=self.pet_a, doctor=self.doctor, status="Pending")
+        appt = Appointment.objects.exclude(pk=self.appt_a.pk).get(
+            pet=self.pet_a, doctor=self.doctor, status="Confirmed",
+        )
         self.assertEqual(appt.pet_id, self.pet_a.id)
 
     def test_convert_twice_is_idempotent(self):
@@ -316,7 +346,7 @@ class EnquiryConvertTests(ApiTestCase):
     def test_missing_date_time_or_visit_type_is_400(self):
         for missing in ("date", "time", "visit_type"):
             with self.subTest(missing=missing):
-                body = {"date": "2026-10-05", "time": "10:30", "visit_type": "Initial"}
+                body = {"date": FUTURE_DATE, "time": "10:30", "visit_type": "Initial"}
                 body.pop(missing)
                 self.auth(self.doctor)
                 r = self.client.post(f"{API}/enquiries/{self.enquiry.id}/convert", body, format="json")
@@ -333,7 +363,7 @@ class EnquiryConvertTests(ApiTestCase):
         import uuid
         self.auth(self.doctor)
         r = self.client.post(f"{API}/enquiries/{uuid.uuid4()}/convert",
-                              {"date": "2026-10-05", "time": "10:30", "visit_type": "Initial"},
+                              {"date": FUTURE_DATE, "time": "10:30", "visit_type": "Initial"},
                               format="json")
         self.assertEqual(r.status_code, 404, r.content)
 
@@ -374,7 +404,7 @@ class EnquiryDismissTests(ApiTestCase):
     def test_cannot_dismiss_a_converted_enquiry(self):
         self.auth(self.doctor)
         r = self.client.post(f"{API}/enquiries/{self.enquiry.id}/convert",
-                              {"date": "2026-10-05", "time": "10:30", "visit_type": "Initial"},
+                              {"date": FUTURE_DATE, "time": "10:30", "visit_type": "Initial"},
                               format="json")
         self.assertEqual(r.status_code, 200, r.content)
         r2 = self.client.post(f"{API}/enquiries/{self.enquiry.id}/dismiss")

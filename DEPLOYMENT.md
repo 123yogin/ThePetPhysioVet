@@ -7,6 +7,63 @@ for now. £0/month, never sleeps.
 Everything in this repo is vendor-neutral Docker, so if Oracle's ARM capacity lottery
 defeats you, the same containers deploy unchanged to Hetzner (~€11/mo) or any Docker host.
 
+> **Uploads live in a private Vercel Blob store (2026-10-08).** Vercel's serverless
+> filesystem is read-only, so writing uploads to `MEDIA_ROOT` crashed every
+> diagnostic-report, query attachment and pet-photo upload with an HTML 500. New uploads now
+> go to the **private** Blob store **`petphysio-files`** (region `iad1`), which is connected
+> to the Vercel project; Vercel injects **`BLOB_READ_WRITE_TOKEN`** into Production, Preview
+> and Development, but only **Production** (`VERCEL_ENV=production`) selects
+> `appointments/storage_blob.py::BlobStorage` from it.
+> The `StoredFile` table stays as the index (name, size, type, uploader, blob URL; migration
+> `0025` made `content` nullable and added `blob_url`), so the owner quota and global
+> ceiling still sum `StoredFile.size`. Private blobs are never public URLs: the signed
+> `GET /api/v1/files/<token>` route fetches the blob server-side with the token and streams
+> it back (attachment + nosniff + original filename).
+>
+> **Storage selection** (`settings._default_storage_backend`):
+> - `FILE_STORAGE=blob` → Blob, in any environment (no or a malformed token refuses to boot).
+> - `FILE_STORAGE` unset + `BLOB_READ_WRITE_TOKEN` set + `VERCEL_ENV=production` → Blob.
+> - `FILE_STORAGE=db`, or `FILE_STORAGE` unset on Vercel otherwise (Preview, Development,
+>   or no token) → Postgres (`DatabaseStorage`). Previews hold the same token but must never
+>   write to or delete from the production store, which a preview database copied from
+>   production could otherwise do.
+> - Anything else, e.g. local dev with a `.env` from `vercel env pull` → the local
+>   filesystem. (If that `.env` also carries `VERCEL=1`, the Vercel rule above gives
+>   Postgres; still never Blob.) Set `FILE_STORAGE=filesystem` to be explicit.
+>
+> Rows written earlier by `DatabaseStorage` keep their bytes in `StoredFile.content` and are
+> still served from Postgres; move them with `python manage.py migrate_files_to_blob` (dry
+> run) then `--apply` (production had 0 stored files at the switch). A `pg_dump` no longer
+> contains Blob-backed uploads — the store is their only copy.
+>
+> **Orphan blobs.** If an upload's request transaction rolls back after the Blob PUT, the
+> blob has no `StoredFile` row. `python manage.py cleanup_orphan_blobs` (dry run) lists
+> blobs older than 1 hour with no row; `--apply` deletes them. Run it against production
+> with the production token and `DATABASE_URL` only. Listing costs one advanced operation
+> per 1,000 blobs; deletes are free.
+>
+> **Vercel Blob Hobby limits** (vercel.com/docs/vercel-blob/usage-and-pricing, updated
+> 2026-09-23): 1 GB storage/month, 10,000 simple operations (cache-miss reads, `head`),
+> 2,000 advanced operations (`put`, `copy`, `list`), 10 GB Blob data transfer; `del` is
+> free. Exceeding a Hobby limit blocks Blob access until 30 days have passed — it is not
+> billed. Each upload is one advanced operation, so ~2,000 uploads/month is the ceiling;
+> `exists`/`size` answer from the `StoredFile` index instead of `head` to save operations.
+> Serving through the function also costs Fast Data Transfer on the way out.
+>
+> **Why 4 MB per file:** Vercel caps a serverless function's request body at 4.5 MB and
+> rejects anything larger at its edge with a plain 413 that never reaches Django; uploads
+> still pass through the function, so the cap stays. Lifting it means client-direct uploads
+> (browser → Blob with a short-lived client token, `@vercel/blob/client` `upload()` /
+> `handleUpload`), which would need a new token-issuing endpoint plus an upload-completed
+> step to create the `StoredFile` row. **Abuse limits:** 30 uploads/hour/user, 60/hour/IP,
+> 100 MB per owner account (doctors exempt), 10 signups/hour/IP, and a global ceiling —
+> `FILE_STORAGE_MAX_MB` (default 700, under Blob's 1 GB Hobby storage and Neon's 1 GB) →
+> 503, with a server error log each time it triggers. These counters need the shared cache
+> (`REDIS_URL` or the database cache), not per-process memory. Uploads are never served by
+> path: there is no `/media/` route in Django or nginx, only the signed
+> `GET /api/v1/files/<token>`. The Coolify/Docker topology below still uses the filesystem
+> (`media_data` volume) unless you set `FILE_STORAGE=db` or `blob`.
+
 ---
 
 ## Why this host
@@ -122,8 +179,9 @@ postgres service.
 file to **`docker-compose.coolify.yml`**.
 
 - Enable **Connect to Predefined Network** so the app can reach the managed database.
-- Assign the domain/IP to the **frontend** service, **port 80**. nginx proxies `/api` and
-  `/media` internally, so the app is same-origin and needs no Traefik path rules.
+- Assign the domain/IP to the **frontend** service, **port 80**. nginx proxies `/api`
+  internally, so the app is same-origin and needs no Traefik path rules. (It no longer
+  serves `/media/`; uploads go through the signed `/api/v1/files/<token>` route.)
 
 Environment variables (set in the Coolify UI — **never** commit these):
 
@@ -231,7 +289,8 @@ fails" pattern. Belt and braces:
 ```
 
 3. **Back up the `media_data` volume too.** It holds uploaded diagnostic reports and query
-   attachments. Database backups do not cover it.
+   attachments. Database backups do not cover it (unless `FILE_STORAGE=db`, in which case
+   uploads are rows in `appointments_storedfile` and `pg_dump` already has them).
 
 4. **Do a restore drill now, not after an incident.** Coolify has no UI restore:
 
@@ -258,7 +317,7 @@ POST /api/v1/auth/login           200   same-origin proxy works
 POST  (wrong password)            401
 GET  /api/v1/dashboard/stats      real aggregates from Postgres
 POST /owner/pets/1/history 5000ch 400   (SQLite hid this; Postgres would 500)
-GET  /media/                      Content-Disposition: attachment present
+GET  /media/                      Content-Disposition: attachment present (route removed 2026-10-08; now 404)
 manage.py test appointments       191/191
 manage.py check --deploy          0 warnings (with HTTPS env vars set)
 ```
@@ -274,3 +333,99 @@ Honest accounting, since this is the trade for never sleeping:
 - **Always:** verify backups actually reach the bucket. Do not trust the Test button alone.
 - **Watch:** Oracle changed free-tier terms twice without announcement. Keep off-platform
   backups so you can rebuild anywhere from a compose file plus a Postgres dump.
+
+---
+
+## SMS via Android gateway
+
+The clinic texts owners when a visit or boarding stay is confirmed, the day before a visit,
+and on the morning an overnight stay ends. Texts go out from an Android phone with the
+clinic's SIM, running the open-source **SMS Gateway for Android** by capcom6 (Apache-2.0,
+<https://github.com/capcom6/android-sms-gateway>, docs <https://docs.sms-gate.app>), in
+**Cloud mode**. The backend calls the gateway's Cloud API
+(`POST https://api.sms-gate.app/3rdparty/v1/messages`, HTTP Basic auth); the phone polls
+the Cloud server and sends the SMS itself.
+
+### 1. Set up the phone
+1. On a spare Android phone (Android 5+) with the clinic SIM, install the latest APK from
+   <https://github.com/capcom6/android-sms-gateway/releases> and grant **SEND_SMS**.
+2. Toggle **Cloud Server** on and tap **Online**. The Cloud Server section shows a
+   **username** and **password**: these are the gateway credentials.
+3. Keep the phone on charge and on Wi-Fi or data, and exempt the app from battery
+   optimisation. If the phone is offline, sends fail (`Gateway HTTP 503: phone offline…`) and
+   the gateway drops anything older than 24 h.
+
+### 2. Set Vercel environment variables — **Production environment only**
+Scope `SMS_GATEWAY_USERNAME`, `SMS_GATEWAY_PASSWORD` and `CRON_SECRET` to **Production**, not
+Preview/Development: every preview deployment of a branch would otherwise hold the clinic's
+gateway login. Even if they leak into a preview, the gateway is only switched on
+automatically when `VERCEL_ENV=production` (set by Vercel); other environments stay
+`disabled` unless `SMS_BACKEND` is set explicitly.
+
+| Variable | Value |
+| --- | --- |
+| `SMS_BACKEND` | `android_gateway` |
+| `SMS_GATEWAY_USERNAME` | from the app's Cloud Server section |
+| `SMS_GATEWAY_PASSWORD` | from the app's Cloud Server section |
+| `CRON_SECRET` | a random string of 16+ characters (e.g. `openssl rand -hex 24`). Vercel sends it as `Authorization: Bearer …` to the cron |
+| `SMS_DAILY_LIMIT` | optional, default `90` |
+| `SMS_PER_PHONE_DAILY_LIMIT` | optional, default `3` texts per number per day |
+| `SMS_ALLOWED_COUNTRY_CODES` | optional, default `+91`; comma-separated (e.g. `+91,+44`). Other numbers are recorded `SKIPPED_COUNTRY` |
+| `SMS_WEBHOOK_SIGNING_KEY` | optional; from the app's **Settings → Webhooks → Signing Key**, to enable delivery status |
+| `CLINIC_NAME` / `CLINIC_PHONE` | optional, default `Pet Physio Vet` / `+91 72840 73241` |
+| `SMS_GATEWAY_URL` | optional, default `https://api.sms-gate.app/3rdparty/v1` (must be https; change it only for a private gateway server) |
+
+If `SMS_BACKEND` is unset, SMS is on only when the credentials are present **and**
+`VERCEL_ENV=production`; otherwise it is **disabled** (each message recorded as
+`SKIPPED_DISABLED`).
+`SMS_BACKEND=android_gateway` without credentials stops the deploy at boot, by design.
+Redeploy after changing variables. Then open **SMS Reminders** in the staff app: the mode
+should read *Android gateway (live)*. Use **Send test SMS** to your own phone.
+
+**Cron:** `vercel.json` schedules `GET /api/v1/cron/sms-reminders` twice, at `30 3 * * *` and
+`30 4 * * *` (09:00 and 10:00 IST). The run is idempotent, so the second pass only sends what
+the first skipped, deferred or failed to send (e.g. the phone was briefly offline). On the
+Hobby plan each cron is daily-only and may fire any time within its hour. Vercel runs crons only on the production deployment. If a run reports
+`deferred` > 0 (phone offline), fix the phone and re-run it by hand:
+`curl -H "Authorization: Bearer $CRON_SECRET" https://thepetphysiovet.com/api/v1/cron/sms-reminders`.
+It is idempotent, so nobody is texted twice.
+
+**Delivery status (optional):** register the webhook once per event:
+```sh
+for ev in sms:sent sms:delivered sms:failed; do
+  curl -X POST -u "$SMS_GATEWAY_USERNAME:$SMS_GATEWAY_PASSWORD" -H "Content-Type: application/json" \
+    -d "{\"url\": \"https://thepetphysiovet.com/api/v1/sms/webhook\", \"event\": \"$ev\"}" \
+    https://api.sms-gate.app/3rdparty/v1/webhooks
+done
+```
+Requests are verified with the HMAC signing key. The endpoint returns 404 until
+`SMS_WEBHOOK_SIGNING_KEY` is set.
+
+### 3. TRAI limits (read before relying on this)
+- **An ordinary prepaid/postpaid SIM is capped at about 100 SMS a day.** The app stops at
+  `SMS_DAILY_LIMIT` (default 90, counted from texts accepted today, IST) and records the rest
+  as `SKIPPED_LIMIT`. Test SMS count too.
+- **Commercial SMS in India should come from a DLT-registered sender** (a 6-character
+  header and pre-approved templates). A personal SIM is not that. Operators can throttle or
+  block a SIM that looks like bulk business traffic. This setup is meant for low-volume
+  **transactional** texts only: confirmations and reminders for something the owner booked.
+  **Never add offers or promotions** to `backend/appointments/sms/templates.py`.
+- Owners who opted out on the SMS Reminders screen are never texted (`SKIPPED_OPTOUT`).
+- **Abuse limits:** reminders go only to visits a doctor booked, confirmed or moved (an owner
+  booking their own visit can never trigger a reminder); only `SMS_ALLOWED_COUNTRY_CODES`
+  are texted; one number gets at most `SMS_PER_PHONE_DAILY_LIMIT` texts a day. Visits booked
+  before this release have no doctor confirmation recorded, so they get **no reminder until a
+  doctor confirms, books or moves them**.
+
+### 4. Swapping to a DLT-registered provider later
+All sending goes through `send_sms()` in `backend/appointments/sms/service.py`. Idempotency,
+opt-out, the daily cap and the `SmsMessage` log are provider-independent. To switch:
+1. Register the clinic's entity, a header, and the five templates in
+   `sms/templates.py` on a DLT portal (Jio/Airtel/Vi/BSNL), using your provider's process.
+2. Add a backend class in `sms/backends.py` with `name` and
+   `send(to_e164, body, message_id, timeout) -> SendResult` (never raise; 5 s timeout), add it
+   to `BACKENDS`, and add its name to `SMS_BACKENDS` and its credential check in
+   `petphysio/settings.py`.
+3. Set `SMS_BACKEND` to the new name and raise `SMS_DAILY_LIMIT` to suit the plan. Nothing
+   else changes. If the provider has its own delivery callbacks, extend `sms/webhook.py`.
+

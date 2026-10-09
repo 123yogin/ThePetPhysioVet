@@ -51,12 +51,25 @@ from .pets import (  # noqa: F401
     pets_view,
     pet_detail_view,
 )
+from .files import file_download_view  # noqa: F401
+from .sms import (  # noqa: F401
+    sms_log_view,
+    sms_test_view,
+    cron_sms_reminders_view,
+    sms_webhook_view,
+)
 from .clinical import (  # noqa: F401
     pet_diagnoses_view,
     diagnostic_report_detail_view,
     pet_treatment_plans_view,
     treatment_plan_detail_view,
     treatment_plan_progress_notes_view,
+    treatment_plan_extend_view,
+    rehab_therapies_view,
+    rehab_today_view,
+    rehab_session_done_view,
+    rehab_session_skip_view,
+    rehab_session_undo_view,
 )
 from .scheduling import (  # noqa: F401
     appointments_view,
@@ -64,6 +77,7 @@ from .scheduling import (  # noqa: F401
     appointment_reschedule_view,
     appointment_complete_view,
     appointment_confirm_view,
+    appointment_cancel_view,
     appointment_reschedule_approve_view,
     appointment_reschedule_reject_view,
     appointment_share_view,
@@ -73,6 +87,7 @@ from .billing import (  # noqa: F401
     invoices_view,
     invoice_detail_view,
     invoice_payments_view,
+    invoice_void_view,
     revenue_view,
 )
 from .notifications import (  # noqa: F401
@@ -111,6 +126,7 @@ from .enquiries import (  # noqa: F401
     enquiries_view,
     enquiry_convert_view,
     enquiry_dismiss_view,
+    enquiry_confirm_client_view,
 )
 from .facility import (  # noqa: F401
     facility_availability_view,
@@ -124,6 +140,10 @@ from .boarding import (  # noqa: F401
     boarding_view,
     boarding_status_view,
     boarding_ending_soon_view,
+    boarding_hold_view,
+    boarding_hold_confirm_view,
+    boarding_convert_view,
+    boarding_confirm_client_view,
 )
 
 __all__ = [
@@ -152,6 +172,7 @@ __all__ = [
     "appointment_reschedule_view",
     "appointment_complete_view",
     "appointment_confirm_view",
+    "appointment_cancel_view",
     "appointment_reschedule_approve_view",
     "appointment_reschedule_reject_view",
     "appointment_share_view",
@@ -159,6 +180,7 @@ __all__ = [
     "invoices_view",
     "invoice_detail_view",
     "invoice_payments_view",
+    "invoice_void_view",
     "revenue_view",
     "notifications_view",
     "notifications_mark_all_read_view",
@@ -183,6 +205,7 @@ __all__ = [
     "enquiries_view",
     "enquiry_convert_view",
     "enquiry_dismiss_view",
+    "enquiry_confirm_client_view",
     "facility_availability_view",
     "facility_bookings_view",
     "facility_booking_status_view",
@@ -192,4 +215,13 @@ __all__ = [
     "boarding_view",
     "boarding_status_view",
     "boarding_ending_soon_view",
+    "boarding_hold_view",
+    "boarding_hold_confirm_view",
+    "boarding_convert_view",
+    "boarding_confirm_client_view",
+    "file_download_view",
+    "sms_log_view",
+    "sms_test_view",
+    "cron_sms_reminders_view",
+    "sms_webhook_view",
 ]

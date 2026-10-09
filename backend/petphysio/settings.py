@@ -1,4 +1,6 @@
 import os
+import re
+import sys
 from pathlib import Path
 from datetime import timedelta
 
@@ -210,14 +212,83 @@ if SERVE_SPA and SPA_DIST_DIR.is_dir():
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+def _blob_token(environ):
+    return (environ.get("BLOB_READ_WRITE_TOKEN") or "").strip()
+
+
+def _default_storage_backend(environ):
+    """Where uploads go.
+
+    Vercel's serverless filesystem is read-only, so writing to MEDIA_ROOT there
+    crashed every upload with an HTML 500. In order:
+
+    - FILE_STORAGE=blob (honoured anywhere), or FILE_STORAGE unset with
+      BLOB_READ_WRITE_TOKEN set AND VERCEL_ENV=production: the private Vercel
+      Blob store (appointments/storage_blob.py `BlobStorage`). Explicit `blob`
+      without a usable token fails fast.
+    - FILE_STORAGE=db, or FILE_STORAGE unset on Vercel (VERCEL=1) otherwise --
+      Preview and Development deployments get the token too, but must not
+      write to (or delete from) the production store: Postgres
+      (appointments/storage.py `DatabaseStorage`).
+    - Otherwise (local dev, FILE_STORAGE=filesystem): MEDIA_ROOT, even when a
+      `.env` pulled from Vercel carries the token.
+    An unrecognised value fails fast rather than silently falling back to a
+    backend that cannot write in production.
+    """
+    choice = (environ.get("FILE_STORAGE") or "").strip().lower()
+    if choice not in ("", "blob", "db", "filesystem"):
+        raise ImproperlyConfigured(
+            f"FILE_STORAGE must be 'blob', 'db' or 'filesystem', got {choice!r}."
+        )
+    token = _blob_token(environ)
+    production = environ.get("VERCEL_ENV", "").strip().lower() == "production"
+    if choice == "blob" or (choice == "" and token and production):
+        # Same shape the @vercel/blob SDK parses: vercel_blob_rw_<storeId>_<secret>.
+        # The message never echoes the value -- it is a credential.
+        parts = token.split("_")
+        if not token.startswith("vercel_blob_rw_") or len(parts) < 5 or not parts[3]:
+            raise ImproperlyConfigured(
+                "FILE_STORAGE=blob needs BLOB_READ_WRITE_TOKEN set to a Vercel Blob "
+                "read-write token (vercel_blob_rw_<store>_<secret>)."
+            )
+        return "appointments.storage_blob.BlobStorage"
+    if choice == "db" or (choice == "" and environ.get("VERCEL")):
+        return "appointments.storage.DatabaseStorage"
+    return "django.core.files.storage.FileSystemStorage"
+
+
+# Read by appointments/storage_blob.py. A credential: never log it.
+BLOB_READ_WRITE_TOKEN = _blob_token(os.environ)
+
+
+def _file_storage_max_bytes(environ):
+    """Global ceiling on stored upload bytes (sum of StoredFile.size).
+
+    Past this point upload routes answer 503 "File storage is nearly full"
+    instead of letting the store hit its plan limit. The sum covers every
+    backend (StoredFile indexes Blob uploads too). Default 700 MB sits under
+    both Neon's 1 GB free tier (DatabaseStorage, where records share it) and
+    Vercel Blob's 1 GB/month Hobby storage (BlobStorage).
+    """
+    raw = (environ.get("FILE_STORAGE_MAX_MB") or "700").strip()
+    try:
+        mb = int(raw)
+    except ValueError:
+        mb = 0
+    if mb <= 0:
+        raise ImproperlyConfigured(f"FILE_STORAGE_MAX_MB must be a positive integer, got {raw!r}.")
+    return mb * 1024 * 1024
+
+
+FILE_STORAGE_MAX_BYTES = _file_storage_max_bytes(os.environ)
+
 # Compressed + hashed filenames (cache-busting) with a manifest, gzip/br
 # pre-compression, and long-lived cache headers — the standard WhiteNoise
-# production storage backend. `default` (media/uploads) storage is left as
-# the plain filesystem backend; media is never served by Django in
-# production (see petphysio/urls.py) so it doesn't need cache-busting here.
+# production storage backend. `default` (uploads) is chosen above; either way
+# uploads are served by the signed `GET /api/v1/files/<token>` route.
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": _default_storage_backend(os.environ),
     },
     "staticfiles": {
         # Manifest storage hashes filenames and REQUIRES a manifest produced by
@@ -276,6 +347,13 @@ EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", default=True)
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+# Implicit TLS (port 465, e.g. many hosted SMTP providers). Mutually exclusive
+# with EMAIL_USE_TLS (STARTTLS, port 587); Django raises ValueError at send
+# time if both are on, and STARTTLS against a 465 listener hangs until
+# EMAIL_TIMEOUT -- both used to surface as a password-reset 500.
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL", default=False)
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False
 
 # Clinic notifications: email the practice when a new enquiry/booking/boarding
 # arrives, so leads are seen without logging into the portal. Off by default —
@@ -283,6 +361,137 @@ EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 # are set. A send failure must never break the booking (see appointments/notify.py).
 NOTIFY_DOCTOR = _env_bool("NOTIFY_DOCTOR", default=False)
 DOCTOR_EMAIL = os.environ.get("DOCTOR_EMAIL", "")
+
+# --- Transactional SMS (appointments/sms/) ---------------------------------
+# Owners get texted when a visit/stay is confirmed and the day before a visit.
+# The default sender is an Android phone running capcom6 "SMS Gateway for
+# Android" in Cloud mode; the backend is chosen by SMS_BACKEND so a
+# DLT-registered Indian provider can replace it later (see DEPLOYMENT.md).
+#
+#   console          log only, nothing leaves the server (default when DEBUG)
+#   disabled         record each message as SKIPPED_DISABLED (default in any
+#                    deployed environment that has no gateway credentials)
+#   android_gateway  POST {SMS_GATEWAY_URL}/messages with HTTP Basic auth
+#
+# Explicitly asking for the gateway without its credentials fails at boot,
+# like EMAIL_BACKEND above: a silently-disabled sender looks like it works.
+SMS_BACKENDS = ("console", "disabled", "android_gateway")
+SMS_DEFAULT_GATEWAY_URL = "https://api.sms-gate.app/3rdparty/v1"
+
+
+def _sms_backend_choice(environ, debug):
+    choice = (environ.get("SMS_BACKEND") or "").strip().lower()
+    has_creds = bool(environ.get("SMS_GATEWAY_USERNAME") and environ.get("SMS_GATEWAY_PASSWORD"))
+    if not choice:
+        if debug:
+            return "console"
+        # Only the real production deployment texts real people by default.
+        # Preview/development builds share env vars too easily (security
+        # review M2); they stay disabled unless SMS_BACKEND says otherwise.
+        is_production = environ.get("VERCEL_ENV") == "production"
+        return "android_gateway" if (has_creds and is_production) else "disabled"
+    if choice not in SMS_BACKENDS:
+        raise ImproperlyConfigured(
+            f"SMS_BACKEND must be one of {', '.join(SMS_BACKENDS)}, got {choice!r}."
+        )
+    if choice == "android_gateway" and not has_creds:
+        raise ImproperlyConfigured(
+            "SMS_BACKEND=android_gateway needs SMS_GATEWAY_USERNAME and "
+            "SMS_GATEWAY_PASSWORD (shown in the gateway app's Cloud server section)."
+        )
+    return choice
+
+
+def _sms_daily_limit(environ):
+    """Ordinary Indian SIMs are throttled at about 100 SMS a day (TRAI), so the
+    default leaves headroom for the clinic's own texting."""
+    raw = (environ.get("SMS_DAILY_LIMIT") or "90").strip()
+    try:
+        limit = int(raw)
+    except ValueError:
+        limit = 0
+    if limit <= 0:
+        raise ImproperlyConfigured(f"SMS_DAILY_LIMIT must be a positive integer, got {raw!r}.")
+    return limit
+
+
+def _sms_per_phone_daily_limit(environ):
+    """Texts one number may receive per day -- caps any single relay."""
+    raw = (environ.get("SMS_PER_PHONE_DAILY_LIMIT") or "3").strip()
+    try:
+        limit = int(raw)
+    except ValueError:
+        limit = 0
+    if limit <= 0:
+        raise ImproperlyConfigured(f"SMS_PER_PHONE_DAILY_LIMIT must be a positive integer, got {raw!r}.")
+    return limit
+
+
+def _sms_allowed_country_codes(environ):
+    """Calling codes the clinic may text, e.g. "+91" or "+91,+44". Anything
+    else is recorded as SKIPPED_COUNTRY and never sent."""
+    raw = environ.get("SMS_ALLOWED_COUNTRY_CODES") or "+91"
+    codes = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        code = "+" + item.lstrip("+")
+        if not re.fullmatch(r"\+[1-9]\d{0,3}", code):
+            raise ImproperlyConfigured(
+                f"SMS_ALLOWED_COUNTRY_CODES must be calling codes like +91, got {item!r}."
+            )
+        codes.append(code)
+    if not codes:
+        raise ImproperlyConfigured("SMS_ALLOWED_COUNTRY_CODES must list at least one code.")
+    return tuple(codes)
+
+
+def _sms_gateway_url(environ):
+    url = (environ.get("SMS_GATEWAY_URL") or SMS_DEFAULT_GATEWAY_URL).strip().rstrip("/")
+    if not url.startswith("https://"):
+        # Basic-auth credentials and patients' phone numbers ride on this call.
+        raise ImproperlyConfigured("SMS_GATEWAY_URL must be an https:// URL.")
+    return url
+
+
+SMS_BACKEND = _sms_backend_choice(os.environ, DEBUG)
+SMS_GATEWAY_URL = _sms_gateway_url(os.environ)
+SMS_GATEWAY_USERNAME = os.environ.get("SMS_GATEWAY_USERNAME", "")
+SMS_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "")
+SMS_DAILY_LIMIT = _sms_daily_limit(os.environ)
+SMS_PER_PHONE_DAILY_LIMIT = _sms_per_phone_daily_limit(os.environ)
+SMS_ALLOWED_COUNTRY_CODES = _sms_allowed_country_codes(os.environ)
+SMS_TIMEOUT_SECONDS = 5
+# HMAC key from the gateway app (Settings -> Webhooks -> Signing Key). The
+# delivery-status webhook answers 404 until it is set.
+SMS_WEBHOOK_SIGNING_KEY = os.environ.get("SMS_WEBHOOK_SIGNING_KEY", "")
+# Vercel Cron sends `Authorization: Bearer $CRON_SECRET`. Unset = the cron
+# endpoint rejects every caller.
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+# Who the texts say they are from. Defaults match the public site
+# (landing/src/seo/siteConfig.ts).
+CLINIC_NAME = os.environ.get("CLINIC_NAME", "Pet Physio Vet")
+CLINIC_PHONE = os.environ.get("CLINIC_PHONE", "+91 72840 73241")
+
+# Without this, Django's default config drops INFO, so the console backend
+# printed nothing and SENT/SKIPPED outcomes left no trace in Vercel's logs.
+# Phones are masked and credentials never logged (appointments/sms/). Quiet
+# under `manage.py test`, which would otherwise print every console "send".
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "appointments.sms": {
+            "handlers": ["console"],
+            "level": os.environ.get(
+                "SMS_LOG_LEVEL", "WARNING" if "test" in sys.argv[1:2] else "INFO"
+            ),
+            "propagate": False,
+        },
+    },
+}
 
 if EMAIL_BACKEND.endswith("smtp.EmailBackend") and not EMAIL_HOST:
     raise ImproperlyConfigured(

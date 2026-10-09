@@ -4,6 +4,7 @@ import { Pulse, PawTrail, setPawTrail } from '../motion/extras';
 import { JOURNEY_STEPS } from '../data/clinicData';
 import { CheckCircle2, ChevronRight } from 'lucide-react';
 import { useLab } from '../lab/Lab';
+import { pad2 } from '../lib/format';
 
 export const TreatmentJourney: React.FC = () => {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
@@ -51,7 +52,7 @@ export const TreatmentJourney: React.FC = () => {
               </p>
               <p className="mt-8 font-(family-name:--f-display) italic text-6xl text-(--c-accent)/40 leading-none" aria-hidden="true">
                 <span ref={railCount}>01</span>
-                <span className="text-2xl not-italic text-(--c-line)"> / {String(JOURNEY_STEPS.length).padStart(2, '0')}</span>
+                <span className="text-2xl not-italic text-(--c-line)"> / {pad2(JOURNEY_STEPS.length)}</span>
               </p>
             </div>
           </div>

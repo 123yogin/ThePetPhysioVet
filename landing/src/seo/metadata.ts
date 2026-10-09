@@ -16,6 +16,7 @@ import { matchRoute, type RouteEntity } from './routes';
 import { HERO_IMAGE } from '../data/clinicData';
 import { PRIVACY, TERMS } from '../data/legalContent';
 import type { ConditionItem, ServiceItem, Specialist } from '../types';
+import type { CareService } from '../data/careServices';
 
 export const TITLE_MAX = 60;
 export const DESC_MAX = 160;
@@ -84,6 +85,7 @@ const robotsValue = (noindex: boolean): string =>
 const isCondition = (e: RouteEntity): e is ConditionItem => !!e && 'symptoms' in e;
 const isService = (e: RouteEntity): e is ServiceItem => !!e && 'benefits' in e;
 const isSpecialist = (e: RouteEntity): e is Specialist => !!e && 'credentials' in e;
+export const isCareService = (e: RouteEntity): e is CareService => !!e && 'bookingCode' in e;
 
 /** Resolve full metadata for any pathname. Pure — safe on server and client. */
 export function getPageMeta(pathname: string): PageMeta {
@@ -126,6 +128,19 @@ export function getPageMeta(pathname: string): PageMeta {
       imageAlt: `${entity.title} at ${SITE.brandName}`,
       ogType: 'article',
       breadcrumbs: [...base.breadcrumbs, { name: 'Treatments', path: '/#services' }, { name: entity.title, path: route.path }],
+    };
+  }
+
+  if (isCareService(entity)) {
+    return {
+      ...base,
+      // Hand-written and used verbatim, like the condition/treatment overrides.
+      title: entity.seoTitle,
+      description: entity.seoDescription,
+      image: socialImage(),
+      imageAlt: `${entity.title} at ${SITE.brandName}, Shilaj, ${locality}`,
+      ogType: 'article',
+      breadcrumbs: [...base.breadcrumbs, { name: 'Services', path: '/#book' }, { name: entity.title, path: route.path }],
     };
   }
 

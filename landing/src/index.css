@@ -128,6 +128,35 @@
   --font-label-caps: 'Inter', sans-serif;
 }
 
+/*
+ * Server-rendered height of the fixed navbar, before Navbar measures itself
+ * and publishes the real value. These are the shipped pill bar's heights
+ * (h-14 / lg:h-16, plus py-1.5 and a 1px border): 70px and 78px. The old
+ * 113px fallback was the desktop height of a previous bar, so on a phone the
+ * whole hero jumped up ~43px at hydration -- the page's entire CLS (0.18 in
+ * Lighthouse mobile). Keep these in step with Navbar's classes.
+ */
+:root { --nav-h: 70px; }
+@media (min-width: 1024px) {
+  :root { --nav-h: 78px; }
+}
+
+/*
+ * Below-the-fold home sections skip style, layout and paint until they come
+ * near the viewport. The home page is ~1,800 elements; laying all of it out
+ * before the first frame held first paint back by ~1s in a Lighthouse mobile
+ * trace (observed first paint 1245ms -> 164ms with this). Content stays in
+ * the DOM, the accessibility tree and find-in-page. `auto` remembers each
+ * section's real height once rendered, so scrolling back does not jump.
+ *
+ * Not applied to sections with position:sticky inside (TreatmentJourney,
+ * SplitDoorsReveal): containment there is not worth the risk.
+ */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1000px;
+}
+
 /* Material Symbols font settings */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';

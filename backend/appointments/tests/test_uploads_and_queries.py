@@ -1,6 +1,6 @@
 """File-upload validation and append-only query threads.
 
-API_CONTRACT.md §3 "Diagnostic reports": max 10 MB, allow image/*,
+API_CONTRACT.md §3 "Diagnostic reports": max 4 MB (amended 2026-10-08, was 10 MB), allow image/*,
 application/pdf, application/dicom; reject anything else with 400.
 §3 "Queries": max 5 attachments; append-only; sender_name derived from
 request.user, never from the body.
@@ -12,7 +12,7 @@ from appointments.models import DiagnosticReport, QueryAttachment, QueryMessage
 
 from .base import API, ApiTestCase, upload
 
-TEN_MB = 10 * 1024 * 1024
+MAX_BYTES = 4 * 1024 * 1024  # Vercel caps request bodies at ~4.5 MB
 
 
 class DiagnosticUploadTests(ApiTestCase):
@@ -51,13 +51,13 @@ class DiagnosticUploadTests(ApiTestCase):
                 self.assertEqual(DiagnosticReport.objects.count(), before)
 
     def test_oversized_file_rejected(self):
-        big = upload("huge.png", content_type="image/png", pad_to=TEN_MB + 1)
+        big = upload("huge.png", content_type="image/png", pad_to=MAX_BYTES + 1)
         r = self._post(big)
         self.assertEqual(r.status_code, 400, r.content)
         self.assertEqual(DiagnosticReport.objects.count(), 0)
 
     def test_exactly_at_limit_accepted(self):
-        r = self._post(upload("edge.png", content_type="image/png", pad_to=TEN_MB))
+        r = self._post(upload("edge.png", content_type="image/png", pad_to=MAX_BYTES))
         self.assertEqual(r.status_code, 201, r.content)
 
     def test_missing_file_rejected(self):
@@ -74,10 +74,23 @@ class DiagnosticUploadTests(ApiTestCase):
         r = self._post(upload("../../../../etc/passwd.png", content_type="image/png"))
         self.assertEqual(r.status_code, 201, r.content)
         report = DiagnosticReport.objects.get(pk=r.data["id"])
-        stored = os.path.realpath(report.file.path)
-        root = os.path.realpath(str(settings.MEDIA_ROOT))
-        self.assertTrue(stored.startswith(root),
-                        f"upload escaped MEDIA_ROOT: {stored}")
+        # Database storage (the suite default): the stored key stays under
+        # its upload_to prefix with no traversal segments.
+        self.assertTrue(report.file.name.startswith("diagnostic_reports/"), report.file.name)
+        self.assertNotIn("..", report.file.name)
+
+        # Filesystem storage (local dev): the file stays inside MEDIA_ROOT.
+        with self.settings(STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }):
+            r = self._post(upload("../../../../etc/passwd.png", content_type="image/png"))
+            self.assertEqual(r.status_code, 201, r.content)
+            report = DiagnosticReport.objects.get(pk=r.data["id"])
+            stored = os.path.realpath(report.file.path)
+            root = os.path.realpath(str(settings.MEDIA_ROOT))
+            self.assertTrue(stored.startswith(root),
+                            f"upload escaped MEDIA_ROOT: {stored}")
 
     def test_pet_id_in_url_is_validated(self):
         r = self.client.post(f"{API}/pets/999999/diagnoses",
@@ -97,7 +110,7 @@ class OwnerUploadTests(ApiTestCase):
     def test_owner_oversized_upload_rejected(self):
         self.auth(self.owner_a)
         r = self.client.post(f"{API}/owner/pets/{self.pet_a.id}/diagnoses",
-                             {"file": upload("x.png", content_type="image/png", pad_to=TEN_MB + 1),
+                             {"file": upload("x.png", content_type="image/png", pad_to=MAX_BYTES + 1),
                               "report_type": "OTHER"}, format="multipart")
         self.assertEqual(r.status_code, 400, r.content)
 
@@ -137,7 +150,7 @@ class QueryAttachmentTests(ApiTestCase):
     def test_query_attachment_size_is_validated(self):
         r = self.client.post(self.url, {
             "message": "big file",
-            "attachments": [upload("x.png", content_type="image/png", pad_to=TEN_MB + 1)],
+            "attachments": [upload("x.png", content_type="image/png", pad_to=MAX_BYTES + 1)],
         }, format="multipart")
         self.assertEqual(r.status_code, 400, r.content)
 

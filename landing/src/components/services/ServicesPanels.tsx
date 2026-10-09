@@ -4,6 +4,7 @@ import { SERVICES } from '../../data/clinicData';
 import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { onFrame, track, prefersReducedMotion } from '../../motion/engine';
+import { pad2 } from '../../lib/format';
 
 /**
  * One photo per service, picked from the clinic's own photo set (there are no
@@ -52,7 +53,7 @@ const PHOTOS: Record<string, PanelPhoto> = {
   },
 };
 
-const num = (i: number) => String(i + 1).padStart(2, '0');
+const num = (i: number) => pad2(i + 1);
 
 /** A panel shows a still photo unless it has a `video`, which then autoplays
  *  muted and looping (poster/photo is the fallback still). */

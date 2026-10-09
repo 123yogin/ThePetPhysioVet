@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchEnquiries, convertEnquiry, dismissEnquiry, enquiriesQueryKey } from '../api/enquiries';
+import { fetchEnquiries, convertEnquiry, dismissEnquiry, confirmEnquiryClient, enquiriesQueryKey } from '../api/enquiries';
 import { fetchAppointmentOptions } from '../api/appointments';
 import { useFlash } from '../lib/flash';
+import { nextFreeSlot } from '../lib/dates';
 import { Icon } from '../components/Icon';
-import { humanizeStatus, friendlyDate } from '../lib/labels';
+import { humanizeStatus, friendlyDate, bookingWhen } from '../lib/labels';
 import { Enquiry } from '../lib/types';
 
 type StatusTab = 'NEW' | 'CONVERTED' | 'DISMISSED';
@@ -151,8 +152,10 @@ export const EnquiriesScreen: React.FC = () => {
     // row has to reveal it — and the owner's reason is worth seeing while
     // you pick the slot.
     setExpandedIds((prev) => new Set(prev).add(enq.id));
-    setConvertDate(enq.preferred_date || new Date().toISOString().slice(0, 10));
-    setConvertTime('10:00');
+    // Never default into the past: today 10:00 at 3pm used to be offered.
+    const slot = nextFreeSlot(enq.preferred_date);
+    setConvertDate(slot.date);
+    setConvertTime(slot.time);
     // Start from what the owner actually asked for on the website. This used
     // to default to the first option -- Initial Consultation -- for every
     // enquiry, so a request for Grooming or Hydrotherapy silently became a
@@ -218,6 +221,15 @@ export const EnquiriesScreen: React.FC = () => {
     convertMutation.mutate({ id: enq.id, date: convertDate, time: convertTime, visit_type: convertVisitType });
   };
 
+  const confirmClientMutation = useMutation({
+    mutationFn: (id: string) => confirmEnquiryClient(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['enquiries'] });
+      addFlash('Client confirmed — the request now shows in their app.', 'success');
+    },
+    onError: (err: any) => addFlash(err?.message || 'Could not confirm the client.', 'error'),
+  });
+
   const anyMutationPending = convertMutation.isPending || dismissMutation.isPending;
 
   return (
@@ -232,7 +244,7 @@ export const EnquiriesScreen: React.FC = () => {
         >
           <span>
             <Icon name="celebrate" size={14} /> Booked an appointment for <strong>{justConverted.petName}</strong>
-            {justConverted.date ? ` on ${friendlyDate(justConverted.date)}` : ''}.
+            {justConverted.date ? ` — ${bookingWhen(justConverted.date, justConverted.time)}` : ''}.
           </span>
           <div style={{ display: 'flex', gap: '8px' }}>
             {justConverted.appointmentId && (
@@ -360,6 +372,8 @@ export const EnquiriesScreen: React.FC = () => {
 
                       <span style={{ display: 'block', fontSize: '12px', color: 'var(--brown-500)', marginTop: '6px' }}>
                         <Icon name="clock" size={12} /> {timeAgo(enq.created_at)}
+                        {/* The visitor quotes this on the phone (live QA B6). */}
+                        {enq.reference && <span style={{ marginLeft: '10px', letterSpacing: '0.04em' }}>{enq.reference}</span>}
                       </span>
                     </span>
                   </button>
@@ -449,6 +463,30 @@ export const EnquiriesScreen: React.FC = () => {
                           <Link to={`/appointments/${appointmentId}/share`} className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}>
                             View Appointment <Icon name="arrowRight" size={14} />
                           </Link>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Convert matched an EXISTING account by email (unverified at
+                        signup): show who it is, and only publish it to that
+                        owner's app once staff confirm (live QA D1). */}
+                    {isConverted && enq.owner_account && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--brown-700)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span>
+                          <b>Linked account:</b> {enq.owner_account.name || '—'}
+                          {enq.owner_account.email ? ` · ${enq.owner_account.email}` : ''}
+                          {enq.owner_account.phone ? ` · ${enq.owner_account.phone}` : ''}
+                          {enq.owner_verified ? ' · shown in their app' : ' · not yet shown in their app'}
+                        </span>
+                        {!enq.owner_verified && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={confirmClientMutation.isPending}
+                            onClick={() => confirmClientMutation.mutate(enq.id)}
+                          >
+                            {confirmClientMutation.isPending && confirmClientMutation.variables === enq.id ? 'Confirming…' : 'Confirm client'}
+                          </button>
                         )}
                       </div>
                     )}

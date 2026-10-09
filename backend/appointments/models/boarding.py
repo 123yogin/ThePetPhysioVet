@@ -7,10 +7,11 @@ an hour, a day, a week, a month — and is priced by that duration, not by the
 clock. Capacity is therefore counted per DATE across the stay's range, not per
 slot.
 
-One row per stay (no HELD countdown: boarding is paid at the clinic and the
-clinic confirms it, so there is no "seats blocked" race to protect against).
-A visitor books it on the marketing site; a doctor can also create one and run
-check-in from the portal.
+One row per stay. A visitor on the marketing site first HOLDS a bed (status
+HELD + `expires_at`, FACILITY_HOLD_SECONDS) while filling in the intake, then
+confirms it (HELD -> PENDING); a doctor can also create a stay directly and run
+check-in from the portal. Expiry is lazy, exactly as for `FacilityBooking`: an
+expired hold simply stops matching `occupies_q`, no sweeper needed.
 """
 import uuid
 from datetime import timedelta
@@ -67,6 +68,11 @@ def duration_label(key):
     return d["label"] if d else key
 
 
+def departure_for(check_in, key):
+    """See BoardingBooking.departure_date."""
+    return check_in + timedelta(days=duration_hours(key) // 24)
+
+
 # The three walk windows an owner may request, with their length in minutes.
 BOARDING_WALK_OPTIONS = (
     {"key": "morning", "label": "Morning", "minutes": 20},
@@ -88,6 +94,30 @@ class BoardingBooking(models.Model):
     owner_name = models.CharField(max_length=150)
     owner_phone = models.CharField(max_length=50)
     owner_email = models.EmailField(blank=True, default="")
+
+    # Who to call if the owner cannot be reached. Required on every NEW booking
+    # (enforced in the serializer); existing rows default to "".
+    emergency_contact_name = models.CharField(max_length=150, blank=True, default="")
+    emergency_contact_phone = models.CharField(max_length=50, blank=True, default="")
+
+    # Set by server-side matching on create, or by the doctor's "convert".
+    # Never exposed on the public API. SET_NULL so deleting a client never
+    # deletes the stay record.
+    owner = models.ForeignKey(
+        "appointments.UserProfile", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="boarding_bookings",
+    )
+    pet = models.ForeignKey(
+        "appointments.Pet", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="boarding_bookings",
+    )
+    # Whether the stay may appear in `owner`'s portal. True only when it was
+    # booked while signed in as that owner, when convert CREATED the account
+    # itself, or after staff explicitly press "Confirm client". An automatic
+    # phone match, or convert finding an EXISTING account by phone/email, is a
+    # staff HINT: signup verifies neither, so it is never proof of identity
+    # (live QA D1, 2026-10-08).
+    owner_verified = models.BooleanField(default=False)
 
     check_in = models.DateField()
     duration = models.CharField(max_length=12)
@@ -114,13 +144,15 @@ class BoardingBooking(models.Model):
     # PENDING -> the clinic confirms -> CHECKED_IN when the pet arrives ->
     # COMPLETED at the end. CANCELLED frees the beds immediately.
     STATUS_CHOICES = (
+        ("HELD", "Held"),
         ("PENDING", "Pending"),
         ("CONFIRMED", "Confirmed"),
         ("CHECKED_IN", "Checked in"),
         ("CANCELLED", "Cancelled"),
         ("COMPLETED", "Completed"),
     )
-    # Statuses that still occupy a bed for capacity counting.
+    # Non-expiring statuses that occupy a bed. HELD also occupies one, but only
+    # until `expires_at` -- always count capacity with `occupies_q(now)`.
     ACTIVE_STATUSES = ("PENDING", "CONFIRMED", "CHECKED_IN")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
 
@@ -132,6 +164,11 @@ class BoardingBooking(models.Model):
     # checked_in_at + the duration's hours, which is how the "ending soon" alert
     # knows when to warn the clinic. Null until check-in.
     checked_in_at = models.DateTimeField(null=True, blank=True)
+    # Set only while status == HELD; cleared on confirm.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    # Salted hash of the requester's IP, kept on a HELD row only so one visitor
+    # cannot park every bed at once. Never serialised.
+    requester_hash = models.CharField(max_length=32, blank=True, default="", db_index=True)
 
     class Meta:
         ordering = ("-created_at",)
@@ -141,14 +178,26 @@ class BoardingBooking(models.Model):
         ]
 
     @staticmethod
-    def active_q():
-        return Q(status__in=BoardingBooking.ACTIVE_STATUSES)
+    def occupies_q(now):
+        """Rows that currently take a bed: an active stay, or a HELD one whose
+        hold has not expired. Expired holds match nothing, so they free their
+        bed with no sweep."""
+        return Q(status__in=BoardingBooking.ACTIVE_STATUSES) | Q(
+            status="HELD", expires_at__gt=now
+        )
 
     def save(self, *args, **kwargs):
         # Derive check_out and price from the duration; never trust the client.
         self.check_out = self.check_in + timedelta(days=max(0, duration_days(self.duration) - 1))
         self.price = duration_price(self.duration)
         super().save(*args, **kwargs)
+
+    def departure_date(self):
+        """The day the pet goes home, for people to read. `check_out` is the
+        inclusive LAST BED-NIGHT (what capacity counts), so a 24h stay from the
+        8th has check_out == the 8th but leaves on the 9th; a sub-day stay leaves
+        the day it arrived. Display only -- never use this for capacity."""
+        return departure_for(self.check_in, self.duration)
 
     def ends_at(self):
         """When this stay actually finishes: check-in time + the duration's

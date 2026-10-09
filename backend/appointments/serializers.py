@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
@@ -6,10 +8,12 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .validators import normalise_phone, validate_aadhaar as _validate_aadhaar
+from . import rehab
+from .storage import signed_file_url
+from .validators import FUTURE_ONLY_MESSAGE, is_in_the_past, normalise_phone, phone_key, validate_aadhaar as _validate_aadhaar
 from .models import (
     UserProfile, Pet, Appointment, DiagnosticReport,
-    TreatmentPlan, ProgressNote, Invoice, LineItem, Payment, Package,
+    TreatmentPlan, RehabSession, ProgressNote, Invoice, LineItem, Payment, Package,
     Notification, NotificationPref, QueryThread, QueryMessage, QueryAttachment,
     Enquiry, FacilityBooking, BoardingBooking,
 )
@@ -23,7 +27,11 @@ from .models import (
 # `image/svg+xml` through. SVG is executable XML (can carry <script>) and is
 # served back from the media origin, so it is a stored-XSS vector — replaced
 # with an explicit allow-list of raster image types.
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+# 4 MB (amended 2026-10-08, was 10 MB): production is Vercel serverless, which
+# rejects a request body over ~4.5 MB at its edge before Django runs. 4 MB of
+# file plus multipart overhead stays under that, so the API's own 400 is what
+# the user sees rather than a gateway 413.
+MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 ALLOWED_UPLOAD_TYPES = (
     "image/png", "image/jpeg", "image/gif", "image/webp",
     "application/pdf", "application/dicom",
@@ -78,7 +86,7 @@ def _sniff_head(file_obj):
 
 def _validate_upload(file_obj):
     if file_obj.size > MAX_UPLOAD_SIZE:
-        raise serializers.ValidationError("File too large. Maximum size is 10 MB.")
+        raise serializers.ValidationError("File is too large (max 4 MB).")
     content_type = getattr(file_obj, "content_type", "") or ""
     if content_type not in ALLOWED_UPLOAD_TYPES:
         raise serializers.ValidationError(
@@ -249,6 +257,32 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         return value
 
 
+# Pet photos are rendered as <img>, so only raster photo formats a phone
+# camera produces. Sniffed like every other upload: the multipart
+# Content-Type is client-controlled. HEIC/HEIF is an ISO-BMFF container,
+# recognised by its `ftyp` box and a HEIF-family brand.
+PET_PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
+PET_PHOTO_MESSAGE = "Pet photo must be a JPEG, PNG, WebP or HEIC image."
+_HEIF_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1")
+
+
+def validate_pet_photo(file_obj):
+    """Raise ValidationError(PET_PHOTO_MESSAGE) unless `file_obj` is a real
+    JPEG/PNG/WebP/HEIC image. Size is checked separately (same cap as every
+    other upload)."""
+    content_type = (getattr(file_obj, "content_type", "") or "").lower()
+    if content_type not in PET_PHOTO_TYPES:
+        raise serializers.ValidationError(PET_PHOTO_MESSAGE)
+    head = _sniff_head(file_obj)
+    if content_type in ("image/heic", "image/heif"):
+        ok = head[4:8] == b"ftyp" and head[8:12] in _HEIF_BRANDS
+    else:
+        ok = _matches_signature(head, content_type)
+    if not ok:
+        raise serializers.ValidationError(PET_PHOTO_MESSAGE)
+    return file_obj
+
+
 class PetSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     doctor_name = serializers.SerializerMethodField()
@@ -273,11 +307,9 @@ class PetSerializer(serializers.ModelSerializer):
         read_only_fields = ["doctor_name"]
 
     def get_photo(self, obj):
-        if not obj.photo:
-            return None
-        request = self.context.get("request")
-        url = obj.photo.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link (appointments/storage.py): only rendered for
+        # callers already allowed to see this pet, so the token is the grant.
+        return signed_file_url(obj.photo, self.context.get("request"))
 
     def get_doctor_name(self, obj):
         doctor = obj.doctor
@@ -359,10 +391,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "owner_name", "owner_phone",
             "date", "time", "visit_type", "visit_type_display", "status",
             "requested_date", "requested_time", "reschedule_reason", "reason_notes",
+            "cancel_reason",
         ]
         read_only_fields = [
             "pet_name", "owner_name", "owner_phone", "visit_type_display",
             "status", "requested_date", "requested_time", "reschedule_reason",
+            "cancel_reason",
         ]
 
     def validate(self, attrs):
@@ -377,9 +411,9 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if self.instance is None:
             date = attrs.get("date")
             if date and date < timezone.localdate():
-                raise serializers.ValidationError(
-                    {"date": "That date has already passed. Choose today or a later date."}
-                )
+                raise serializers.ValidationError({"date": FUTURE_ONLY_MESSAGE})
+            if date and attrs.get("time") and is_in_the_past(date, attrs["time"]):
+                raise serializers.ValidationError({"time": FUTURE_ONLY_MESSAGE})
 
         # A second identical submission is almost always a double tap on a slow
         # connection, not a deliberate second booking: nothing in the product
@@ -444,11 +478,9 @@ class DiagnosticReportSerializer(serializers.ModelSerializer):
         read_only_fields = ["original_filename", "size", "mime", "uploaded_at"]
 
     def get_file_url(self, obj):
-        if not obj.file:
-            return None
-        request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link (appointments/storage.py): only rendered for
+        # callers already allowed to see the pet, so the token is the grant.
+        return signed_file_url(obj.file, self.context.get("request"), obj.original_filename)
 
     def get_is_dicom(self, obj):
         return obj.mime == "application/dicom" or obj.original_filename.lower().endswith(".dcm")
@@ -490,18 +522,144 @@ class ProgressNoteSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class RehabSessionSerializer(serializers.ModelSerializer):
+    display_status = serializers.SerializerMethodField()
+    done_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RehabSession
+        fields = [
+            "id", "therapy", "planned_date", "status", "display_status",
+            "done_on", "done_by_name", "note", "skip_reason",
+        ]
+        read_only_fields = fields
+
+    def get_display_status(self, obj):
+        # Derived, never stored: MISSED = still DUE after its day; DONE_LATE =
+        # ticked on a different day than planned. "Today" is clinic-local.
+        if obj.status == "DUE" and obj.planned_date < timezone.localdate():
+            return "MISSED"
+        if obj.status == "DONE" and obj.done_on != obj.planned_date:
+            return "DONE_LATE"
+        return obj.status
+
+    def get_done_by_name(self, obj):
+        # Owners must not learn which staff member did a session (E2E D1).
+        if self.context.get("hide_staff"):
+            return None
+        user = obj.done_by
+        if user is None:
+            return ""
+        return user.get_full_name().strip() or user.username
+
+
+class ScheduleEntrySerializer(serializers.Serializer):
+    therapy = serializers.CharField()
+    frequency = serializers.ChoiceField(choices=[f["code"] for f in rehab.FREQUENCIES])
+    weekdays = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6), required=False, default=list,
+    )
+
+    def validate_therapy(self, value):
+        if value not in rehab.ALL_THERAPIES:
+            raise serializers.ValidationError(f"Unknown therapy: {value}")
+        return value
+
+    def validate(self, attrs):
+        weekdays = attrs.get("weekdays", [])
+        need = rehab.WEEKDAYS_REQUIRED[attrs["frequency"]]
+        if len(set(weekdays)) != len(weekdays) or len(weekdays) != need:
+            raise serializers.ValidationError(
+                {"weekdays": f"{attrs['frequency']} needs exactly {need} distinct weekday(s)."}
+            )
+        attrs["weekdays"] = sorted(weekdays)
+        return attrs
+
+
 class TreatmentPlanSerializer(serializers.ModelSerializer):
     pet_id = serializers.UUIDField(source="pet.id", read_only=True)
     progress_notes = ProgressNoteSerializer(many=True, read_only=True)
+    sessions = RehabSessionSerializer(many=True, read_only=True)
     therapies = serializers.ListField(child=serializers.CharField(), default=list)
+    # ListField (not many=True) so DRF's nested-write guard doesn't reject a JSON column.
+    schedule = serializers.ListField(child=ScheduleEntrySerializer(), required=False)
 
     class Meta:
         model = TreatmentPlan
         fields = [
-            "id", "pet_id", "therapies", "frequency", "frequency_custom",
+            "id", "pet_id", "therapies", "schedule", "frequency", "frequency_custom",
             "duration", "duration_custom", "start_date", "end_date", "status",
-            "completed_at", "created_at", "updated_at", "progress_notes",
+            "completed_at", "created_at", "updated_at", "progress_notes", "sessions",
         ]
+
+    def validate_schedule(self, entries):
+        names = [e["therapy"] for e in entries]
+        if len(set(names)) != len(names):
+            raise serializers.ValidationError("Each therapy may appear only once.")
+        return entries
+
+    def validate(self, attrs):
+        inst = self.instance
+        start = attrs.get("start_date") or (inst.start_date if inst else None)
+        end = attrs.get("end_date")
+        if end is None and inst is not None:
+            end = inst.end_date  # never invent an end_date on update
+        if end is None and inst is None and start:
+            # Create only: derive from `duration` ("4WK", "10 days") when it
+            # parses, leave it open for other free text, else default 7 days.
+            duration = (attrs.get("duration") or "").strip()
+            if not duration:
+                end = start + timedelta(days=rehab.DEFAULT_PLAN_DAYS - 1)
+            else:
+                days = rehab.parse_duration_days(duration)
+                if days:
+                    end = start + timedelta(days=days - 1)
+            if end is not None:
+                attrs["end_date"] = end
+        if start and end:
+            if end < start:
+                raise serializers.ValidationError({"end_date": "End date is before the start date."})
+            if (end - start).days + 1 > rehab.MAX_PLAN_DAYS:
+                raise serializers.ValidationError({"end_date": "A plan can span at most 366 days."})
+        if (inst is not None and attrs.get("start_date") not in (None, inst.start_date)
+                and inst.sessions.exists()):
+            raise serializers.ValidationError({
+                "start_date": "Start date can't be changed once the plan has sessions; "
+                              "create a new plan instead.",
+            })
+        schedule = attrs.get("schedule")
+        if schedule and not attrs.get("therapies"):
+            attrs["therapies"] = [e["therapy"] for e in schedule]
+        return attrs
+
+    def create(self, validated_data):
+        plan = super().create(validated_data)
+        rehab.sync_sessions(plan, timezone.localdate(), backfill_from=plan.start_date)
+        return plan
+
+    def update(self, instance, validated_data):
+        old_end = instance.end_date
+        old_status = instance.status
+        new_status = validated_data.get("status", old_status)
+        if new_status != old_status:
+            if new_status == "COMPLETED":
+                validated_data["completed_at"] = timezone.now()
+            elif new_status == "ACTIVE":
+                validated_data["completed_at"] = None
+        plan = super().update(instance, validated_data)
+        today = timezone.localdate()
+        if plan.status != "ACTIVE":
+            # Not being worked: drop future DUE rows so they can't turn MISSED.
+            # Re-assert status/date in the DELETE (a tick may race in).
+            if old_status == "ACTIVE":
+                plan.sessions.filter(status="DUE", planned_date__gte=today).delete()
+            return plan
+        grew = old_end is not None and plan.end_date and plan.end_date > old_end
+        rehab.sync_sessions(
+            plan, timezone.localdate(),
+            backfill_from=old_end + timedelta(days=1) if grew else None,
+        )
+        return plan
 
 
 class LineItemSerializer(serializers.ModelSerializer):
@@ -572,15 +730,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
     # said so. It is now summed from the line rates like every other money field.
     tax = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     is_tax_invoice = serializers.BooleanField(read_only=True)
+    # Set only by POST /invoices/:id/void; never writable here.
+    voided_at = serializers.DateTimeField(read_only=True)
+    void_reason = serializers.CharField(read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
             "id", "invoice_no", "pet_id", "pet_name", "subtotal", "tax", "is_tax_invoice", "total",
             "payment_status", "payment_mode", "created_at", "line_items",
-            "payments", "package", "amount_paid", "balance_due",
+            "payments", "package", "amount_paid", "balance_due", "voided_at", "void_reason",
         ]
-        read_only_fields = ["invoice_no", "created_at"]
+        read_only_fields = ["invoice_no", "created_at", "voided_at", "void_reason"]
 
     def get_pet_id(self, obj):
         return obj.pet_id
@@ -611,11 +772,8 @@ class QueryAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["original_filename", "mime", "size"]
 
     def get_url(self, obj):
-        if not obj.file:
-            return None
-        request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        # Signed, 15-minute link -- see DiagnosticReportSerializer.get_file_url.
+        return signed_file_url(obj.file, self.context.get("request"), obj.original_filename)
 
     def validate_file(self, value):
         return _validate_upload(value)
@@ -769,6 +927,20 @@ class EnquiryCreateSerializer(serializers.ModelSerializer):
         return normalise_phone(value)
 
 
+def _owner_account(user):
+    """The linked client account as staff need it to VERIFY the link before
+    pressing "Confirm client": who it is and how to reach them. Doctor-facing
+    serializers only -- never on a public or owner response (live QA D1)."""
+    if user is None:
+        return None
+    return {
+        "id": str(user.id),
+        "name": (user.get_full_name() or user.username).strip(),
+        "email": user.email or "",
+        "phone": user.phone or "",
+    }
+
+
 class EnquirySerializer(serializers.ModelSerializer):
     """Doctor-facing read shape for `GET /enquiries` and the convert/dismiss
     responses — snake_case, matching this app's internal API convention
@@ -780,6 +952,13 @@ class EnquirySerializer(serializers.ModelSerializer):
 
     converted_appointment_id = serializers.UUIDField(read_only=True, allow_null=True)
     appointment = serializers.SerializerMethodField()
+    # ENQ-XXXXXXXX -- the reference the visitor was given, so the clinic can
+    # match a phone call to the card (live QA B6).
+    reference = serializers.CharField(read_only=True)
+    owner_account = serializers.SerializerMethodField()
+
+    def get_owner_account(self, obj):
+        return _owner_account(obj.owner if obj.owner_id else None)
 
     class Meta:
         model = Enquiry
@@ -787,7 +966,8 @@ class EnquirySerializer(serializers.ModelSerializer):
             "id", "first_name", "last_name", "pet_name", "species_breed",
             "email", "phone", "service", "reason", "preferred_date",
             "preferred_specialist", "status", "created_at",
-            "converted_appointment_id", "appointment",
+            "converted_appointment_id", "appointment", "reference",
+            "owner_verified", "owner_account",
         ]
         read_only_fields = fields
 
@@ -921,9 +1101,29 @@ class BoardingCreateSerializer(serializers.Serializer):
     termsAccepted = serializers.BooleanField(source="terms_accepted")
     website = serializers.CharField(required=False, allow_blank=True, default="")
 
+    # Emergency contact: the phone is REQUIRED on every new booking.
+    emergencyContactName = serializers.CharField(
+        source="emergency_contact_name", max_length=150, required=False, allow_blank=True,
+        default="", trim_whitespace=True,
+    )
+    emergencyContactPhone = serializers.CharField(
+        source="emergency_contact_phone", max_length=50, trim_whitespace=True,
+    )
+
+    def validate_ownerPhone(self, value):
+        return normalise_phone(value) or _blank_phone_error()
+
+    def validate_emergencyContactPhone(self, value):
+        return normalise_phone(value) or _blank_phone_error()
+
+    def validate(self, attrs):
+        a, b = attrs.get("owner_phone"), attrs.get("emergency_contact_phone")
+        if a and b and phone_key(a) == phone_key(b):
+            raise serializers.ValidationError({"emergencyContactPhone": "Emergency contact must be a different number"})
+        return attrs
+
     def validate_checkIn(self, value):
-        from datetime import date as _date
-        if value < _date.today():
+        if value < timezone.localdate():
             raise serializers.ValidationError("Choose today or a future date.")
         return value
 
@@ -938,17 +1138,52 @@ class BoardingCreateSerializer(serializers.Serializer):
         return _validate_aadhaar(value)
 
 
+def _blank_phone_error():
+    raise serializers.ValidationError("This field may not be blank.")
+
+
+class BoardingHoldSerializer(serializers.Serializer):
+    """PUBLIC ``POST /facility/boarding/holds`` -- dates only, no personal data."""
+
+    check_in = serializers.DateField()
+    duration = serializers.ChoiceField(choices=list(BOARDING_DURATION_KEYS))
+    website = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_check_in(self, value):
+        if value < timezone.localdate():
+            raise serializers.ValidationError("Choose today or a future date.")
+        return value
+
+
+class BoardingConfirmSerializer(BoardingCreateSerializer):
+    """Intake for ``POST /facility/boarding/holds/<ref>/confirm``. Same body as
+    the direct create, but the dates/duration were fixed by the hold, so any
+    `checkIn`/`duration` sent is ignored rather than trusted."""
+
+    checkIn = None
+    duration = None
+
+
 class BoardingSerializer(serializers.ModelSerializer):
     """Doctor-facing read of one boarding stay (snake_case, this app's internal
     convention). Derived fields (duration label, price) come along so the portal
     needs no pricing table of its own."""
 
     duration_label = serializers.SerializerMethodField()
+    owner_id = serializers.UUIDField(read_only=True)
+    pet_id = serializers.UUIDField(read_only=True)
+    pet_link_status = serializers.SerializerMethodField()
+    previous_reports = serializers.SerializerMethodField()
+    previous_reports_restricted = serializers.SerializerMethodField()
+    # Staff see only the last four digits; the full number never leaves the server.
+    aadhaar = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardingBooking
         fields = [
             "id", "reference", "pet_name", "owner_name", "owner_phone", "owner_email",
+            "emergency_contact_name", "emergency_contact_phone",
+            "owner_id", "pet_id", "owner_verified", "owner_account", "pet_link_status", "previous_reports", "previous_reports_restricted", "expires_at",
             "check_in", "check_out", "duration", "duration_label", "price",
             "food_by", "utensils_by", "medicines_by", "blanket_by", "food_preference",
             "walk_times", "aadhaar", "terms_accepted", "status", "source", "created_at",
@@ -957,3 +1192,37 @@ class BoardingSerializer(serializers.ModelSerializer):
 
     def get_duration_label(self, obj):
         return duration_label(obj.duration)
+
+    def get_aadhaar(self, obj):
+        return f"XXXX XXXX {obj.aadhaar[-4:]}" if len(obj.aadhaar) >= 4 else ""
+
+    owner_account = serializers.SerializerMethodField()
+
+    def get_owner_account(self, obj):
+        return _owner_account(obj.owner if obj.owner_id else None)
+
+    def get_pet_link_status(self, obj):
+        if obj.pet_id:
+            return "linked"
+        return "owner_only" if obj.owner_id else "unlinked"
+
+    def get_previous_reports_restricted(self, obj):
+        """True only when a pet is linked but belongs to another doctor, so the
+        empty `previous_reports` means "not yours to see" rather than "none"."""
+        if not obj.pet_id:
+            return False
+        doctor = self.context.get("doctor")
+        return obj.pet.doctor_id is not None and (doctor is None or doctor.id != obj.pet.doctor_id)
+
+    def get_previous_reports(self, obj):
+        """The linked pet's diagnostic reports (same serializer as the pet page);
+        None when no pet is linked. Doctor-scoped like every report route: a pet
+        that belongs to ANOTHER doctor's practice contributes nothing."""
+        if not obj.pet_id:
+            return None
+        doctor = self.context.get("doctor")
+        if obj.pet.doctor_id is not None and (doctor is None or doctor.id != obj.pet.doctor_id):
+            return []
+        return DiagnosticReportSerializer(
+            obj.pet.diagnostic_reports.all(), many=True, context=self.context,
+        ).data

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAppointmentDetail, rescheduleAppointment } from '../api/appointments';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 
 export const RescheduleScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,7 +20,7 @@ export const RescheduleScreen: React.FC = () => {
     enabled: !!apptId,
   });
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayISO());
   const [time, setTime] = useState('11:00');
   const [submitting, setSubmitting] = useState(false);
 
@@ -92,8 +93,10 @@ export const RescheduleScreen: React.FC = () => {
           <button type="submit" className="btn btn-primary" disabled={submitting}>
             {submitting ? 'Saving...' : 'Update Appointment'}
           </button>
+          {/* "Cancel" here read as "cancel the appointment" (live QA B1); it only
+              leaves the form. Cancelling a visit is on the appointments list. */}
           <button type="button" onClick={() => navigate('/appointments')} className="btn btn-ghost">
-            Cancel
+            Back without changes
           </button>
         </div>
       </form>

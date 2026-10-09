@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchAppointments, completeAppointment, approveReschedule, rejectReschedule, confirmAppointment } from '../api/appointments';
+import { fetchAppointments, completeAppointment, approveReschedule, rejectReschedule, confirmAppointment, cancelAppointment } from '../api/appointments';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import type { Appointment } from '../lib/types';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
 import { humanizeStatus, petEmoji } from '../lib/labels';
 
@@ -11,7 +14,7 @@ export const AppointmentsScreen: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('');
   const [ownerSearch, setOwnerSearch] = useState('');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(
-    new Date().toISOString().slice(0, 10)
+    todayISO()
   );
   
   // Current calendar month view state
@@ -52,6 +55,26 @@ export const AppointmentsScreen: React.FC = () => {
       addFlash(err.message || 'Failed to confirm appointment', 'error');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  // Live QA B1: there was no way for the clinic to cancel a visit.
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const isOpenVisit = (status?: string) => status !== 'Completed' && status !== 'Cancelled';
+
+  const handleCancel = async (reason: string) => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await cancelAppointment(cancelTarget.id, reason || undefined);
+      addFlash(`Cancelled ${cancelTarget.pet_name}'s appointment`, 'success');
+      setCancelTarget(null);
+      refetch();
+    } catch (err: any) {
+      addFlash(err.message || 'Could not cancel the appointment', 'error');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -119,7 +142,7 @@ export const AppointmentsScreen: React.FC = () => {
     const today = new Date();
     setCurrentYear(today.getFullYear());
     setCurrentMonth(today.getMonth());
-    setSelectedCalendarDate(today.toISOString().slice(0, 10));
+    setSelectedCalendarDate(todayISO());
   };
 
   // Generate matrix for month grid
@@ -150,7 +173,7 @@ export const AppointmentsScreen: React.FC = () => {
     });
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
 
   // Filtered appointments for list view or selected date view
   const selectedDateAppointments = selectedCalendarDate
@@ -599,7 +622,7 @@ export const AppointmentsScreen: React.FC = () => {
                               </button>
                             )}
 
-                            {appt.status !== 'Completed' && (
+                            {isOpenVisit(appt.status) && (
                               <button
                                 onClick={() => handleComplete(appt.id)}
                                 className="btn btn-secondary btn-sm"
@@ -608,15 +631,29 @@ export const AppointmentsScreen: React.FC = () => {
                               </button>
                             )}
 
-                            <Link to={`/appointments/${appt.id}/reschedule`} className="btn btn-ghost btn-sm">
-                              Reschedule
-                            </Link>
+                            {isOpenVisit(appt.status) && (
+                              <>
+                                <Link to={`/appointments/${appt.id}/reschedule`} className="btn btn-ghost btn-sm">
+                                  Reschedule
+                                </Link>
+                                <button
+                                  onClick={() => setCancelTarget(appt)}
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ color: '#b71c1c' }}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            )}
                           </>
                         )}
 
-                        <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
-                          Share
-                        </Link>
+                        {/* Share sends the booking confirmation, so it only makes sense for a visit that is still going ahead. */}
+                        {isOpenVisit(appt.status) && (
+                          <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
+                            Share
+                          </Link>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -746,22 +783,34 @@ export const AppointmentsScreen: React.FC = () => {
                                   {confirmingId === appt.id ? 'Confirming…' : 'Confirm'}
                                 </button>
                               )}
-                              {appt.status !== 'Completed' && (
-                                <button
-                                  onClick={() => handleComplete(appt.id)}
-                                  className="btn btn-secondary btn-sm"
-                                >
-                                  Complete
-                                </button>
+                              {isOpenVisit(appt.status) && (
+                                <>
+                                  <button
+                                    onClick={() => handleComplete(appt.id)}
+                                    className="btn btn-secondary btn-sm"
+                                  >
+                                    Complete
+                                  </button>
+                                  <Link to={`/appointments/${appt.id}/reschedule`} className="btn btn-ghost btn-sm">
+                                    Reschedule
+                                  </Link>
+                                  <button
+                                    onClick={() => setCancelTarget(appt)}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ color: '#b71c1c' }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
                               )}
-                              <Link to={`/appointments/${appt.id}/reschedule`} className="btn btn-ghost btn-sm">
-                                Reschedule
-                              </Link>
                             </>
                           )}
-                          <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
-                            Share
-                          </Link>
+                          {/* Share sends the booking confirmation, so it only makes sense for a visit that is still going ahead. */}
+                          {isOpenVisit(appt.status) && (
+                            <Link to={`/appointments/${appt.id}/share`} className="btn btn-ghost btn-sm">
+                              Share
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -772,6 +821,26 @@ export const AppointmentsScreen: React.FC = () => {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title="Cancel this appointment?"
+        body={cancelTarget && (
+          <>
+            {cancelTarget.pet_name} ({cancelTarget.owner_name}) on {cancelTarget.date} at{' '}
+            {cancelTarget.time?.substring(0, 5)}. The slot becomes free again. Let the owner know — they are
+            not notified automatically.
+          </>
+        )}
+        confirmLabel="Cancel appointment"
+        cancelLabel="Keep appointment"
+        danger
+        busy={cancelling}
+        reasonLabel="Reason (optional)"
+        reasonPlaceholder="e.g. Owner called to cancel"
+        onConfirm={handleCancel}
+        onClose={() => setCancelTarget(null)}
+      />
     </div>
   );
 };

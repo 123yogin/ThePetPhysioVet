@@ -6,8 +6,13 @@ import { createBoarding } from '../api/boarding';
 import { fetchAppointmentOptions } from '../api/appointments';
 import { fetchMe } from '../api/auth';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { isValidAadhaar } from '../lib/aadhaar';
 import { Icon } from '../components/Icon';
+import { PetAvatar } from '../components/PetAvatar';
+import { PetPhotoField } from '../components/PetPhotoField';
+import { Spinner } from '../components/Spinner';
+import { petPhotoError, uploadErrorMessage } from '../lib/uploads';
 import { petEmoji, friendlyDate, friendlyTime } from '../lib/labels';
 import { Appointment } from '../lib/types';
 
@@ -91,6 +96,7 @@ export const OwnerHomeScreen: React.FC = () => {
 
   // New Pet State
   const [petName, setPetName] = useState('');
+  const [petPhoto, setPetPhoto] = useState<File | null>(null);
   const [species, setSpecies] = useState('Dog');
   const [breed, setBreed] = useState('');
   const [age, setAge] = useState('');
@@ -101,7 +107,7 @@ export const OwnerHomeScreen: React.FC = () => {
 
   // New Appointment State
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
-  const [apptDate, setApptDate] = useState(new Date().toISOString().slice(0, 10));
+  const [apptDate, setApptDate] = useState(todayISO());
   const [visitType, setVisitType] = useState('');
   const [reasonNotes, setReasonNotes] = useState('');
   // Website-like, per-service extras — each service books its own way, so only
@@ -149,8 +155,18 @@ export const OwnerHomeScreen: React.FC = () => {
   // the owner press Book a second time. The param is cleared once handled so a
   // refresh or Back does not re-open it.
   const [searchParams, setSearchParams] = useSearchParams();
+  // Live QA D6: with no pets, ?book=1 used to land on an empty "My Pets" with no
+  // word about why the booking did not open. Say so, and offer the next step.
+  const [needsPetFirst, setNeedsPetFirst] = useState(false);
   useEffect(() => {
-    if (searchParams.get('book') !== '1' || !pets || pets.length === 0) return;
+    if (searchParams.get('book') !== '1' || !pets) return;
+    if (pets.length === 0) {
+      setNeedsPetFirst(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('book');
+      setSearchParams(next, { replace: true });
+      return;
+    }
     setSelectedPetId((prev) => prev ?? pets[0].id);
     setShowApptModal(true);
     const next = new URLSearchParams(searchParams);
@@ -194,7 +210,7 @@ export const OwnerHomeScreen: React.FC = () => {
   // answered on the home screen instead of three taps away.
   const nextApptByPet = new Map<string, Appointment>();
   if (appointments) {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayISO();
     for (const a of appointments) {
       if (a.status === 'Cancelled' || a.status === 'Completed') continue;
       if (a.date < todayStr) continue;
@@ -207,6 +223,8 @@ export const OwnerHomeScreen: React.FC = () => {
 
   const createPetMutation = useMutation({
     mutationFn: async () => {
+      const photoErr = petPhotoError(petPhoto);
+      if (photoErr) throw new Error(photoErr);
       const fd = new FormData();
       fd.append('name', petName);
       fd.append('species', species);
@@ -218,6 +236,7 @@ export const OwnerHomeScreen: React.FC = () => {
       if (needsContactPhone) {
         fd.append('owner_phone', contactPhone.trim());
       }
+      if (petPhoto) fd.append('photo', petPhoto);
       return createOwnerPet(fd);
     },
     onSuccess: (newPet) => {
@@ -232,9 +251,10 @@ export const OwnerHomeScreen: React.FC = () => {
       setWeight('');
       setComplaint('');
       setContactPhone('');
+      setPetPhoto(null);
     },
-    onError: (err: any) => {
-      addFlash(err?.message || 'Failed to add pet. Please try again.', 'error');
+    onError: (err: unknown) => {
+      addFlash(uploadErrorMessage(err, 'Failed to add pet. Please try again.'), 'error');
     },
   });
 
@@ -360,6 +380,15 @@ export const OwnerHomeScreen: React.FC = () => {
         </div>
       </div>
 
+      {needsPetFirst && pets && pets.length === 0 && !showAddPet && (
+        <div className="alert alert-info" role="status" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <span><strong>Add your pet first.</strong> Appointments are booked for a pet, so add yours and then book.</span>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowAddPet(true)}>
+            <Icon name="plus" /> Add your pet
+          </button>
+        </div>
+      )}
+
       {/* Add Pet Form / Card */}
       {showAddPet && (
         <div className="glass-card" style={{ marginBottom: '24px', padding: '24px', border: '2px solid var(--primary)' }}>
@@ -393,6 +422,15 @@ export const OwnerHomeScreen: React.FC = () => {
                   <option value="Exotic">Exotic Pet</option>
                 </select>
               </div>
+            </div>
+
+            <div style={{ marginTop: '12px' }}>
+              <PetPhotoField
+                file={petPhoto}
+                onChange={setPetPhoto}
+                onError={(msg) => addFlash(msg, 'error')}
+                disabled={createPetMutation.isPending}
+              />
             </div>
 
             {needsContactPhone && (
@@ -483,13 +521,20 @@ export const OwnerHomeScreen: React.FC = () => {
                 onClick={() => {
                   setShowAddPet(false);
                   setShowMoreDetails(false);
+                  setPetPhoto(null);
                 }}
                 className="btn btn-ghost btn-sm"
               >
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary btn-sm" disabled={createPetMutation.isPending}>
-                {createPetMutation.isPending ? 'Saving...' : 'Save Pet'}
+                {createPetMutation.isPending ? (
+                  <>
+                    <Spinner /> {petPhoto ? 'Uploading photo…' : 'Saving...'}
+                  </>
+                ) : (
+                  'Save Pet'
+                )}
               </button>
             </div>
           </form>
@@ -858,8 +903,8 @@ export const OwnerHomeScreen: React.FC = () => {
             return (
               <div key={p.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '230px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--brown-900)' }}>
-                    {petEmoji(p.species)} {p.name}
+                  <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--brown-900)', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <PetAvatar name={p.name} species={p.species} photo={p.photo} size={p.photo ? 44 : 28} radius={12} /> {p.name}
                   </div>
                   <span className="badge badge-neutral">
                     {p.species || 'Pet'}

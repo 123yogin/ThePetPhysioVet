@@ -1,4 +1,9 @@
 import { ConditionItem, ServiceItem, JourneyStep, SuccessStory, Specialist, GalleryItem, FAQItem } from '../types';
+import { bookableByCode } from './bookableServices';
+import { rupee } from '../lib/format';
+
+/** Single swimming session price, from the bookable Swimming card, for copy. */
+const SINGLE_SWIM = bookableByCode('Hydrotherapy')?.priceList?.[0]?.price;
 
 // The hero's own poster frame, from the clinic's footage. Used as the last
 // resort og:image when SITE.images.ogImage is unset. It was a stock
@@ -219,10 +224,15 @@ export const SERVICES: ServiceItem[] = [
   {
     id: 'hydrotherapy',
     title: 'Hydrotherapy',
-    seoH1: 'Hydrotherapy for dogs in Ahmedabad',
-    seoTitle: 'Dog Hydrotherapy in Ahmedabad | The Pet Physio Vet',
+    // Owns both "dog hydrotherapy" and "dog swimming pool" for Ahmedabad: same
+    // pool, same booking code, so one page rather than a near-duplicate
+    // swimming page (local-seo-plan section 5). No brand suffix: it would
+    // push the title past 60 characters.
+    seoH1: 'Dog hydrotherapy and swimming in our indoor pool in Ahmedabad',
+    seoTitle: 'Dog Hydrotherapy & Swimming Pool in Ahmedabad',
     seoDescription:
-      'Dog hydrotherapy in Ahmedabad: supported swimming in our lukewarm indoor pool with a hydrotherapist alongside. For IVDD, post-surgery, arthritis, weight loss.',
+      'Dog hydrotherapy and swimming in our indoor, lukewarm pool in Shilaj, Ahmedabad, with a hydrotherapist in the water.'
+      + (SINGLE_SWIM ? ` Single swim ${rupee(SINGLE_SWIM)}. Book a slot.` : ' Book a slot.'),
     icon: 'star',
     shortDesc: 'Supported swimming in our indoor, lukewarm pool.',
     fullDesc: 'Hydrotherapy in an indoor swimming pool kept at lukewarm temperature (29-31\u00b0C), with a dedicated hydrotherapist in the water alongside your pet.',

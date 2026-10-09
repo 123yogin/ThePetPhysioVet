@@ -4,6 +4,7 @@ import { GalleryItem } from '../types';
 import { Maximize2 } from 'lucide-react';
 import { SplitWords, VelocitySkew } from '../motion';
 import { Pulse } from '../motion/extras';
+import { LazyLoopVideo } from './LazyLoopVideo';
 
 interface GallerySectionProps {
   onSelectImage: (item: GalleryItem) => void;
@@ -47,26 +48,6 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
-
-  // Play each loop only while that tile is actually on screen. The marquee
-  // repeats tiles, so there are many more <video> elements than reels; letting
-  // every one decode (off-screen or not) is a real CPU/battery drain on phones.
-  React.useEffect(() => {
-    const el = sectionRef.current;
-    if (!el || prefersReducedMotion) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(({ target, isIntersecting }) => {
-          const v = target as HTMLVideoElement;
-          if (isIntersecting) v.play().catch(() => {});
-          else v.pause();
-        });
-      },
-      { rootMargin: '100px' },
-    );
-    el.querySelectorAll('video').forEach((v) => io.observe(v));
-    return () => io.disconnect();
-  }, [prefersReducedMotion, reps]);
 
   return (
     <section ref={sectionRef} id="gallery" className="py-20 sm:py-28 bg-(--c-card) overflow-x-clip">
@@ -170,15 +151,11 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ onSelectImage })
                         all -- permanent motion is a genuine problem for some
                         people, and there is already a marquee moving. */}
                     {item.videoUrl ? (
-                      <video
+                      <LazyLoopVideo
                         src={item.previewUrl || item.videoUrl}
-                        autoPlay={!prefersReducedMotion}
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        aria-label={item.altText}
-                        className="w-full aspect-[9/16] object-cover grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
+                        label={item.altText}
+                        reducedMotion={prefersReducedMotion}
+                        className="w-full aspect-[9/16] object-cover bg-(--c-surface-3) grayscale-[25%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700 ease-out"
                       />
                     ) : (
                       <img

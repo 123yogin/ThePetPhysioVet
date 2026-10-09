@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createAppointment, fetchAppointmentOptions } from '../api/appointments';
 import { fetchPets } from '../api/pets';
 import { useFlash } from '../lib/flash';
+import { nextFreeSlot } from '../lib/dates';
 
 export const CreateScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -15,8 +16,10 @@ export const CreateScreen: React.FC = () => {
 
   const [petId, setPetId] = useState(defaultPetId);
   const [visitType, setVisitType] = useState('');
-  const [date, setDate] = useState(dateParam || new Date().toISOString().slice(0, 10));
-  const [time, setTime] = useState('10:00');
+  // Same default as enquiry "Confirm & Book": the next free future time, never a past one.
+  const [initialSlot] = useState(() => nextFreeSlot(dateParam));
+  const [date, setDate] = useState(initialSlot.date);
+  const [time, setTime] = useState(initialSlot.time);
   const [reasonNotes, setReasonNotes] = useState('');
   const [loading, setLoading] = useState(false);
 

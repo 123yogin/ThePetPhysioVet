@@ -11,6 +11,7 @@ as before -- every public name is re-exported by the package.
 """
 
 import hashlib
+import logging
 import secrets
 from datetime import timedelta
 from django.conf import settings
@@ -32,6 +33,12 @@ from ..serializers import (
 from django.contrib.auth import authenticate
 
 from ._shared import _client_ip, _first_error_detail, _rate_limited, problem
+
+logger = logging.getLogger(__name__)
+
+# Public signup, per client IP per hour (see `_client_ip` for the edge caveat).
+SIGNUP_WINDOW_SECONDS = 60 * 60
+SIGNUP_IP_LIMIT = 30
 
 def _issue_tokens(user):
     refresh = RefreshToken.for_user(user)
@@ -105,6 +112,11 @@ def login_view(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def signup_view(request):
+    # Every owner account carries its own upload quota, so unlimited signups
+    # would multiply it (security review 2026-10-08). Counted before
+    # validation so failed attempts count too.
+    if _rate_limited(f"signup:ip:{_client_ip(request)}", SIGNUP_IP_LIMIT, SIGNUP_WINDOW_SECONDS):
+        return problem(429, "Too many requests", "Too many sign-ups from this network. Please try again later.")
     serializer = SignupSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
@@ -192,38 +204,79 @@ PASSWORD_RESET_EMAIL_LIMIT = 5
 PASSWORD_RESET_IP_LIMIT = 20
 
 
+def _mask_email(email):
+    """`alice@example.com` -> `a***@example.com`, for log lines that must not
+    carry a full address (PII + the log becomes an account-existence list)."""
+    local, sep, domain = (email or "").partition("@")
+    if not sep or not local or not domain:
+        return "***"
+    return f"{local[0]}***@{domain}"
+
+
+def _new_reset_token():
+    """(raw, sha256-hex). SHA-256, not bcrypt/PBKDF2 — see PasswordResetToken's
+    docstring: the raw value is 256 bits of CSPRNG entropy, not a human-chosen
+    password, so a slow hash defends against nothing and only costs CPU."""
+    raw_token = secrets.token_urlsafe(32)
+    return raw_token, hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _reset_url(raw_token):
+    # rstrip: FRONTEND_BASE_URL is set by hand per environment, and a trailing
+    # slash produced `.../app//reset-password`, which the SPA router 404s.
+    base = (settings.FRONTEND_BASE_URL or "").rstrip("/")
+    return f"{base}/reset-password?token={raw_token}"
+
+
 def _issue_password_reset(user):
     """Create (and email) a fresh reset token for `user`, invalidating any
     earlier unused ones first — "requesting a second token invalidates the
     first" (task spec). Marking old rows `used_at` rather than deleting them
     keeps a full audit trail of every token ever issued.
+
+    Never raises on a send failure: an SMTP/config error used to propagate
+    as an HTML 500 for known accounts only (unknown emails got 200), which
+    both broke the flow and leaked which addresses have accounts. The
+    failure is logged (address masked) and the caller returns the generic 200.
     """
     now = timezone.now()
     PasswordResetToken.objects.filter(user=user, used_at__isnull=True).update(used_at=now)
 
-    raw_token = secrets.token_urlsafe(32)
-    # SHA-256, not bcrypt/PBKDF2 — see PasswordResetToken's docstring: the
-    # raw value is 256 bits of CSPRNG entropy, not a human-chosen password,
-    # so a slow hash defends against nothing and only costs CPU.
-    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    raw_token, token_hash = _new_reset_token()
     PasswordResetToken.objects.create(
         user=user, token_hash=token_hash, expires_at=now + timedelta(minutes=30),
     )
 
-    reset_url = f"{settings.FRONTEND_BASE_URL}/reset-password?token={raw_token}"
-    send_mail(
-        subject="Reset your Pet Physio Vet password",
-        message=(
-            "We received a request to reset the password for your Pet Physio "
-            "Vet account.\n\n"
-            f"Reset your password (link valid for 30 minutes): {reset_url}\n\n"
-            "If you did not request this, no action is needed — your password "
-            "has not been changed."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
+    reset_url = _reset_url(raw_token)
+    try:
+        send_mail(
+            subject="Reset your Pet Physio Vet password",
+            message=(
+                "We received a request to reset the password for your Pet Physio "
+                "Vet account.\n\n"
+                f"Reset your password (link valid for 30 minutes): {reset_url}\n\n"
+                "If you did not request this, no action is needed — your password "
+                "has not been changed."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.exception(
+            "Password reset email failed for %s (check EMAIL_* settings); "
+            "returning the generic 200.", _mask_email(user.email),
+        )
+
+
+def _simulate_password_reset():
+    """Comparable work for an unknown/inactive email so the two branches do
+    the same token generation + hashing + a DB write-shaped query, removing
+    the obvious timing difference. (SMTP latency on the known branch is the
+    residual difference; it is bounded by EMAIL_TIMEOUT.)"""
+    _raw, token_hash = _new_reset_token()
+    PasswordResetToken.objects.filter(token_hash=token_hash, used_at__isnull=True).update(
+        used_at=timezone.now())
 
 
 @api_view(["POST"])
@@ -265,6 +318,8 @@ def password_reset_request_view(request):
     user = UserProfile.objects.filter(email__iexact=email, is_active=True).first()
     if user is not None:
         _issue_password_reset(user)
+    else:
+        _simulate_password_reset()
 
     return generic_response
 

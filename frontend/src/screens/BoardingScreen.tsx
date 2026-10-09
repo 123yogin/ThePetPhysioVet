@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  fetchBoardings, fetchBoardingMenu, updateBoardingStatus, createBoarding,
+  fetchBoardings, fetchBoardingMenu, updateBoardingStatus, createBoarding, convertBoarding, confirmBoardingClient,
   boardingQueryKey, Boarding, BoardingAction,
 } from '../api/boarding';
 import { useFlash } from '../lib/flash';
+import { todayISO } from '../lib/dates';
 import { Icon } from '../components/Icon';
-import { friendlyDate, formatMoney } from '../lib/labels';
+import { ExternalLink } from '../components/ExternalLink';
+import { friendlyDate, formatMoney, REPORT_TYPES, boardingStayLabel, boardingProvidesLine } from '../lib/labels';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { isValidAadhaar } from '../lib/aadhaar';
 
 /**
@@ -35,14 +38,18 @@ const BADGE_CLASS: Record<string, string> = {
   CANCELLED: 'badge-cancelled',
 };
 
-const providerLabel = (v: string) => (v === 'clinic' ? 'clinic' : 'owner');
-
 // Actions offered per status.
 const NEXT_ACTIONS: Record<string, { action: BoardingAction; label: string; primary?: boolean }[]> = {
   PENDING: [{ action: 'confirm', label: 'Confirm', primary: true }, { action: 'cancel', label: 'Cancel' }],
   CONFIRMED: [{ action: 'check_in', label: 'Check in', primary: true }, { action: 'cancel', label: 'Cancel' }],
   CHECKED_IN: [{ action: 'complete', label: 'Complete', primary: true }],
 };
+
+/** Today's date in the browser's local zone as YYYY-MM-DD. */
+function localIsoDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export const BoardingScreen: React.FC = () => {
   const qc = useQueryClient();
@@ -71,9 +78,36 @@ export const BoardingScreen: React.FC = () => {
     onSuccess: (_r, vars) => {
       qc.invalidateQueries({ queryKey: ['boarding'] });
       addFlash(vars.act === 'cancel' ? 'Booking cancelled — beds freed.' : 'Booking updated.', 'success');
+      if (vars.act === 'cancel') setCancelTarget(null);
     },
     onError: () => addFlash('Could not update the booking.', 'error'),
   });
+
+  const convert = useMutation({
+    mutationFn: (reference: string) => convertBoarding(reference),
+    onSuccess: (_r, reference) => {
+      qc.invalidateQueries({ queryKey: ['boarding'] });
+      qc.invalidateQueries({ queryKey: ['pets'] });
+      addFlash('Converted to patient.', 'success');
+      setJustConverted(reference);
+    },
+    onError: (e: any) => addFlash(e?.detail || e?.message || 'Could not convert to patient.', 'error'),
+  });
+
+  // Live QA B4: Cancel freed the bed on a single tap. It now asks first.
+  const [cancelTarget, setCancelTarget] = useState<Boarding | null>(null);
+
+  const confirmClient = useMutation({
+    mutationFn: (reference: string) => confirmBoardingClient(reference),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['boarding'] });
+      addFlash('Client confirmed — the stay now shows in their app.', 'success');
+    },
+    onError: (e: any) => addFlash(e?.message || 'Could not confirm the client.', 'error'),
+  });
+
+  // Reference of the stay just converted, so its "Open pet record" link takes focus.
+  const [justConverted, setJustConverted] = useState<string | null>(null);
 
   const rows: Boarding[] = data?.results ?? [];
 
@@ -116,10 +150,34 @@ export const BoardingScreen: React.FC = () => {
             g={g}
             highlight={!!highlightRef && g.reference === highlightRef}
             busy={action.isPending && action.variables?.reference === g.reference}
-            onAction={(act, intake) => action.mutate({ reference: g.reference, act, intake })}
+            onAction={(act, intake) => (
+              act === 'cancel' ? setCancelTarget(g) : action.mutate({ reference: g.reference, act, intake })
+            )}
+            converting={convert.isPending && convert.variables === g.reference}
+            onConvert={() => convert.mutate(g.reference)}
+            confirming={confirmClient.isPending && confirmClient.variables === g.reference}
+            onConfirmClient={() => confirmClient.mutate(g.reference)}
+            focusRecord={justConverted === g.reference}
           />
         ))}
       </div>
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title="Cancel this boarding stay?"
+        body={cancelTarget && (
+          <>
+            {cancelTarget.pet_name} ({cancelTarget.owner_name}) · {cancelTarget.duration_label} from{' '}
+            {friendlyDate(cancelTarget.check_in)}. The bed is released immediately.
+          </>
+        )}
+        confirmLabel="Cancel stay"
+        cancelLabel="Keep stay"
+        danger
+        busy={action.isPending}
+        onConfirm={() => cancelTarget && action.mutate({ reference: cancelTarget.reference, act: 'cancel' })}
+        onClose={() => setCancelTarget(null)}
+      />
     </div>
   );
 };
@@ -138,7 +196,12 @@ const BoardingCard: React.FC<{
   busy: boolean;
   highlight?: boolean;
   onAction: (act: BoardingAction, intake?: Record<string, string>) => void;
-}> = ({ g, busy, highlight, onAction }) => {
+  converting: boolean;
+  onConvert: () => void;
+  confirming: boolean;
+  onConfirmClient: () => void;
+  focusRecord: boolean;
+}> = ({ g, busy, highlight, onAction, converting, onConvert, confirming, onConfirmClient, focusRecord }) => {
   const actions = NEXT_ACTIONS[g.status] ?? [];
   const editable = actions.length > 0;
   const [intake, setIntake] = useState<Record<string, string>>({
@@ -181,6 +244,12 @@ const BoardingCard: React.FC<{
           <p className="page-sub" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
             {g.owner_name}<br /><a href={`tel:${g.owner_phone}`}>{g.owner_phone}</a>
           </p>
+          {g.emergency_contact_phone && (
+            <p className="page-sub" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+              <b>Emergency:</b> {g.emergency_contact_name ? `${g.emergency_contact_name} · ` : ''}
+              <a href={`tel:${g.emergency_contact_phone}`}>{g.emergency_contact_phone}</a>
+            </p>
+          )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontWeight: 700 }}>{g.duration_label}</div>
@@ -189,9 +258,15 @@ const BoardingCard: React.FC<{
         </div>
       </div>
 
+      <ClientMatch
+        g={g} converting={converting} onConvert={onConvert}
+        confirming={confirming} onConfirmClient={onConfirmClient} focusRecord={focusRecord}
+      />
+
       <div className="page-sub" style={{ fontSize: '0.85rem', margin: 0 }}>
-        <Icon name="clock" size={12} /> {friendlyDate(g.check_in)}
-        {g.check_out !== g.check_in ? ` → ${friendlyDate(g.check_out)}` : ''}
+        {/* check_out is the last bed-night, the pet goes home the day after (D4). */}
+        <Icon name="clock" size={12} /> Arrives {friendlyDate(g.check_in)}
+        <div style={{ marginTop: '2px' }}>{boardingStayLabel(g.check_in, g.check_out, g.duration)}</div>
       </div>
 
       {/* Intake — the clinic records this here (owner vs clinic per item), it is
@@ -231,10 +306,7 @@ const BoardingCard: React.FC<{
         </div>
       ) : (
         <div style={{ fontSize: '0.82rem', lineHeight: 1.6 }}>
-          <div>
-            <b>Bringing:</b> food {providerLabel(intake.food_by)}, utensils {providerLabel(intake.utensils_by)},
-            medicines {providerLabel(intake.medicines_by)}, blanket {providerLabel(intake.blanket_by)}
-          </div>
+          <div>{boardingProvidesLine(intake)}</div>
           {intake.food_preference && <div><b>Food:</b> {intake.food_preference}</div>}
           {editable && (
             <button
@@ -256,18 +328,100 @@ const BoardingCard: React.FC<{
 
       {actions.length > 0 && (
         <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-          {actions.map((a) => (
+          {actions.map((a) => {
+            // The API refuses these before the stay's first day (400); mirror it.
+            const notStarted = (a.action === 'check_in' || a.action === 'complete') && g.check_in > localIsoDate();
+            return (
             <button
               key={a.action}
               type="button"
               className={`btn btn-sm ${a.primary ? 'btn-primary' : 'btn-ghost'}`}
-              disabled={busy}
-              onClick={() => onAction(a.action, a.action === 'cancel' ? undefined : intake)}
+              disabled={busy || notStarted}
+              title={notStarted ? `Available from ${friendlyDate(g.check_in)}` : undefined}
+              onClick={() => {
+                if (a.action === 'complete' && !window.confirm(`Complete ${g.pet_name}'s stay? This marks the pet as gone home.`)) return;
+                onAction(a.action, a.action === 'cancel' ? undefined : intake);
+              }}
             >
               {a.primary && <Icon name="check" size={14} />} {a.label}
             </button>
-          ))}
+            );
+          })}
         </div>
+      )}
+    </div>
+  );
+};
+
+/* ---- Client match: badge, convert, previous reports ---- */
+
+const ClientMatch: React.FC<{
+  g: Boarding; converting: boolean; onConvert: () => void;
+  confirming: boolean; onConfirmClient: () => void; focusRecord?: boolean;
+}> = ({ g, converting, onConvert, confirming, onConfirmClient, focusRecord }) => {
+  const recordLink = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (focusRecord) recordLink.current?.focus();
+  }, [focusRecord, g.pet_id]);
+  const status = g.pet_link_status ?? 'unlinked';
+  // The API can already carry a matched account while the stay is not yet
+  // converted (pet_link_status 'unlinked'); that is still an existing client.
+  const matched = status !== 'unlinked' || !!g.owner_account;
+  if (g.status === 'CANCELLED' && !matched) return null;
+  const reports = g.previous_reports;
+  return (
+    <div style={{ display: 'grid', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {status === 'linked' && <span className="badge badge-confirmed">Matches existing client · {g.pet_name}</span>}
+        {status === 'owner_only' && <span className="badge badge-confirmed">Matches existing client · new pet</span>}
+        {status === 'unlinked' && g.owner_account && <span className="badge badge-confirmed">Matches existing client · new pet</span>}
+        {!matched && <span className="badge badge-pending">New client</span>}
+        {status === 'linked' && g.pet_id && (
+          <Link ref={recordLink} to={`/patients/${g.pet_id}`} className="btn btn-ghost btn-sm">Open pet record</Link>
+        )}
+        {status !== 'linked' && (
+          <button type="button" className="btn btn-secondary btn-sm" disabled={converting} onClick={onConvert}>
+            {converting ? 'Converting…' : 'Convert to patient'}
+          </button>
+        )}
+        {/* A phone/email match is only a hint (signup verifies neither), so the
+            stay is not shown in that owner's portal until staff confirm it. */}
+        {g.owner_account && !g.owner_verified && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={confirming} onClick={onConfirmClient}>
+            {confirming ? 'Confirming…' : 'Confirm client'}
+          </button>
+        )}
+      </div>
+      {g.owner_account && (
+        <div className="page-sub" style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>
+          <b>Linked account:</b> {g.owner_account.name || '—'}
+          {g.owner_account.email && <> · {g.owner_account.email}</>}
+          {g.owner_account.phone && <> · {g.owner_account.phone}</>}
+          {!g.owner_verified && (
+            <div>Matched automatically — check these details with the owner, then Confirm client to show the stay in their app.</div>
+          )}
+        </div>
+      )}
+      {reports && reports.length > 0 && (
+        <details style={{ fontSize: '0.82rem' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Previous reports ({reports.length})</summary>
+          <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: '6px' }}>
+            {reports.map((r) => (
+              <li key={r.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className="badge badge-confirmed">
+                  {REPORT_TYPES.find((t) => t.value === r.report_type)?.label ?? r.report_type_display ?? r.report_type}
+                </span>
+                <span className="page-sub">{friendlyDate(r.uploaded_at)}</span>
+                {r.file_url && <ExternalLink href={r.file_url}>Open file</ExternalLink>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {reports && reports.length === 0 && status === 'linked' && (
+        <span className="page-sub" style={{ fontSize: '0.8rem' }}>
+          {g.previous_reports_restricted ? 'No reports visible to you' : 'No previous reports'}
+        </span>
       )}
     </div>
   );
@@ -290,9 +444,9 @@ const ITEMS: { field: string; label: string }[] = [
 const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const { addFlash } = useFlash();
   const { data: menu } = useQuery({ queryKey: ['boarding-menu'], queryFn: () => fetchBoardingMenu() });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [f, setF] = useState<Record<string, string>>({
-    petName: '', ownerName: '', ownerPhone: '', checkIn: today, duration: '',
+    petName: '', ownerName: '', ownerPhone: '', emergencyName: '', emergencyPhone: '', checkIn: today, duration: '',
     foodBy: 'owner', utensilsBy: 'owner', medicinesBy: 'owner', blanketBy: 'owner',
     foodPreference: '', aadhaar: '',
   });
@@ -303,6 +457,8 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     mutationFn: () =>
       createBoarding({
         petName: f.petName, ownerName: f.ownerName, ownerPhone: f.ownerPhone,
+        emergencyContactName: f.emergencyName.trim() || undefined,
+        emergencyContactPhone: f.emergencyPhone,
         checkIn: f.checkIn, duration: f.duration,
         foodBy: f.foodBy, utensilsBy: f.utensilsBy, medicinesBy: f.medicinesBy, blanketBy: f.blanketBy,
         foodPreference: f.foodPreference || undefined,
@@ -315,7 +471,7 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   });
 
   const aadhaarOk = !f.aadhaar || isValidAadhaar(f.aadhaar);
-  const canSave = f.petName.trim() && f.ownerName.trim() && f.ownerPhone.trim() && f.duration && aadhaarOk && !create.isPending;
+  const canSave = f.petName.trim() && f.ownerName.trim() && f.ownerPhone.trim() && f.emergencyPhone.trim() && f.duration && aadhaarOk && !create.isPending;
 
   return (
     <div className="glass-card" style={{ padding: '18px', marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -324,6 +480,8 @@ const NewBoardingForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         <input className="input" placeholder="Pet's name *" value={f.petName} onChange={(e) => set('petName', e.target.value)} />
         <input className="input" placeholder="Owner name *" value={f.ownerName} onChange={(e) => set('ownerName', e.target.value)} />
         <input className="input" placeholder="Phone *" value={f.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} />
+        <input className="input" placeholder="Emergency contact name" aria-label="Emergency contact name" value={f.emergencyName} onChange={(e) => set('emergencyName', e.target.value)} />
+        <input className="input" placeholder="Emergency contact phone *" aria-label="Emergency contact phone" inputMode="tel" value={f.emergencyPhone} onChange={(e) => set('emergencyPhone', e.target.value)} />
         <input className="input" type="date" value={f.checkIn} min={today} onChange={(e) => set('checkIn', e.target.value)} />
         <select className="input" value={f.duration} onChange={(e) => set('duration', e.target.value)}>
           <option value="">Duration *</option>

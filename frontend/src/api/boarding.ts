@@ -1,4 +1,5 @@
 import { http } from '../lib/http';
+import type { Diagnosis } from '../lib/types';
 
 /**
  * Indoor-facility BOARDING (duration-priced stays) — doctor side.
@@ -31,6 +32,20 @@ export interface Boarding {
   status: string;
   source: string;
   created_at: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  owner_id?: string | null;
+  pet_id?: string | null;
+  pet_link_status?: 'linked' | 'owner_only' | 'unlinked';
+  /** True once staff pressed "Confirm client", convert created the account, or
+   *  the owner booked signed in. A phone/email match is false — a hint only. */
+  owner_verified?: boolean;
+  /** The linked account, so staff can check it before confirming. */
+  owner_account?: { id: string; name: string; email: string; phone: string } | null;
+  /** null when no pet is linked; [] when the pet belongs to another practice. */
+  previous_reports?: Diagnosis[] | null;
+  /** True only when the linked pet belongs to another doctor (the [] means "not yours to see"). */
+  previous_reports_restricted?: boolean;
 }
 
 export interface BoardingListResponse {
@@ -113,5 +128,20 @@ export async function createBoarding(payload: Record<string, unknown>) {
   return http<{ reference: string; status: string; price: number }>(`/facility/boarding`, {
     method: 'POST',
     data: payload,
+  });
+}
+
+/** Find-or-create the owner + pet for a stay and link them (idempotent). */
+/** Staff have checked the linked account is this client: show the stay in
+ *  that owner's app. */
+export async function confirmBoardingClient(reference: string) {
+  return http<Boarding>(`/facility/boarding/${encodeURIComponent(reference)}/confirm-client`, {
+    method: 'POST',
+  });
+}
+
+export async function convertBoarding(reference: string) {
+  return http<Boarding>(`/facility/boarding/${encodeURIComponent(reference)}/convert`, {
+    method: 'POST',
   });
 }

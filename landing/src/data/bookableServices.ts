@@ -12,8 +12,10 @@
  * selects that exact service in the form and the clinic receives a code its own
  * booking screen already understands. Codes are checked against the live
  * /appointment-options response at render time rather than trusted: a card for
- * a service the clinic has retired should disappear, not post a value the API
- * would reject.
+ * a service the clinic has retired loses its Book button, so it can never post
+ * a value the API would reject. The card's CONTENT is static and always
+ * rendered (including in the prerendered HTML), because crawlers never run
+ * that API call. If a service is retired for good, remove it from this list.
  *
  * The inclusions are the clinic's own words from its service notes. Nothing
  * clinical is invented here -- where the notes say only "Physiotherapy", this
@@ -38,7 +40,7 @@ export interface BookableService {
    * is still reserved as a one-hour slot and paid at the clinic; these are what
    * the options cost.
    */
-  priceList?: { label: string; price: number }[];
+  priceList?: { label: string; price: number; compareAt?: number }[];
   /**
    * Set to 'per-session' when `priceList` prices the SAME service at
    * different session-count tiers (e.g. Swimming's single/5-session/
@@ -47,8 +49,9 @@ export interface BookableService {
    *
    * Leave unset for services whose `priceList` prices separate, unrelated
    * things (e.g. Grooming's Shampooing / Nail trimming / Hair clipping) —
-   * there is no single baseline to discount against, so no badge should
-   * ever be computed there.
+   * there is no single baseline to discount against. A combo in such a list
+   * can still carry a badge by setting `compareAt` on that one entry: the sum
+   * of its parts' own prices, so the saving shown is real.
    */
   pricingMode?: 'per-session';
 }
@@ -111,7 +114,11 @@ export const BOOKABLE_SERVICES: BookableService[] = [
       { label: 'Shampooing', price: 1200 },
       { label: 'Nail trimming', price: 200 },
       { label: 'Hair clipping', price: 800 },
-      { label: 'Swim + groom + shampoo + dry', price: 2500 },
+      // compareAt = what the parts cost separately: Swimming single session
+      // (swim & dry) 1300 + Shampooing 1200 + Hair clipping 800 + Nail
+      // trimming 200 = 3500 ("groom" = clipping + nails, confirmed by the
+      // clinic 2026-10-08). Update it if any of those prices change.
+      { label: 'Swim + groom + shampoo + dry', price: 2500, compareAt: 3500 },
     ],
     icon: 'sparkles',
   },
@@ -127,3 +134,30 @@ export const BOOKABLE_SERVICES: BookableService[] = [
     icon: 'footprints',
   },
 ];
+
+/** Look up a bookable service by its booking code. */
+export const bookableByCode = (code: string): BookableService | undefined =>
+  BOOKABLE_SERVICES.find((s) => s.code === code);
+
+/**
+ * Indoor Facility (boarding) duration menu, as STATIC text so the prices are in
+ * the prerendered HTML of /services/pet-boarding.
+ *
+ * The booking panel reads the same menu live from /facility/boarding/
+ * availability; the authoritative copy is BOARDING_DURATIONS in
+ * backend/appointments/models/boarding.py. This is a mirror, and
+ * `npm run seo:check` fails the build if the two disagree (when the backend
+ * source is present), so a price change cannot leave the page stale.
+ */
+export const BOARDING_PRICES: { label: string; price: number }[] = [
+  { label: '1 hour', price: 100 },
+  { label: '8 hours', price: 600 },
+  { label: '12 hours', price: 800 },
+  { label: '24 hours', price: 1200 },
+  { label: '48 hours', price: 2000 },
+  { label: '1 week', price: 6000 },
+  { label: '1 month', price: 21000 },
+];
+
+/** Beds in the indoor facility. Mirrors BOARDING_BEDS in the backend. */
+export const BOARDING_BEDS = 6;

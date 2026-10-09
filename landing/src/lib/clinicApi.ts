@@ -1,3 +1,5 @@
+import { friendlyApiError } from './errors';
+
 /**
  * Shared booking helpers — the clinic API base URL and the local-date formatter
  * were copy-pasted across every booking subform (BookingForm,
@@ -11,13 +13,24 @@ export const CLINIC_API = (import.meta as any).env?.VITE_CLINIC_API_URL ?? '/api
 /** The clinic is in India: "today" is always the Asia/Kolkata calendar date, whatever the visitor's zone. */
 const CLINIC_TZ = 'Asia/Kolkata';
 
+/** The calendar day `n` days after a `YYYY-MM-DD` string, as `YYYY-MM-DD`. */
+export function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  // Pure UTC calendar arithmetic, so the visitor's zone/DST cannot shift the day.
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
 /** Clinic (IST) calendar date `offsetDays` from today, as `YYYY-MM-DD`. */
 export function isoDate(offsetDays = 0): string {
   // en-CA formats as YYYY-MM-DD.
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: CLINIC_TZ }).format(new Date());
-  const [y, m, d] = today.split('-').map(Number);
-  // Pure UTC calendar arithmetic, so the visitor's zone/DST cannot shift the day.
-  return new Date(Date.UTC(y, m - 1, d + offsetDays)).toISOString().slice(0, 10);
+  return addDays(new Intl.DateTimeFormat('en-CA', { timeZone: CLINIC_TZ }).format(new Date()), offsetDays);
+}
+
+/** GET `path` under the clinic API and parse the JSON; rejects on a non-2xx response. */
+export async function getJson<T = any>(path: string): Promise<T> {
+  const res = await fetch(`${CLINIC_API}${path}`);
+  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  return res.json();
 }
 
 /**
@@ -34,7 +47,7 @@ export async function postEnquiry(payload: Record<string, unknown>): Promise<any
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body?.detail || 'We could not send your enquiry. Please try again.');
+    throw new Error(friendlyApiError(body?.detail, 'We could not send your enquiry. Please try again.'));
   }
   return body;
 }
