@@ -15,6 +15,7 @@ import logging
 import secrets
 from datetime import timedelta
 from django.conf import settings
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import status
@@ -39,6 +40,23 @@ logger = logging.getLogger(__name__)
 # Public signup, per client IP per hour (see `_client_ip` for the edge caveat).
 SIGNUP_WINDOW_SECONDS = 60 * 60
 SIGNUP_IP_LIMIT = 30
+
+# Failed sign-ins, per ACCOUNT per window. Not per IP: behind Cloudflare ->
+# Vercel every client shares the edge's REMOTE_ADDR (see `_client_ip`), so a
+# per-IP limit would lock the whole clinic out after one person's typos. Only
+# failures count, and a correct sign-in resets the counter.
+LOGIN_FAIL_WINDOW_SECONDS = 15 * 60
+LOGIN_FAIL_LIMIT = 10
+
+
+def _login_fail_key(identifier):
+    """One counter per account, whether it is named by username or email, so
+    alternating the two cannot double the guesses. Unknown names get their own
+    counter, keyed the same way an existing account would be."""
+    ident = identifier.strip()
+    match = (UserProfile.objects.filter(username=ident).only("pk").first()
+             or ("@" in ident and UserProfile.objects.filter(email__iexact=ident).only("pk").first()))
+    return f"login:fail:{match.pk if match else ident.lower()}"
 
 def _issue_tokens(user):
     refresh = RefreshToken.for_user(user)
@@ -72,6 +90,13 @@ def login_view(request):
     if not username or not password:
         return problem(400, "username and password are required.")
 
+    # Checked before authenticate(), so a blocked account refuses even the right
+    # password: otherwise the 401/200 difference keeps the guessing going.
+    fail_key = _login_fail_key(username)
+    if (cache.get(fail_key) or 0) >= LOGIN_FAIL_LIMIT:
+        return problem(429, "Too many requests",
+                       "Too many failed sign-in attempts. Try again in 15 minutes or reset your password.")
+
     # django.contrib.auth.authenticate() — the actual credential check.
     # No username-only lookup, no role-based fallback, no anonymous default.
     user = authenticate(request, username=username, password=password)
@@ -89,7 +114,12 @@ def login_view(request):
             user = authenticate(request, username=match.username, password=password)
 
     if user is None:
+        try:
+            cache.incr(fail_key)
+        except ValueError:
+            cache.set(fail_key, 1, timeout=LOGIN_FAIL_WINDOW_SECONDS)
         return problem(401, "Invalid credentials", "Incorrect username or password.")
+    cache.delete(fail_key)
 
     # Django writes last_login from its session login() only, which a JWT API
     # never calls — so the column stayed null for every account no matter how
