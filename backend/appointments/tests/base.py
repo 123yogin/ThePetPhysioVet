@@ -21,7 +21,7 @@ from appointments.models import (
 
 API = "/api/v1"
 
-# bcrypt at cost 12 is deliberately slow; the suite creates a lot of users so
+# Real password hashers are deliberately slow; the suite creates a lot of users so
 # swap in a fast hasher for everything except the tests that assert on hashing.
 FAST_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

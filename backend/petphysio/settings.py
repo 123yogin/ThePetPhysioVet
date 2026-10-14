@@ -170,10 +170,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# bcrypt (cost >= 12) first — CLAUDE.md rule "JWT: ... bcrypt cost >= 12 for
-# passwords." BCryptSHA256PasswordHasher pre-hashes with SHA256 before bcrypt
-# to avoid bcrypt's 72-byte password truncation, and rounds default to 12.
+# Argon2id first (OWASP's first choice; see petphysio/hashers.py). bcrypt
+# (cost 12) stays second so every account created before the switch still
+# signs in — Django re-saves that hash as Argon2id on the next good sign-in.
 PASSWORD_HASHERS = [
+    "petphysio.hashers.Argon2idPasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
 ]

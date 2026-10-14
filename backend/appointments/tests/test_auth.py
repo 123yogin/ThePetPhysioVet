@@ -173,30 +173,53 @@ class SignupTests(ApiTestCase):
         self.assertNotIn("password", r.data)
 
     @override_settings(PASSWORD_HASHERS=[
+        "petphysio.hashers.Argon2idPasswordHasher",
         "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
-        "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     ])
-    def test_password_hashed_with_bcrypt_cost_at_least_12(self):
-        """API_CONTRACT.md §5: bcrypt, cost >= 12, first in PASSWORD_HASHERS."""
+    def test_password_hashed_with_argon2id_at_owasp_minimum(self):
+        """API_CONTRACT.md §5: Argon2id, m >= 19 MiB, t >= 2, first in PASSWORD_HASHERS."""
         r = self.anon().post(f"{API}/auth/signup", {
-            "username": "bcryptuser", "password": "S3curePass!", "email": "b@e.com",
+            "username": "argonuser", "password": "S3curePass!", "email": "b@e.com",
             "first_name": "B", "last_name": "C", "role": "OWNER",
             "phone": "9800000000",
         }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
-        user = UserProfile.objects.get(username="bcryptuser")
-        self.assertTrue(user.password.startswith("bcrypt_sha256$"), user.password[:30])
-        cost = int(user.password.split("$")[3])
-        self.assertGreaterEqual(cost, 12, f"bcrypt cost {cost} < 12")
+        user = UserProfile.objects.get(username="argonuser")
+        # argon2$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>
+        self.assertTrue(user.password.startswith("argon2$argon2id$"), user.password[:30])
+        params = dict(kv.split("=") for kv in user.password.split("$")[3].split(","))
+        self.assertGreaterEqual(int(params["m"]), 19456)
+        self.assertGreaterEqual(int(params["t"]), 2)
 
-    def test_settings_declare_bcrypt_first_with_cost_12(self):
+    @override_settings(PASSWORD_HASHERS=[
+        "petphysio.hashers.Argon2idPasswordHasher",
+        "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    ])
+    def test_existing_bcrypt_user_signs_in_and_is_upgraded_to_argon2id(self):
+        """Every account made before the switch holds a bcrypt hash. It must
+        still sign in, and that sign-in re-saves the hash as Argon2id."""
+        from django.contrib.auth.hashers import make_password
+        old = make_password("OldPass!234", hasher="bcrypt_sha256")
+        UserProfile.objects.filter(pk=self.owner_a.pk).update(password=old)
+        r = self.anon().post(f"{API}/auth/login", {
+            "username": "ownera", "password": "OldPass!234"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.owner_a.refresh_from_db()
+        self.assertTrue(self.owner_a.password.startswith("argon2$argon2id$"),
+                        self.owner_a.password[:30])
+        self.assertTrue(self.owner_a.check_password("OldPass!234"))
+
+    def test_settings_declare_argon2id_first_and_keep_bcrypt_for_old_hashes(self):
         """Read the settings MODULE, not django.conf (this suite overrides
         PASSWORD_HASHERS with a fast hasher for speed)."""
-        from django.contrib.auth.hashers import BCryptSHA256PasswordHasher
         from petphysio import settings as raw
-        self.assertIn("bcrypt", raw.PASSWORD_HASHERS[0].lower(),
+        from petphysio.hashers import Argon2idPasswordHasher
+        self.assertEqual(raw.PASSWORD_HASHERS[0], "petphysio.hashers.Argon2idPasswordHasher")
+        self.assertIn("django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
                       raw.PASSWORD_HASHERS)
-        self.assertGreaterEqual(BCryptSHA256PasswordHasher().rounds, 12)
+        h = Argon2idPasswordHasher()
+        self.assertGreaterEqual(h.memory_cost, 19456)
+        self.assertGreaterEqual(h.time_cost, 2)
 
     def test_signup_rejects_invalid_role(self):
         r = self.anon().post(f"{API}/auth/signup", {

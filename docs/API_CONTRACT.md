@@ -796,7 +796,10 @@ enquiry cannot be dismissed (`400`) — a real appointment exists for it by then
 from the environment. `DEBUG` defaults to `False`. When `DEBUG` is false and `SECRET_KEY`
 is unset, the app **raises `ImproperlyConfigured` at startup** — fail fast, never fall back
 to a baked-in default. `CORS_ALLOW_ALL_ORIGINS` is removed; dev origins come from env.
-Password hashing: bcrypt with cost ≥ 12 as the first entry in `PASSWORD_HASHERS`.
+Password hashing: Argon2id with m ≥ 19 MiB, t ≥ 2 (OWASP minimum) as the first entry in
+`PASSWORD_HASHERS` (`petphysio.hashers.Argon2idPasswordHasher`). bcrypt (cost 12) stays
+listed to verify hashes made before 2026-10-14; each is re-saved as Argon2id on the next
+successful sign-in.
 
 **Added 2026-09-02 (password reset).** `EMAIL_BACKEND`, `DEFAULT_FROM_EMAIL`, and
 `FRONTEND_BASE_URL` follow the identical fail-fast posture: in `DEBUG` they default to
