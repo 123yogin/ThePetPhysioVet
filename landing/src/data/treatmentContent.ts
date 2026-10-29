@@ -35,7 +35,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
   hydrotherapy: {
     sections: [
       {
-        heading: 'What hydrotherapy is and why it helps',
+        heading: 'What is hydrotherapy, and why does it help?',
         paragraphs: [
           'Hydrotherapy is exercise done in water. The buoyancy of the water takes weight off the joints and spine, so a dog that struggles on hard ground can move, stretch and build muscle with far less impact. The resistance of the water also makes the muscles work, which is why the same session can support strength, balance and fitness.',
           'At The Pet Physio Vet in Shilaj, Ahmedabad, hydrotherapy takes place in an indoor swimming pool kept at a lukewarm 29 to 31 degrees Celsius (84 to 88 degrees Fahrenheit), with clean, filtered water, under the observation of the vet. Warm water also helps stiff muscles relax, which is part of why it suits older and sore dogs.',
@@ -93,7 +93,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
   acupuncture: {
     sections: [
       {
-        heading: 'What veterinary acupuncture is',
+        heading: 'What is veterinary acupuncture?',
         paragraphs: [
           'Acupuncture is the placing of very fine, sterile needles at specific points on the body. In animals it is used mainly to help manage pain and to support mobility. Electro-acupuncture is a variation in which a mild electrical current is passed between needles. Research on acupuncture in animals is still developing, so it is used as one part of a wider rehabilitation plan and not as a stand-alone cure.',
           'Acupressure, the same idea applied with the hands instead of needles, is part of our [[manual therapy|/treatments/manual-therapy]].',
@@ -152,7 +152,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
   'indoor-physiotherapy': {
     sections: [
       {
-        heading: 'What indoor physiotherapy is',
+        heading: 'What is indoor physiotherapy?',
         paragraphs: [
           'Indoor physiotherapy is our residential option for patients travelling from outside the city. Instead of making the journey to Ahmedabad for every session, your pet stays at the clinic for their course of physiotherapy, with special care for food and hygiene.',
           'It follows the same programme as any other patient, so your pet gets a full assessment first and a plan built around their condition. It can include [[hydrotherapy|/treatments/hydrotherapy]], laser and other [[electro-physical therapies|/treatments/electrophysical]], [[manual therapy|/treatments/manual-therapy]] and [[acupuncture|/treatments/acupuncture]] as needed.',
@@ -211,7 +211,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
   'manual-therapy': {
     sections: [
       {
-        heading: 'What manual therapy is',
+        heading: 'What is manual therapy?',
         paragraphs: [
           'Manual therapy is hands-on treatment delivered directly by a clinician. At The Pet Physio Vet in Ahmedabad it covers massage, therapeutic exercise, strength training and acupressure, selected and adjusted for each animal during the session. Joint mobilisation and myofascial trigger point release are among the techniques that appear in our treatment plans.',
           'Because the clinician\'s hands feel how tissue is responding, the treatment can be changed minute by minute. That is the main strength of manual work compared with equipment alone.',
@@ -272,7 +272,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
   electrophysical: {
     sections: [
       {
-        heading: 'What electro-physical therapy is',
+        heading: 'What is electro-physical therapy?',
         paragraphs: [
           'Electro-physical therapies are equipment-assisted treatments applied under clinical supervision at our Shilaj clinic in Ahmedabad, chosen to suit the animal and the stage of their recovery. The modalities we use are pulsed electro-magnetic field therapy (PEMF), Class IV laser, ultrasound, TENS, NMES and electro-acupuncture.',
         ],
@@ -336,7 +336,7 @@ export const TREATMENT_CONTENT: Record<string, TreatmentContent> = {
   'home-care': {
     sections: [
       {
-        heading: 'What the home care programme is',
+        heading: 'What is the home care programme?',
         paragraphs: [
           'Home care is a programme that continues your pet\'s rehabilitation between visits. It includes a home exercise programme, massage, guidance on food and supplements, basic and special care, and guidance on the surfaces your pet walks and rests on. Rehabilitation depends on what happens at home as much as in the clinic, so the programme is written for your pet and your home.',
         ],

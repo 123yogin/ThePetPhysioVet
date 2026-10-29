@@ -39,6 +39,11 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
             <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
               {condition.shortDesc}
             </p>
+            {/* Question-form heading over the definition paragraph: answer engines
+                match "what is IVDD" style queries to a heading that asks it. */}
+            <h2 className="font-(family-name:--f-display) text-xl text-(--c-ink) font-light mt-8 mb-3">
+              What is {/^[A-Z]+$/.test(condition.title) ? condition.title : condition.title.toLowerCase()}?
+            </h2>
             <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed">
               {condition.fullDesc}
             </p>
