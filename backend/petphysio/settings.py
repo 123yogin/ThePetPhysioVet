@@ -473,7 +473,7 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "")
 # Who the texts say they are from. Defaults match the public site
 # (landing/src/seo/siteConfig.ts).
 CLINIC_NAME = os.environ.get("CLINIC_NAME", "Pet Physio Vet")
-CLINIC_PHONE = os.environ.get("CLINIC_PHONE", "+91 72840 73241")
+CLINIC_PHONE = os.environ.get("CLINIC_PHONE", "+91 94270 71031")
 
 # Without this, Django's default config drops INFO, so the console backend
 # printed nothing and SENT/SKIPPED outcomes left no trace in Vercel's logs.

@@ -314,7 +314,7 @@ Google ranks local results on **relevance, distance and prominence**: "More revi
 The Pet Physio Vet
 Shop No. 1 & 2, Ground Floor, Avaneesh Heights, Thaltej – Shilaj Road,
 near Dine in the Clouds restaurant, Shilaj Circle, Shilaj, Ahmedabad, Gujarat 380059
-+91 72840 73241
++91 94270 71031
 https://www.thepetphysiovet.com
 ```
 Where the address field is short, use: `Shop No. 1 & 2, Avaneesh Heights, Thaltej – Shilaj Road, Shilaj Circle, Shilaj, Ahmedabad, Gujarat 380059`. The spelling "Avaneesh" matches the GBP.
@@ -335,7 +335,7 @@ Where the address field is short, use: `Shop No. 1 & 2, Avaneesh Heights, Thalte
 | C12 | IndiaMART | **Skip** (B2B products). | — |
 | C13 | Practo | **Skip.** Human-health platform; no vet listings found. | — |
 
-Run a quarterly check by searching `"72840 73241"` to find duplicate or inconsistent listings.
+Run a quarterly check by searching `"94270 71031"` to find duplicate or inconsistent listings.
 
 ### 7.4 Local links and mentions (earned, no paid links; any sponsorship link must be `rel="sponsored"`)
 

@@ -146,8 +146,8 @@ export const SITE: SiteConfig = {
   currency: 'INR',
 
   contact: {
-    phone: '+917284073241',
-    phoneDisplay: '+91 72840 73241',
+    phone: '+919427071031',
+    phoneDisplay: '+91 94270 71031',
     email: 'contact@thepetphysiovet.com',
 
     // The clinic confirmed (2026-09-19) that out-of-hours enquiries go to the
@@ -156,8 +156,8 @@ export const SITE: SiteConfig = {
     // weekdays cannot be someone's plan for a dog in distress at midnight, and
     // a number presented as an emergency line is read as a promise to answer.
     emergencyName: 'The Pet Physio Vet',
-    emergencyPhone: '+917284073241',
-    emergencyPhoneDisplay: '+91 72840 73241',
+    emergencyPhone: '+919427071031',
+    emergencyPhoneDisplay: '+91 94270 71031',
   },
 
   address: {
@@ -266,7 +266,7 @@ export const SITE: SiteConfig = {
 /**
  * wa.me deep link derived from the clinic's published phone number, so the
  * Call and WhatsApp buttons can never point at different numbers. Strips
- * everything but digits (`+91 72840 73241` → `917284073241`); the number is
+ * everything but digits (`+91 94270 71031` → `919427071031`); the number is
  * already stored with the 91 country code in `contact.phone`. An optional
  * pre-filled message is appended as the standard `?text=` query param.
  */
