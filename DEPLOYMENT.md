@@ -372,7 +372,7 @@ automatically when `VERCEL_ENV=production` (set by Vercel); other environments s
 | `SMS_PER_PHONE_DAILY_LIMIT` | optional, default `3` texts per number per day |
 | `SMS_ALLOWED_COUNTRY_CODES` | optional, default `+91`; comma-separated (e.g. `+91,+44`). Other numbers are recorded `SKIPPED_COUNTRY` |
 | `SMS_WEBHOOK_SIGNING_KEY` | optional; from the app's **Settings → Webhooks → Signing Key**, to enable delivery status |
-| `CLINIC_NAME` / `CLINIC_PHONE` | optional, default `Pet Physio Vet` / `+91 72840 73241` |
+| `CLINIC_NAME` / `CLINIC_PHONE` | optional, default `Pet Physio Vet` / `+91 94270 71031` |
 | `SMS_GATEWAY_URL` | optional, default `https://api.sms-gate.app/3rdparty/v1` (must be https; change it only for a private gateway server) |
 
 If `SMS_BACKEND` is unset, SMS is on only when the credentials are present **and**

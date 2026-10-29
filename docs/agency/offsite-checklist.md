@@ -10,7 +10,7 @@ Why this matters: "pet vet ahmedabad" is a local query. Google answers it mainly
 |---|---|
 | Name | The Pet Physio Vet |
 | Address | Shop No. 1 & 2, Ground Floor, Avaneesh Heights, Thaltej – Shilaj Road, near Dine in the Clouds restaurant, Shilaj Circle, Shilaj, Ahmedabad, Gujarat 380059 |
-| Phone | +91 72840 73241 |
+| Phone | +91 94270 71031 |
 | Email | contact@thepetphysiovet.com |
 | Website | https://www.thepetphysiovet.com |
 | Clinician | Dr. Dhanvi Patel (B.V.Sc. & A.H., M.V.Sc.) |
@@ -20,7 +20,7 @@ Why this matters: "pet vet ahmedabad" is a local query. Google answers it mainly
 | Booking / appointment URL | [owner: confirm booking URL; use the site's booking page if one exists] |
 | Facebook page URL | [owner: confirm whether one exists] |
 
-Rule: pick one spelling ("Thaltej – Shilaj Road", "Shilaj Circle", pincode 380059) and never vary it. Decide once whether the phone is written `+91 72840 73241` and use that format on every listing.
+Rule: pick one spelling ("Thaltej – Shilaj Road", "Shilaj Circle", pincode 380059) and never vary it. Decide once whether the phone is written `+91 94270 71031` and use that format on every listing.
 
 ---
 
@@ -68,7 +68,7 @@ The clinic already has a Maps listing (CID 16829298020285027612). **Claim/verify
 - [ ] 2.3 **Primary category.** Choose what a searcher would call the clinic. See the category table below; owner decides, then confirm in the dashboard's own category search.
 - [ ] 2.4 **Secondary categories** (up to 9; add only ones that truly apply and exist in the dropdown).
 - [ ] 2.5 Address and service area: enter the NAP exactly as in the table above; pin on the map is on the building (Avaneesh Heights, near Dine in the Clouds restaurant). Because home visits are offered, optionally add service areas (Shilaj, Thaltej, Bopal, Ahmedabad: [owner: confirm areas served]). Keep the street address visible since customers visit the clinic.
-- [ ] 2.6 Phone: `+91 72840 73241` as primary. Website: `https://www.thepetphysiovet.com/?utm_source=google&utm_medium=organic&utm_campaign=gbp_website`
+- [ ] 2.6 Phone: `+91 94270 71031` as primary. Website: `https://www.thepetphysiovet.com/?utm_source=google&utm_medium=organic&utm_campaign=gbp_website`
 - [ ] 2.7 Appointment link: `[owner: confirm booking URL]` with `?utm_source=google&utm_medium=organic&utm_campaign=gbp_appointment`. UTMs let you see GBP clicks separately in analytics.
 - [ ] 2.8 Hours: `[owner: confirm hours]` for every day, plus special hours for holidays. Add "More hours" for home visits/boarding if different.
 - [ ] 2.9 Services: add each service below with a 1-2 sentence description in plain language. Use only what the clinic really offers.
@@ -146,7 +146,7 @@ Reply guide:
 | Review | How to reply |
 |---|---|
 | Positive | Thank by first name, mention the pet and service in a natural way, no medical promises. E.g. "Thank you, [Name]! Wonderful to see [Pet] enjoying the hydrotherapy sessions. We look forward to your next visit." |
-| Mixed / negative | Reply calmly within 48 hours, apologise for the experience without arguing, do not share the pet's medical details publicly, invite them to call +91 72840 73241 or email contact@thepetphysiovet.com, and fix the issue. Never argue or accuse the reviewer of lying. |
+| Mixed / negative | Reply calmly within 48 hours, apologise for the experience without arguing, do not share the pet's medical details publicly, invite them to call +91 94270 71031 or email contact@thepetphysiovet.com, and fix the issue. Never argue or accuse the reviewer of lying. |
 | Fake/spam/abusive | Flag it via the "Report review" menu; do not retaliate. |
 
 Review log:
@@ -174,7 +174,7 @@ Verification note: a web search on 2026-10-07 did not return Justdial or Sulekha
 - [ ] 4.9 Pet and vet directories relevant in India. Check each for Ahmedabad coverage and whether a clinic listing is free [owner/helper: verify]; none were confirmed by search: Practo has vet categories in some cities (unverified for Ahmedabad), Sulekha and Justdial pet categories, WhatClinic (search showed it lists physiotherapy in Ahmedabad, unverified for pets), local "pet-friendly Ahmedabad" directories, pet-service apps and marketplaces.
 - [ ] 4.10 Local Ahmedabad pet communities: pet-parent Facebook groups and WhatsApp communities, Instagram pet accounts based in Ahmedabad, Reddit r/ahmedabad. Be a helpful member (answer mobility questions) and follow group rules on promotion. Do not spam.
 - [ ] 4.11 Add the clinic's **email, phone and address in the website footer and contact page** exactly like the canonical table, so the site matches the listings.
-- [ ] 4.12 Quarterly: search the clinic phone number in Google in quotes (`"72840 73241"`) to find inconsistent or duplicate listings and fix them.
+- [ ] 4.12 Quarterly: search the clinic phone number in Google in quotes (`"94270 71031"`) to find inconsistent or duplicate listings and fix them.
 
 Citation tracker:
 
