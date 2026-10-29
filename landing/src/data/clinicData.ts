@@ -665,3 +665,12 @@ export function servicesForCondition(condition: ConditionItem): ServiceItem[] {
  */
 export const CONTENT_REVIEWED_DATE = '2026-10-03';
 export const CONTENT_REVIEWED_DISPLAY = 'October 2026';
+
+/**
+ * When the site's visible content last changed. Drives schema.org
+ * `dateModified` and sitemap `<lastmod>`. It used to be the build date, so
+ * every deploy -- even a CSS tweak -- claimed all 19 pages had changed, which
+ * teaches Google to ignore lastmod. Bump it only when page text, prices or
+ * contact details change.
+ */
+export const CONTENT_UPDATED_DATE = '2026-10-29';

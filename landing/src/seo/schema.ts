@@ -31,6 +31,7 @@ import {
   HERO_IMAGE,
   servicesForCondition,
   CONTENT_REVIEWED_DATE,
+  CONTENT_UPDATED_DATE,
 } from '../data/clinicData';
 import { conditionFaqs } from '../data/conditionFaqs';
 import { TREATMENT_CONTENT, plainText } from '../data/treatmentContent';
@@ -165,6 +166,8 @@ export function businessNode(): Node {
     ...(SITE.sameAs.length ? { sameAs: SITE.sameAs } : {}),
     employee: SPECIALISTS.map((p) => ({ '@id': ID.person(p.id) })),
     // Mirrors the visible treatment list, so the graph matches the page.
+    // (availableService used to repeat this list, but schema.org only defines
+    // it on MedicalClinic/Hospital/Physician; validators flagged it on all 19 pages.)
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
       name: `${SITE.brandName} treatment modalities`,
@@ -173,7 +176,6 @@ export function businessNode(): Node {
         itemOffered: { '@id': id },
       })),
     },
-    availableService: allServiceIds().map((id) => ({ '@id': id })),
     knowsAbout: CONDITIONS.map((c) => c.title),
     potentialAction: {
       '@type': 'ReserveAction',
@@ -235,6 +237,7 @@ export function websiteNode(): Node {
 function webPageNode(path: string): Node {
   const meta = getPageMeta(path);
   const isConditionPage = matchRoute(path).route.kind === 'condition';
+  const hasBreadcrumb = meta.breadcrumbs.length > 1;
   return {
     // Condition pages are health content, so they are MedicalWebPage (a stronger
     // E-E-A-T signal for AI/Google on health topics) with an explicit reviewer
@@ -248,7 +251,9 @@ function webPageNode(path: string): Node {
     isPartOf: { '@id': ID.website() },
     about: { '@id': ID.business() },
     primaryImageOfPage: { '@type': 'ImageObject', url: meta.image, caption: meta.imageAlt },
-    breadcrumb: { '@id': ID.breadcrumb(path) },
+    ...(hasBreadcrumb ? { breadcrumb: { '@id': ID.breadcrumb(path) } } : {}),
+    publisher: { '@id': ID.organization() },
+    dateModified: CONTENT_UPDATED_DATE,
     // Which parts an assistant should read aloud / is safe to quote. Headings
     // carry the page's question-and-answer structure, so they point AI answer
     // engines straight at the citable passages.
@@ -300,10 +305,8 @@ export function serviceNode(service: ServiceItem, withPrices = false): Node {
     // audienceType names a group of people, not conditions or animals.
     audience: { '@type': 'Audience', audienceType: 'Pet owners' },
     hoursAvailable: openingHoursSpecification(),
-    additionalProperty: [
-      { '@type': 'PropertyValue', name: 'Typical session length', value: service.duration },
-      ...service.benefits.map((b) => ({ '@type': 'PropertyValue', name: 'Benefit', value: b })),
-    ],
+    // Session length and benefits stay in the visible copy; additionalProperty
+    // is not a Service property, so validators flagged all 32 uses.
     ...(withPrices && swimming?.priceList
       ? {
           alternateName: 'Dog swimming sessions',
@@ -351,7 +354,6 @@ export function groomingServiceNode(): Node | null {
     provider: { '@id': ID.business() },
     areaServed: cityArea(),
     audience: { '@type': 'Audience', audienceType: 'Pet owners' },
-    additionalProperty: grooming.includes.map((value) => ({ '@type': 'PropertyValue', name: 'Includes', value })),
     offers: offersFrom(grooming.priceList ?? [], url),
   };
 }
@@ -473,7 +475,9 @@ export function serviceFaqNode(service: ServiceItem, path: string): Node | null 
 export function buildGraph(pathname: string): Node {
   const { route, entity } = matchRoute(pathname);
   const path = route.path;
-  const graph: Node[] = [organizationNode(), websiteNode(), businessNode(), webPageNode(path), breadcrumbNode(path)];
+  const graph: Node[] = [organizationNode(), websiteNode(), businessNode(), webPageNode(path)];
+  // A one-item trail (the homepage) is not a breadcrumb; validators flag it.
+  if (getPageMeta(path).breadcrumbs.length > 1) graph.push(breadcrumbNode(path));
 
   if (route.kind === 'home') {
     // The home route renders every service, specialist and FAQ, so all are marked up.

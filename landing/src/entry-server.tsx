@@ -15,6 +15,7 @@ export { ROUTES, indexableRoutes, normalizePath } from './seo/routes';
 export { getPageMeta } from './seo/metadata';
 export { renderHeadHtml, lcpPreloadHtml } from './seo/head';
 export { buildRobotsTxt, buildSitemapXml, buildLlmsTxt, buildLlmsFullTxt } from './seo/generators';
+export { CONTENT_UPDATED_DATE } from './data/clinicData';
 
 export interface RenderResult {
   html: string;
