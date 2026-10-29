@@ -281,8 +281,11 @@ export const Footer: React.FC = () => {
           <p>© {new Date().getFullYear()} {SITE.brandName}. All rights reserved.</p>
           {/* Pet owners and clinic staff share one login — the account's role
               decides which portal they land in. */}
+          {/* nofollow: the portal is robots-disallowed, so a followed link only
+              gets /app/login indexed as a bare, content-less URL. */}
           <a
             href="/app/login"
+            rel="nofollow"
             className="underline underline-offset-4 hover:text-(--c-accent) transition-colors"
           >
             <Roll>Staff &amp; client login</Roll>

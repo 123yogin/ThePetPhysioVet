@@ -38,6 +38,9 @@ export function buildHead(pathname: string): HeadData {
   const metas: MetaTag[] = [
     { key: 'name', keyValue: 'description', content: meta.description },
     { key: 'name', keyValue: 'robots', content: meta.robots },
+    // The clinic, not a named vet: only condition pages carry a visible
+    // "Medically reviewed by" line, and authorship must match the page.
+    { key: 'name', keyValue: 'author', content: SITE.brandName },
 
     // Open Graph
     { key: 'property', keyValue: 'og:type', content: meta.ogType },
@@ -48,8 +51,15 @@ export function buildHead(pathname: string): HeadData {
     { key: 'property', keyValue: 'og:locale', content: SITE.locale },
     { key: 'property', keyValue: 'og:image', content: meta.image },
     { key: 'property', keyValue: 'og:image:alt', content: meta.imageAlt },
-    { key: 'property', keyValue: 'og:image:width', content: String(SITE.images.ogImageWidth) },
-    { key: 'property', keyValue: 'og:image:height', content: String(SITE.images.ogImageHeight) },
+    // Dimensions are only known for the default share image. Condition and team
+    // pages share their own portrait WebP photos, and declaring 1200x630 for
+    // those told every link-preview crawler the wrong shape.
+    ...(meta.image === absoluteUrl(SITE.images.ogImage)
+      ? [
+          { key: 'property' as const, keyValue: 'og:image:width', content: String(SITE.images.ogImageWidth) },
+          { key: 'property' as const, keyValue: 'og:image:height', content: String(SITE.images.ogImageHeight) },
+        ]
+      : []),
 
     // Twitter/X
     { key: 'name', keyValue: 'twitter:card', content: 'summary_large_image' },
@@ -117,6 +127,11 @@ export function applyHead(pathname: string): void {
 
   document.title = head.title;
   document.documentElement.lang = SITE.lang;
+
+  // og:image dimensions are conditional, so drop stale ones left by the previous route.
+  for (const key of ['og:image:width', 'og:image:height']) {
+    if (!head.metas.some((m) => m.keyValue === key)) document.head.querySelector(`meta[property="${key}"]`)?.remove();
+  }
 
   const setMeta = (tag: MetaTag) => {
     const selector = `meta[${tag.key}="${tag.keyValue}"]`;

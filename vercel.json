@@ -18,7 +18,10 @@
 
   "redirects": [
     { "source": "/treatments/specialised", "destination": "/treatments/hydrotherapy", "statusCode": 301 },
-    { "source": "/treatments/specialised/", "destination": "/treatments/hydrotherapy", "statusCode": 301 }
+    { "source": "/treatments/specialised/", "destination": "/treatments/hydrotherapy", "statusCode": 301 },
+
+    { "source": "/:section(conditions|treatments|services|team)/:slug/", "destination": "/:section/:slug", "statusCode": 301 },
+    { "source": "/:page(privacy|terms)/", "destination": "/:page", "statusCode": 301 }
   ],
 
   "rewrites": [
