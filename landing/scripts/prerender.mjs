@@ -57,7 +57,15 @@ function composePage(template, { head, body, lang }) {
 
   // These two are load-bearing (head tags + the rendered app), so assert they hit.
   html = mustReplace(html, '<head>', `<head>\n    ${head}`, '<head> injection');
-  html = mustReplace(html, '<div id="root"></div>', `<div id="root">${body}</div>`, '#root body injection');
+  // email_off stops Cloudflare's Email Obfuscation rewriting mailto links into
+  // /cdn-cgi/l/email-protection hrefs, which 404 for every non-JS crawler and
+  // pull a render-blocking decoder script into every page.
+  html = mustReplace(
+    html,
+    '<div id="root"></div>',
+    `<!--email_off--><div id="root">${body}</div><!--/email_off-->`,
+    '#root body injection',
+  );
   html = html.replace(/<html([^>]*)lang="[^"]*"/i, `<html$1lang="${lang}"`);
 
   return html;
@@ -78,6 +86,7 @@ async function main() {
     buildSitemapXml,
     buildLlmsTxt,
     buildLlmsFullTxt,
+    CONTENT_UPDATED_DATE,
   } = mod;
 
   const routes = indexableRoutes();
@@ -109,9 +118,8 @@ async function main() {
   writeFileSync(join(DIST, '404.html'), notFoundHtml, 'utf8');
   log('✓ /404.html (noindex, follow)');
 
-  // Build date is used as lastmod for every URL. Once content is managed in a CMS
-  // this should become a real per-page modification date.
-  const lastmod = new Date().toISOString().split('T')[0];
+  // The date content last changed, not the build date (see CONTENT_UPDATED_DATE).
+  const lastmod = CONTENT_UPDATED_DATE;
 
   writeFileSync(join(DIST, 'robots.txt'), buildRobotsTxt(), 'utf8');
   writeFileSync(join(DIST, 'sitemap.xml'), buildSitemapXml(lastmod), 'utf8');
