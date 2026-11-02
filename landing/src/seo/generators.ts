@@ -77,6 +77,18 @@ export const AI_CRAWLERS = {
   training: ['GPTBot', 'ClaudeBot', 'anthropic-ai', 'Google-Extended', 'CCBot', 'Applebot-Extended', 'meta-externalagent'],
 } as const;
 
+/** Paths no crawler should fetch. Repeated in every user-agent group, because a
+ *  bot that matches a named group ignores the "*" group entirely. */
+const BLOCKED_PATHS = [
+  'Disallow: /app',
+  'Disallow: /admin',
+  'Disallow: /api',
+  'Disallow: /*?*utm_',
+  'Disallow: /*?*fbclid',
+  'Disallow: /*?*gclid',
+  'Disallow: /*/amp/',
+] as const;
+
 export function buildRobotsTxt(): string {
   const sitemapUrl = `${SITE.origin}/sitemap.xml`;
 
@@ -100,22 +112,20 @@ export function buildRobotsTxt(): string {
     '',
     '# The app portal, Django admin and JSON API share this origin but have no',
     '# crawlable/indexable value (SPA shell, login, raw JSON) — keep them out.',
-    'Disallow: /app',
-    'Disallow: /admin',
-    'Disallow: /api',
+    '# Tracking-parameter and AMP URLs have no crawlable value and burn crawl',
+    '# budget on duplicates.',
+    ...BLOCKED_PATHS,
     '',
-    '# No crawlable value, and they burn crawl budget on duplicate URLs.',
-    'Disallow: /*?*utm_',
-    'Disallow: /*?*fbclid',
-    'Disallow: /*?*gclid',
-    'Disallow: /*/amp/',
+    '# Each named group below repeats these Disallow lines on purpose: a crawler',
+    '# obeys ONLY the most specific group that matches it and ignores "*", so a',
+    '# bare "Allow: /" group would let it into /app, /api and tracking URLs.',
     '',
     '# AI search & citation crawlers — explicitly allowed. These are the bots that can',
     '# cite the clinic in an AI answer; blocking them removes us from the candidate pool.',
   ];
 
   for (const bot of AI_CRAWLERS.search) {
-    lines.push(`User-agent: ${bot}`, 'Allow: /', '');
+    lines.push(`User-agent: ${bot}`, 'Allow: /', ...BLOCKED_PATHS, '');
   }
 
   lines.push(
@@ -124,7 +134,11 @@ export function buildRobotsTxt(): string {
       : '# Model-training crawlers — disallowed (SITE.allowAiTrainingCrawlers = false).',
   );
   for (const bot of AI_CRAWLERS.training) {
-    lines.push(`User-agent: ${bot}`, SITE.allowAiTrainingCrawlers ? 'Allow: /' : 'Disallow: /', '');
+    lines.push(
+      `User-agent: ${bot}`,
+      ...(SITE.allowAiTrainingCrawlers ? ['Allow: /', ...BLOCKED_PATHS] : ['Disallow: /']),
+      '',
+    );
   }
 
   lines.push(`Sitemap: ${sitemapUrl}`, '');

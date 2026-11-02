@@ -5,6 +5,7 @@ import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { onFrame, track, prefersReducedMotion } from '../../motion/engine';
 import { pad2 } from '../../lib/format';
+import { LazyLoopVideo } from '../LazyLoopVideo';
 
 /**
  * One photo per service, picked from the clinic's own photo set (there are no
@@ -55,26 +56,21 @@ const PHOTOS: Record<string, PanelPhoto> = {
 
 const num = (i: number) => pad2(i + 1);
 
-/** A panel shows a still photo unless it has a `video`, which then autoplays
- *  muted and looping (poster/photo is the fallback still). */
+/** A panel shows a still photo unless it has a `video`, which then plays
+ *  muted and looping once it nears the viewport (LazyLoopVideo) (poster/photo is the fallback still). */
 const PanelMedia: React.FC<{
   photo: PanelPhoto;
   className?: string; width: number; height: number;
 }> = ({ photo, className, width, height }) =>
   photo.video ? (
-    <video
+    <LazyLoopVideo
       className={className}
       style={{ objectPosition: photo.focus }}
       src={photo.video}
       poster={photo.poster ?? photo.src}
       width={width}
       height={height}
-      autoPlay
-      muted
-      loop
-      playsInline
-      preload="metadata"
-      aria-label={photo.alt}
+      label={photo.alt}
     />
   ) : (
     <img

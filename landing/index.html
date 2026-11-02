@@ -34,7 +34,11 @@
       This origin kept serving the previous paw from cache after the file itself
       had been replaced. Bump the number whenever the mark changes.
     -->
-    <link rel="icon" type="image/svg+xml" href="/logo.svg?v=4" />
+    <!-- PNG, not /logo.svg: that "SVG" is a 512px PNG base64-wrapped in an
+         <image> tag (165 KB), and the browser fetched it on every page just for
+         the tab icon. Same artwork, 2 KB / 28 KB. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=5" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png?v=5" />
     <link rel="apple-touch-icon" href="/logo.png?v=3" />
 
     <!--

@@ -1,4 +1,5 @@
 import React from 'react';
+import { prefersReducedMotion } from '../motion/engine';
 
 /**
  * A silent looping preview that costs nothing until it is about to be seen.
@@ -13,20 +14,29 @@ import React from 'react';
  * Under reduced motion it still loads (metadata only, so the first frame is
  * the tile's picture) but never plays.
  *
- * The box is sized by the caller's classes (e.g. aspect-[3/4]), so attaching
- * the source cannot shift layout.
+ * The box is sized by the caller's classes (e.g. aspect-[3/4]) or by
+ * width/height, so attaching the source cannot shift layout. Pass `poster` to
+ * show a still until the clip loads.
+ *
+ * `reducedMotion` may be omitted, in which case the user's
+ * prefers-reduced-motion setting is read when the observer is set up.
  */
 export const LazyLoopVideo: React.FC<{
   src: string;
   label: string;
   className?: string;
-  reducedMotion: boolean;
-}> = ({ src, label, className, reducedMotion }) => {
+  reducedMotion?: boolean;
+  poster?: string;
+  width?: number;
+  height?: number;
+  style?: React.CSSProperties;
+}> = ({ src, label, className, reducedMotion: reducedMotionProp, poster, width, height, style }) => {
   const ref = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
     const video = ref.current;
     if (!video) return;
+    const reducedMotion = reducedMotionProp ?? prefersReducedMotion();
     if (typeof IntersectionObserver === 'undefined') {
       video.src = src;
       return;
@@ -47,7 +57,7 @@ export const LazyLoopVideo: React.FC<{
     );
     io.observe(video);
     return () => io.disconnect();
-  }, [src, reducedMotion]);
+  }, [src, reducedMotionProp]);
 
   return (
     <video
@@ -58,6 +68,10 @@ export const LazyLoopVideo: React.FC<{
       preload="none"
       aria-label={label}
       className={className}
+      poster={poster}
+      width={width}
+      height={height}
+      style={style}
     />
   );
 };

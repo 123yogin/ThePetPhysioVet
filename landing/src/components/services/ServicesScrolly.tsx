@@ -4,6 +4,7 @@ import { EntityCardLink } from '../EntityCardLink';
 import { servicePath } from '../../seo/routes';
 import { prefersReducedMotion } from '../../motion/engine';
 import { pad2 } from '../../lib/format';
+import { LazyLoopVideo } from '../LazyLoopVideo';
 
 /**
  * One photo per service. There are no per-service photographs, so each is
@@ -45,24 +46,19 @@ const photoFor = (id: string) => PHOTO[id] ?? FALLBACK_PHOTO;
 type ServiceMediaData = { src: string; alt: string; video?: string; poster?: string };
 
 /** A service tile is an image unless it has a `video`, in which case it plays a
- *  muted, looping clip (with the poster/photo as the still fallback). */
+ *  muted, looping clip once it nears the viewport (LazyLoopVideo) (with the poster/photo as the still fallback). */
 const ServiceMedia: React.FC<{
   photo: ServiceMediaData; className?: string; width: number; height: number;
 }> = ({ photo, className, width, height }) => {
   if (photo.video) {
     return (
-      <video
+      <LazyLoopVideo
         className={className}
         src={photo.video}
         poster={photo.poster ?? photo.src}
         width={width}
         height={height}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        aria-label={photo.alt}
+        label={photo.alt}
       />
     );
   }
