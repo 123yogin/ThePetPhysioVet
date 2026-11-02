@@ -127,7 +127,7 @@ export const ServicePage: React.FC<{ service: ServiceItem }> = ({ service }) => 
           <h1 style={{ ['--d' as string]: '280ms' }} className="hero-rise font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light leading-tight tracking-tight mb-6">
             {service.seoH1 ?? service.title}
           </h1>
-          <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
+          <p className="speakable font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
             {service.shortDesc}
           </p>
           <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed">
