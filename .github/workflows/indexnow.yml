@@ -1,0 +1,81 @@
+# Tell IndexNow search engines (Bing, Yandex, Seznam, Naver...) which pages
+# changed, right after each successful PRODUCTION deploy. Bing's index also
+# feeds ChatGPT search and Copilot. Google does not use IndexNow.
+#
+# Which pages: those whose sitemap <lastmod> is within the last few days. The
+# landing build only moves a page's lastmod when its visible content changes
+# (landing/src/seo/lastmod.json), so this submits changed pages, not all 19.
+#
+# The key is public by design: IndexNow verifies ownership by fetching
+# https://www.thepetphysiovet.com/<key>.txt, served from landing/public/.
+name: IndexNow
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      all:
+        description: Submit every sitemap URL, not just recently changed ones
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: indexnow
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      SITE: https://www.thepetphysiovet.com
+      KEY: 231c6065673a669383807202cf355bca
+      SUBMIT_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.all }}
+      RECENT_DAYS: '3'
+    steps:
+      - name: Submit changed URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The deploy is marked successful a moment before the alias always
+          # serves it; give the CDN a few seconds.
+          sleep 20
+          curl -fsS --retry 3 --retry-delay 5 -A 'Mozilla/5.0 (IndexNow submitter)' \
+            "$SITE/sitemap.xml" -o sitemap.xml
+          python3 - <<'PY'
+          import datetime, json, os, re, urllib.request, zoneinfo
+          site, key = os.environ["SITE"], os.environ["KEY"]
+          xml = open("sitemap.xml", encoding="utf-8").read()
+          pairs = re.findall(r"<loc>([^<]+)</loc>\s*<lastmod>([^<]+)</lastmod>", xml)
+          today = datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).date()
+          cutoff = today - datetime.timedelta(days=int(os.environ["RECENT_DAYS"]))
+          submit_all = os.environ.get("SUBMIT_ALL") == "true"
+          urls = [loc for loc, lastmod in pairs
+                  if submit_all or datetime.date.fromisoformat(lastmod[:10]) >= cutoff]
+          print(f"{len(pairs)} URLs in sitemap, {len(urls)} to submit (cutoff {cutoff}, all={submit_all})")
+          for u in urls:
+              print("  ", u)
+          if not urls:
+              raise SystemExit(0)
+          body = json.dumps({
+              "host": site.split("//", 1)[1],
+              "key": key,
+              "keyLocation": f"{site}/{key}.txt",
+              "urlList": urls,
+          }).encode()
+          req = urllib.request.Request("https://api.indexnow.org/indexnow", data=body,
+                                       headers={"Content-Type": "application/json; charset=utf-8"})
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  print("IndexNow response:", resp.status)
+          except urllib.error.HTTPError as e:
+              # 200/202 are success; anything else (400 bad request, 403 key not
+              # found, 422 URLs not on host, 429 too many requests) fails the job.
+              raise SystemExit(f"IndexNow rejected the submission: HTTP {e.code} {e.read()[:300]!r}")
+          PY
