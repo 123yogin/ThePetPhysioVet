@@ -163,7 +163,7 @@ export const SpecialistsSection: React.FC<SpecialistsSectionProps> = ({
                   ) : (
                     <div className="aspect-[3/4] bg-(--c-surface) border border-(--c-line)/40 flex flex-col items-center justify-center gap-4 text-center px-6">
                       <img
-                        src="/logo.svg"
+                        src="/logo-144.webp"
                         alt=""
                         aria-hidden="true"
                         width={96}
