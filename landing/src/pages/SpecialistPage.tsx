@@ -1,9 +1,9 @@
 import React from 'react';
 import type { Specialist } from '../types';
-import { SPECIALISTS } from '../data/clinicData';
+import { SPECIALISTS, CONDITIONS } from '../data/clinicData';
 import { PageShell, DetailCta, FactList } from './PageShell';
 import { Link } from '../seo/router';
-import { specialistPath } from '../seo/routes';
+import { specialistPath, conditionPath } from '../seo/routes';
 import { SITE } from '../seo/siteConfig';
 
 /**
@@ -96,6 +96,27 @@ export const SpecialistPage: React.FC<{ specialist: Specialist }> = ({ specialis
             </p>
           </div>
         </div>
+
+        {/* The profile is the site's best-ranking page and linked to no condition
+            page; every condition page is reviewed by this clinician, so link them
+            with descriptive anchors. */}
+        <section aria-labelledby="conditions-treated" className="border-t border-(--c-line)/30 mt-16 pt-12">
+          <h2 id="conditions-treated" className="font-(family-name:--f-display) text-2xl text-(--c-ink) font-light mb-6">
+            Conditions {specialist.name} treats
+          </h2>
+          <ul className="flex flex-wrap gap-3">
+            {CONDITIONS.map((condition) => (
+              <li key={condition.id}>
+                <Link
+                  to={conditionPath(condition.id)}
+                  className="inline-block px-4 py-2 border border-(--c-line) text-xs uppercase tracking-widest text-(--c-ink) hover:bg-(--c-ink) hover:text-white transition-colors"
+                >
+                  {condition.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {colleagues.length > 0 && (
           <section aria-labelledby="team" className="border-t border-(--c-line)/30 mt-16 pt-12">

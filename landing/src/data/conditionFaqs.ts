@@ -84,9 +84,9 @@ export function conditionFaqs(condition: ConditionItem): Array<{ q: string; a: s
   // sign count) — the "statistical density" an answer engine looks for when
   // deciding a passage is worth quoting. All numbers are counts of / restatements
   // of the condition's own data, never invented. Singular/empty cases are handled
-  // so the prose never reads "combines 1 evidence-based therapies".
+  // so the prose never reads "combines 1 therapies".
   const therapyClause = therapies.length
-    ? `treatment combines ${therapies.length} evidence-based ${therapies.length === 1 ? 'therapy' : 'therapies'} — ${naturalList(
+    ? `treatment combines ${therapies.length} ${therapies.length === 1 ? 'therapy' : 'therapies'} — ${naturalList(
         therapies,
       )} — tailored`
     : 'treatment is tailored';
@@ -98,15 +98,19 @@ export function conditionFaqs(condition: ConditionItem): Array<{ q: string; a: s
   return [
     {
       q: `How is ${condition.title} treated in dogs and cats?`,
-      a: `${condition.fullDesc} At ${brand} in ${locality}, ${therapyClause} to each pet and coordinated with your primary veterinarian. Typical recovery is ${lowerFirst(
-        condition.expectedRecoveryTime,
-      )}.`,
+      // Leads with the treatment itself. It used to open with fullDesc, which is
+      // the "What is X?" answer directly above and the meta description, so the
+      // page said the same paragraph three times.
+      a: `At ${brand} in ${locality}, ${therapyClause} to each pet and coordinated with your primary veterinarian. The plan is set at the first assessment and adjusted as your pet progresses.`,
     },
     {
       q: `How long does ${condition.title} recovery take?`,
-      a: `Typical recovery is ${lowerFirst(
+      // A planning range, not a promise: rehab evidence supports recovery
+      // quality and rate more firmly than a fixed duration. The second sentence
+      // used to be identical boilerplate on all eight pages.
+      a: `For ${condition.title}, the range ${brand} plans around is ${lowerFirst(
         condition.expectedRecoveryTime,
-      )}. The outlook depends on the individual pet, the severity of the condition and consistency with the home-care programme, and progress is measured against objective goals at every session.`,
+      )}. Your pet's own timeline is set at the first assessment and depends on how severe the ${condition.title} is and how consistently the home exercise programme is followed.`,
     },
     {
       q: `What are the signs of ${condition.title} in pets?`,

@@ -4,7 +4,7 @@ import { CONDITIONS, SPECIALISTS, servicesForCondition, CONTENT_REVIEWED_DISPLAY
 import { conditionFaqs } from '../data/conditionFaqs';
 import { PageShell, DetailCta, FactList } from './PageShell';
 import { Link, servicePathLink } from './links';
-import { conditionPath } from '../seo/routes';
+import { conditionPath, specialistPath } from '../seo/routes';
 
 const RELATED_CONDITION_COUNT = 4;
 
@@ -65,7 +65,11 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
                 JSON-LD (seo/schema.ts) — structured data must mirror on-page content. */}
             {reviewer && (
               <p className="mt-6 text-xs text-(--c-body)/70 font-(family-name:--f-body)">
-                Medically reviewed by {reviewer.name} · {CONTENT_REVIEWED_DISPLAY}
+                Medically reviewed by{' '}
+                <Link to={specialistPath(reviewer.id)} className="underline underline-offset-2 hover:text-(--c-ink)">
+                  {reviewer.name}
+                </Link>
+                {reviewer.credentialsShort ? `, ${reviewer.credentialsShort}` : ''} · {CONTENT_REVIEWED_DISPLAY}
               </p>
             )}
           </div>
