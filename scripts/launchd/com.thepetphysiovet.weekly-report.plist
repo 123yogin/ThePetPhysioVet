@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Weekly search + traffic report (scripts/seo_weekly_report.py), Mondays 09:00.
+  If the Mac is asleep at that time, launchd runs it on the next wake.
+
+  Install:   cp scripts/launchd/com.thepetphysiovet.weekly-report.plist ~/Library/LaunchAgents/
+             launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.thepetphysiovet.weekly-report.plist
+  Run now:   launchctl kickstart gui/$(id -u)/com.thepetphysiovet.weekly-report
+  Remove:    launchctl bootout gui/$(id -u)/com.thepetphysiovet.weekly-report
+
+  REPO_PATH below is the checkout's absolute path; edit it if the repo moves.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.thepetphysiovet.weekly-report</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/python3</string>
+    <string>-I</string>
+    <string>/Users/yoginparmar/antigravity/ThePetPhysioVet/scripts/seo_weekly_report.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/petphysio-weekly-report.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/petphysio-weekly-report.log</string>
+</dict>
+</plist>
