@@ -74,7 +74,7 @@ export const CarePage: React.FC<{ service: CareService }> = ({ service }) => {
           <h1 className="font-(family-name:--f-display) text-3xl sm:text-4xl lg:text-5xl text-(--c-ink) font-light leading-tight tracking-tight mb-6">
             {service.seoH1}
           </h1>
-          <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-8">
+          <p className="speakable font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-8">
             {service.intro}
           </p>
           {actions}

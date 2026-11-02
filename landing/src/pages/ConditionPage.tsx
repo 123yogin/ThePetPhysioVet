@@ -6,6 +6,8 @@ import { PageShell, DetailCta, FactList } from './PageShell';
 import { Link, servicePathLink } from './links';
 import { conditionPath } from '../seo/routes';
 
+const RELATED_CONDITION_COUNT = 4;
+
 /**
  * Condition detail page.
  *
@@ -20,9 +22,15 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
   const relatedServices = servicesForCondition(condition);
   const reviewer = SPECIALISTS[0];
 
-  const otherConditions = CONDITIONS.filter(
-    (item) => item.id !== condition.id && item.category === condition.category,
-  ).slice(0, 3);
+  // Same-category conditions first, then the rest, to a fixed count. Filtering
+  // to the category alone left some pages with a single sibling link (IVDD's
+  // only neighbour was neurological-recovery), so condition pages barely linked
+  // to each other and internal link equity stopped at the home page.
+  const others = CONDITIONS.filter((item) => item.id !== condition.id);
+  const otherConditions = [
+    ...others.filter((item) => item.category === condition.category),
+    ...others.filter((item) => item.category !== condition.category),
+  ].slice(0, RELATED_CONDITION_COUNT);
 
   return (
     <PageShell>
@@ -36,7 +44,7 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
               {condition.seoH1 ?? `${condition.title} Rehabilitation`}
             </h1>
             {/* Direct answer, first 100 words. */}
-            <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
+            <p className="speakable font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-4">
               {condition.shortDesc}
             </p>
             {/* Question-form heading over the definition paragraph: answer engines
@@ -44,7 +52,7 @@ export const ConditionPage: React.FC<{ condition: ConditionItem }> = ({ conditio
             <h2 className="font-(family-name:--f-display) text-xl text-(--c-ink) font-light mt-8 mb-3">
               What is {/^[A-Z]+$/.test(condition.title) ? condition.title : condition.title.toLowerCase()}?
             </h2>
-            <p className="font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed">
+            <p className="speakable font-(family-name:--f-body) text-base text-(--c-body) font-light leading-relaxed">
               {condition.fullDesc}
             </p>
             <dl className="mt-8 inline-flex flex-col gap-1 border-l-2 border-(--c-accent) pl-4">
