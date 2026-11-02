@@ -149,10 +149,13 @@ const xmlEscape = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 /**
- * @param lastmod ISO date for every URL. Real per-page dates should come from the
- * CMS once content is live — an inaccurate lastmod teaches Google to ignore the field.
+ * @param lastmod ISO date for every URL, or a function giving each path its own
+ * date. prerender.mjs passes per-page dates from src/seo/lastmod.json, which
+ * only move when a page's visible content changes -- an inaccurate lastmod
+ * teaches Google to ignore the field.
  */
-export function buildSitemapXml(lastmod: string): string {
+export function buildSitemapXml(lastmod: string | ((path: string) => string)): string {
+  const lastmodFor = typeof lastmod === 'function' ? lastmod : () => lastmod;
   if (!SITE.indexable) {
     return '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>\n';
   }
@@ -164,7 +167,7 @@ export function buildSitemapXml(lastmod: string): string {
       return [
         '  <url>',
         `    <loc>${loc}</loc>`,
-        `    <lastmod>${lastmod}</lastmod>`,
+        `    <lastmod>${lastmodFor(route.path)}</lastmod>`,
         `    <changefreq>${route.changefreq}</changefreq>`,
         `    <priority>${route.priority.toFixed(1)}</priority>`,
         '  </url>',

@@ -15,6 +15,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -93,6 +94,7 @@ async function main() {
   log(`Prerendering ${routes.length} routes from the registry…`);
 
   let rendered = 0;
+  const fingerprints = new Map();
   for (const route of routes) {
     const body = render(route.path);
     const head = renderHeadHtml(route.path);
@@ -104,6 +106,7 @@ async function main() {
     writeFileSync(outPath, html, 'utf8');
 
     const meta = getPageMeta(route.path);
+    fingerprints.set(route.path, contentFingerprint(body, meta));
     log(`✓ ${route.path.padEnd(34)} ${String(meta.title.length).padStart(2)}ch title · ${String(meta.description.length).padStart(3)}ch desc`);
     rendered += 1;
   }
@@ -118,11 +121,16 @@ async function main() {
   writeFileSync(join(DIST, '404.html'), notFoundHtml, 'utf8');
   log('✓ /404.html (noindex, follow)');
 
-  // The date content last changed, not the build date (see CONTENT_UPDATED_DATE).
-  const lastmod = CONTENT_UPDATED_DATE;
+  // Per-page lastmod: the date each page's visible content last changed, not
+  // the build date. See updateLastmodManifest().
+  const lastmodByPath = updateLastmodManifest(fingerprints, CONTENT_UPDATED_DATE);
 
   writeFileSync(join(DIST, 'robots.txt'), buildRobotsTxt(), 'utf8');
-  writeFileSync(join(DIST, 'sitemap.xml'), buildSitemapXml(lastmod), 'utf8');
+  writeFileSync(
+    join(DIST, 'sitemap.xml'),
+    buildSitemapXml((path) => lastmodByPath.get(path) ?? CONTENT_UPDATED_DATE),
+    'utf8',
+  );
   writeFileSync(join(DIST, 'llms.txt'), buildLlmsTxt(), 'utf8');
   writeFileSync(join(DIST, 'llms-full.txt'), buildLlmsFullTxt(), 'utf8');
   log('✓ robots.txt · sitemap.xml · llms.txt · llms-full.txt');
@@ -140,3 +148,63 @@ main().catch((error) => {
   console.error('\nPrerender failed:\n', error);
   process.exit(1);
 });
+
+/* ── Per-page lastmod ─────────────────────────────────────────────────────────
+ *
+ * src/seo/lastmod.json maps each route to { date, hash }. `hash` fingerprints
+ * what a searcher or crawler would call the page's content: its visible text,
+ * the links it makes, and its <title> and meta description. Class names, asset
+ * hashes and layout markup are excluded on purpose, so a CSS tweak or a rebuilt
+ * bundle does not move the date and teach Google that lastmod lies.
+ *
+ * On a local build the manifest is rewritten: a page whose fingerprint changed
+ * gets today's date (Asia/Kolkata). Commit the updated manifest with the change.
+ * On Vercel (VERCEL set) the file is not written; a changed page still gets
+ * today's date in the sitemap, and the build log names the pages whose manifest
+ * entry is stale so the drift is visible. Routes missing from the manifest fall
+ * back to CONTENT_UPDATED_DATE rather than today, so adding this did not stamp
+ * every existing page as new.
+ */
+function contentFingerprint(bodyHtml, meta) {
+  const text = bodyHtml
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/g, ' ')
+    .replace(/<a\b[^>]*\bhref="([^"]*)"[^>]*>/g, ' [$1] ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, (e) => e.toLowerCase())
+    .replace(/\s+/g, ' ')
+    .trim();
+  return createHash('sha256')
+    .update(`${meta.title}\n${meta.description}\n${text}`)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+function todayInIndia() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+
+function updateLastmodManifest(fingerprints, fallbackDate) {
+  const manifestPath = join(ROOT, 'src', 'seo', 'lastmod.json');
+  const previous = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+  const today = todayInIndia();
+  const next = {};
+  const changed = [];
+  for (const [path, hash] of fingerprints) {
+    const prior = previous[path];
+    if (prior && prior.hash === hash) {
+      next[path] = prior;
+    } else {
+      next[path] = { date: prior ? today : fallbackDate, hash };
+      if (prior) changed.push(path);
+    }
+  }
+  const dates = new Map(Object.entries(next).map(([path, entry]) => [path, entry.date]));
+  const stale = JSON.stringify(next, null, 2) + '\n' !== (existsSync(manifestPath) ? readFileSync(manifestPath, 'utf8') : '');
+  if (process.env.VERCEL) {
+    if (stale) log(`⚠ src/seo/lastmod.json is stale for: ${changed.join(', ') || 'new routes'} -- run a local build and commit it`);
+  } else if (stale) {
+    writeFileSync(manifestPath, JSON.stringify(next, null, 2) + '\n', 'utf8');
+    log(`✓ lastmod.json updated${changed.length ? ` -- content changed: ${changed.join(', ')}` : ''}`);
+  }
+  return dates;
+}

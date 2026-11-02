@@ -1,0 +1,78 @@
+{
+  "/": {
+    "date": "2026-10-29",
+    "hash": "19fc514a1c3707e7"
+  },
+  "/conditions/arthritis": {
+    "date": "2026-11-02",
+    "hash": "2526045369bdd387"
+  },
+  "/conditions/ivdd": {
+    "date": "2026-11-02",
+    "hash": "a73381d778b0f9b0"
+  },
+  "/conditions/hip-dysplasia": {
+    "date": "2026-11-02",
+    "hash": "d072e807b07e3895"
+  },
+  "/conditions/post-surgical": {
+    "date": "2026-11-02",
+    "hash": "208e5f2aac5e2237"
+  },
+  "/conditions/neurological-recovery": {
+    "date": "2026-11-02",
+    "hash": "377826bba47fa2a1"
+  },
+  "/conditions/sports-injury": {
+    "date": "2026-11-02",
+    "hash": "f7f99891b2455891"
+  },
+  "/conditions/senior-mobility": {
+    "date": "2026-11-02",
+    "hash": "311a7a7bc6f0cb6c"
+  },
+  "/conditions/obesity-rehab": {
+    "date": "2026-11-02",
+    "hash": "3901f3e7456089ef"
+  },
+  "/treatments/indoor-physiotherapy": {
+    "date": "2026-10-29",
+    "hash": "862fc71c53b10e7c"
+  },
+  "/treatments/manual-therapy": {
+    "date": "2026-10-29",
+    "hash": "31477f326ac12151"
+  },
+  "/treatments/electrophysical": {
+    "date": "2026-10-29",
+    "hash": "092327c62f3ee241"
+  },
+  "/treatments/hydrotherapy": {
+    "date": "2026-10-29",
+    "hash": "02a53b34ef638cfc"
+  },
+  "/treatments/acupuncture": {
+    "date": "2026-10-29",
+    "hash": "5b12081858d17fb2"
+  },
+  "/treatments/home-care": {
+    "date": "2026-10-29",
+    "hash": "fb508f15322bbecb"
+  },
+  "/services/pet-boarding": {
+    "date": "2026-10-29",
+    "hash": "cc0d8112fd077ad9"
+  },
+  "/team/dhanvi-patel": {
+    "date": "2026-10-29",
+    "hash": "8a0c8555a875728f"
+  },
+  "/privacy": {
+    "date": "2026-10-29",
+    "hash": "4c839d59816642a3"
+  },
+  "/terms": {
+    "date": "2026-10-29",
+    "hash": "62079931924986ca"
+  }
+}
