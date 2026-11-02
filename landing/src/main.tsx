@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot, hydrateRoot } from 'react-dom/client';
+import { inject } from '@vercel/analytics';
 import App from './App.tsx';
 import './index.css';
 import './motion/motion.css';
@@ -23,6 +24,27 @@ if (container.hasChildNodes()) {
 } else {
   createRoot(container).render(tree);
 }
+
+/**
+ * Vercel Web Analytics: cookieless page views, so no consent banner is needed.
+ * Injected here rather than rendered in <App/> so the prerendered HTML and
+ * hydration are untouched. The script loads from /_vercel/insights on this
+ * origin (allowed by the CSP's 'self'), collects only on Vercel production,
+ * and follows the client-side router's pushState navigations on its own.
+ *
+ * Query strings and hashes are dropped before sending: the booking panel's
+ * `?book=1&for=...&service=...` state would otherwise split one page into many
+ * rows, and URLs pasted from elsewhere can carry tokens we have no reason to log.
+ * Custom events (e.g. booking submitted) need the Pro plan, so none are sent.
+ */
+inject({
+  beforeSend: (event) => {
+    const url = new URL(event.url);
+    url.search = '';
+    url.hash = '';
+    return { ...event, url: url.toString() };
+  },
+});
 
 /**
  * Offline-capable caching for repeat visits (public/sw.js). Production only:
