@@ -10,6 +10,56 @@ function naturalList(items: string[]): string {
 const lowerFirst = (s: string) => (s ? s[0].toLowerCase() + s.slice(1) : s);
 
 /**
+ * How a local searcher phrases the care they want, per condition. Drawn from the
+ * queries Search Console already shows these pages for ("dog rehab after
+ * surgery", "hip dysplasia dog physiotherapy", "canine ivdd rehabilitation").
+ * Falls back to the condition title.
+ */
+const LOCAL_CARE_PHRASE: Record<string, string> = {
+  arthritis: 'arthritis physiotherapy',
+  ivdd: 'IVDD (slipped disc) rehabilitation',
+  'hip-dysplasia': 'hip dysplasia physiotherapy',
+  'post-surgical': 'rehab after surgery',
+  'neurological-recovery': 'paralysis and neurological rehab',
+  'sports-injury': 'sports injury physiotherapy',
+  'senior-mobility': 'senior mobility care',
+  'obesity-rehab': 'weight-loss rehab',
+};
+
+/**
+ * The "where, how and when" answer for someone searching from Ahmedabad.
+ * City, areas served, hours and phone come from SITE, so they cannot disagree
+ * with the footer or the LocalBusiness schema. The street wording ("Shilaj",
+ * "Thaltej - Shilaj Road near Shilaj Circle") is a hand-shortened form of
+ * SITE.address.streetAddress -- update both if the clinic ever moves. Only the
+ * care phrase and the pool sentence vary by condition.
+ */
+function localCareFaq(condition: ConditionItem): { q: string; a: string } {
+  const phrase = LOCAL_CARE_PHRASE[condition.id] ?? `${condition.title} care`;
+  const neighbourhoods = SITE.areaServed.filter(
+    (area) => area !== SITE.address.addressLocality && area !== 'Shilaj',
+  );
+  const usesPool = condition.recommendedTherapies.some((t) => /hydrotherapy|swim/i.test(t));
+  const days = SITE.openingHours[0]?.days ?? [];
+  const dayRange = days.length > 1 ? `${days[0]} to ${days[days.length - 1]}` : days[0];
+  const hours = [
+    SITE.serviceHours.appointmentOnly ? 'by appointment' : '',
+    dayRange,
+    SITE.serviceHours.window,
+  ].filter(Boolean).join(', ');
+  return {
+    q: `Where can my dog or cat get ${phrase} in ${SITE.address.addressLocality}?`,
+    a: `${SITE.brandName} provides ${phrase} at its clinic in Shilaj, ${SITE.address.addressLocality}, `
+      + `on Thaltej \u2013 Shilaj Road near Shilaj Circle, and sees pets from across the city`
+      + (neighbourhoods.length ? `, including ${naturalList(neighbourhoods)}` : '')
+      + `. Assessment and equipment-based therapy`
+      + (usesPool ? ', including the indoor hydrotherapy pool,' : '')
+      + ` happen at the clinic; home visits carry the home exercise programme on between sessions. `
+      + `Physiotherapy is ${hours}. Call or WhatsApp ${SITE.contact.phoneDisplay} to book an assessment.`,
+  };
+}
+
+/**
  * Self-contained question/answer blocks for a condition, generated from the
  * condition's OWN data.
  *
@@ -62,5 +112,6 @@ export function conditionFaqs(condition: ConditionItem): Array<{ q: string; a: s
       q: `What are the signs of ${condition.title} in pets?`,
       a: `${signsClause}. If your dog or cat shows ${signs.length === 1 ? 'it' : 'any of these'}, a veterinary physiotherapy assessment at ${brand} can identify the cause and build a recovery plan.`,
     },
+    localCareFaq(condition),
   ];
 }
