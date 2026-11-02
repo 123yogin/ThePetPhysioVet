@@ -214,7 +214,10 @@ export function organizationNode(): Node {
       },
       {
         '@type': 'ContactPoint',
-        contactType: 'emergency',
+        // Not 'emergency': the clinic takes out-of-hours ENQUIRIES on this line
+        // but is not a 24-hour hospital (see siteConfig contact comment), and an
+        // AI assistant reading contactType "emergency" presents it as one.
+        contactType: 'out-of-hours enquiries',
         name: SITE.contact.emergencyName,
         telephone: SITE.contact.emergencyPhone,
       },
@@ -273,11 +276,14 @@ function breadcrumbNode(path: string): Node {
   return {
     '@type': 'BreadcrumbList',
     '@id': ID.breadcrumb(path),
-    itemListElement: meta.breadcrumbs.map((crumb, index) => ({
+    // Section crumbs like "Conditions" point at a home-page anchor (/#conditions);
+    // in schema that resolves to the home URL, so it would claim the home page
+    // is the Conditions hub. Keep them in the visible trail, drop them here.
+    itemListElement: meta.breadcrumbs.filter((crumb) => !crumb.path.includes('#')).map((crumb, index) => ({
       '@type': 'ListItem',
       position: index + 1,
       name: crumb.name,
-      item: absoluteUrl(crumb.path.split('#')[0] || '/'),
+      item: absoluteUrl(crumb.path),
     })),
   };
 }
