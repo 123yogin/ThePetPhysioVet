@@ -56,7 +56,7 @@ export const SpecialistPage: React.FC<{ specialist: Specialist }> = ({ specialis
               </p>
             )}
             {specialist.bio && (
-              <p className="font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-8">
+              <p className="speakable font-(family-name:--f-body) text-lg text-(--c-body) font-light leading-relaxed mb-8">
                 {specialist.bio}
               </p>
             )}

@@ -254,10 +254,11 @@ function webPageNode(path: string): Node {
     ...(hasBreadcrumb ? { breadcrumb: { '@id': ID.breadcrumb(path) } } : {}),
     publisher: { '@id': ID.organization() },
     dateModified: CONTENT_UPDATED_DATE,
-    // Which parts an assistant should read aloud / is safe to quote. Headings
-    // carry the page's question-and-answer structure, so they point AI answer
-    // engines straight at the citable passages.
-    speakable: { '@type': 'SpeakableSpecification', cssSelector: ['h1', 'h2', 'h3'] },
+    // Which parts an assistant should read aloud / is safe to quote: the H1 and
+    // the short direct-answer paragraphs tagged `.speakable` in the page
+    // templates. It used to be every h1-h3, which pointed at bare headings
+    // ("What is IVDD?") with none of the answers under them.
+    speakable: { '@type': 'SpeakableSpecification', cssSelector: ['h1', '.speakable'] },
     // Guard SPECIALISTS[0]: if the clinicians list is ever emptied, emit a plain
     // MedicalWebPage rather than throwing on `SPECIALISTS[0].id` and taking down
     // the whole graph build. (The sibling person-node push is guarded the same way.)
